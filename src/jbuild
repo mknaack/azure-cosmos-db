@@ -1,0 +1,9 @@
+(jbuild_version 1)
+
+(executable
+ ((name databases)
+  (libraries (lwt yojson ocsigenserver netstring))
+  (flags (:standard -annot))
+ )
+)
+
