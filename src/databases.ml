@@ -7,10 +7,39 @@ open Yojson
 - list database
 *)
 
+let authorization_token_using_master_key = Utility.authorization_token_using_master_key
 
-let key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg=="
-let authorization = "type=master&ver=1.0&sig=" ^ key
+  
+let authorization = (* "type=master&ver=1.0&sig=" ^ key *)
+  let master_key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg==" in
+  let verb = "GET" in
+  let resource_type = "dbs" in
+  let resource_id = "dbs/ToDoList" in
+  let date = "Thu, 27 Apr 2017 00:51:12 GMT" in
+  (* let key = "dsZQi3KtZmCv1ljt3VNWNm7sQUF1y5rJfC6kv5JiwvW0EndXdDku/dkKBp8/ufDToSxLzR4y+O/0H/t4bQtVNw==" in *)
+  (* let key_type = "master" in *)
+  (* let token_version = "1.0" in *)
+  let result = authorization_token_using_master_key verb resource_type resource_id date master_key in
+  result
 let endpoint = "mknnack"
+
+(* let authorization_token_using_master_key verb resource_type resource_id date master_key = *)
+(* var key = new Buffer(masterKey, "base64");   *)
+
+(*     var text = (verb || "").toLowerCase() + "\n" +    *)
+(*                (resourceType || "").toLowerCase() + "\n" +    *)
+(*                (resourceId || "") + "\n" +    *)
+(*                date.toLowerCase() + "\n" +    *)
+(*                "" + "\n";   *)
+
+(*     var body = new Buffer(text, "utf8");   *)
+(*     var signature = crypto.createHmac("sha256", key).update(body).digest("base64");   *)
+
+(*     var MasterToken = "master";   *)
+
+(*     var TokenVersion = "1.0";   *)
+
+(*     return encodeURIComponent("type=" + MasterToken + "&ver=" + TokenVersion + "&sig=" + signature);  *)
   
   (* a simple function to access the content of the response *)
 (* let content = function *)
@@ -90,8 +119,12 @@ let create databaseaccount name =
 (* let content_type = "application", "vnd.eventstore.events+json" *)
                                  
 (* let p = Ocsigen_http_client.post_string ~host:"localhost" ~uri:"/streams/newstream" ~port:2113 ~content:post_content ~content_type:content_type () *)
-let p = create endpoint "test"
-let px = p >>= content  
 
-let result = Lwt_main.run px
-let _ = print_string result
+
+
+
+(* let p = create endpoint "test" *)
+(* let px = p >>= content   *)
+
+(* let result = Lwt_main.run px *)
+(* let _ = print_string result *)

@@ -1,7 +1,15 @@
 (jbuild_version 1)
 
-(executable
+; (executable
+;  ((name databases)
+;   (libraries (lwt yojson ocsigenserver netstring))
+;   (flags (:standard -annot))
+;  )
+; )
+
+(library
  ((name databases)
+  (public_name src)
   (libraries (lwt yojson ocsigenserver netstring))
   (flags (:standard -annot))
  )
