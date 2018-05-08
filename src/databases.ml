@@ -11,16 +11,17 @@ let authorization_token_using_master_key = Utility.authorization_token_using_mas
 
   
 let authorization = (* "type=master&ver=1.0&sig=" ^ key *)
-  let master_key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg==" in
-  let verb = "GET" in
-  let resource_type = "dbs" in
-  let resource_id = "dbs/ToDoList" in
-  let date = "Thu, 27 Apr 2017 00:51:12 GMT" in
-  (* let key = "dsZQi3KtZmCv1ljt3VNWNm7sQUF1y5rJfC6kv5JiwvW0EndXdDku/dkKBp8/ufDToSxLzR4y+O/0H/t4bQtVNw==" in *)
-  (* let key_type = "master" in *)
-  (* let token_version = "1.0" in *)
-  let result = authorization_token_using_master_key verb resource_type resource_id date master_key in
-  result
+  (* let master_key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg==" in *)
+  (* let verb = "GET" in *)
+  (* let resource_type = "dbs" in *)
+  (* let resource_id = "dbs/ToDoList" in *)
+  (* let date = "Thu, 27 Apr 2017 00:51:12 GMT" in *)
+  (* (\* let key = "dsZQi3KtZmCv1ljt3VNWNm7sQUF1y5rJfC6kv5JiwvW0EndXdDku/dkKBp8/ufDToSxLzR4y+O/0H/t4bQtVNw==" in *\) *)
+  (* (\* let key_type = "master" in *\) *)
+  (* (\* let token_version = "1.0" in *\) *)
+  (* let result = authorization_token_using_master_key verb resource_type resource_id date master_key in *)
+  (* result *)
+  "asdf"
 let endpoint = "mknnack"
 
 (* let authorization_token_using_master_key verb resource_type resource_id date master_key = *)

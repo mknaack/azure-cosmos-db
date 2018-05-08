@@ -10,7 +10,7 @@
 (library
  ((name databases)
   (public_name src)
-  (libraries (lwt yojson ocsigenserver netstring))
+  (libraries (lwt yojson ocsigenserver netstring base64 uri))
   (flags (:standard -annot))
  )
 )
