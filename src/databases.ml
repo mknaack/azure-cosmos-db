@@ -10,37 +10,16 @@ open Yojson
 let authorization_token_using_master_key = Utility.authorization_token_using_master_key
 
   
-let authorization = (* "type=master&ver=1.0&sig=" ^ key *)
-  (* let master_key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg==" in *)
-  (* let verb = "GET" in *)
-  (* let resource_type = "dbs" in *)
-  (* let resource_id = "dbs/ToDoList" in *)
-  (* let date = "Thu, 27 Apr 2017 00:51:12 GMT" in *)
-  (* (\* let key = "dsZQi3KtZmCv1ljt3VNWNm7sQUF1y5rJfC6kv5JiwvW0EndXdDku/dkKBp8/ufDToSxLzR4y+O/0H/t4bQtVNw==" in *\) *)
-  (* (\* let key_type = "master" in *\) *)
-  (* (\* let token_version = "1.0" in *\) *)
-  (* let result = authorization_token_using_master_key verb resource_type resource_id date master_key in *)
-  (* result *)
-  "asdf"
+let authorization date = (* "type=master&ver=1.0&sig=" ^ key *)
+  let master_key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg==" in
+  let verb = "GET" in (* get, post, put *)
+  let resource_type = "dbs" in (* "dbs", "colls", "docs". *)
+  (* let resource_id = "dbs/mknnack" in *)
+  let resource_id = "" in
+  let result = authorization_token_using_master_key verb resource_type resource_id date master_key in
+  result
 let endpoint = "mknnack"
 
-(* let authorization_token_using_master_key verb resource_type resource_id date master_key = *)
-(* var key = new Buffer(masterKey, "base64");   *)
-
-(*     var text = (verb || "").toLowerCase() + "\n" +    *)
-(*                (resourceType || "").toLowerCase() + "\n" +    *)
-(*                (resourceId || "") + "\n" +    *)
-(*                date.toLowerCase() + "\n" +    *)
-(*                "" + "\n";   *)
-
-(*     var body = new Buffer(text, "utf8");   *)
-(*     var signature = crypto.createHmac("sha256", key).update(body).digest("base64");   *)
-
-(*     var MasterToken = "master";   *)
-
-(*     var TokenVersion = "1.0";   *)
-
-(*     return encodeURIComponent("type=" + MasterToken + "&ver=" + TokenVersion + "&sig=" + signature);  *)
   
   (* a simple function to access the content of the response *)
 (* let content = function *)
@@ -80,41 +59,49 @@ let content = function
       r
   | _ -> return ""
 
+(* let list_databases = *)
+  
+
   
 let create databaseaccount name =
-  let post_content =
-    let json_content =
-      `Assoc [
-      ("id", `String name);
-    ]
-    in
-    Yojson.pretty_to_string json_content
-  in
-  let content_type = "application", "json" in
+  (* let post_content = *)
+  (*   let json_content = *)
+  (*     `Assoc [ *)
+  (*     ("id", `String name); *)
+  (*   ] *)
+  (*   in *)
+  (*   Yojson.pretty_to_string json_content *)
+  (* in *)
+  (* let content_type = "application", "json" in *)
   let ms_date =
     let now = Unix.time () in
-    let zone = Netdate.localzone in
-    Netdate.mk_mail_date ~zone now
+    (* let zone = Netdate.localzone in *)
+    (* Netdate.mk_mail_date ~zone now *)
+    Utility.x_ms_date now
   in
+  let _ = print_endline ms_date in
   let headers =
     Http_headers.empty
-  |> Http_headers.add (Http_headers.name "authorization") authorization
-  |> Http_headers.add (Http_headers.name "x-ms-version") "2017-02-22"
+  |> Http_headers.add (Http_headers.name "authorization") (authorization ms_date)
+  (* |> Http_headers.add (Http_headers.name "x-ms-version") "2017-02-22" *)
+  |> Http_headers.add (Http_headers.name "x-ms-version") "2015-08-06"
   |> Http_headers.add (Http_headers.name "x-ms-date") ms_date
+  (* |> Http_headers.add (Http_headers.name "content-type") ms_date *)
   in
-  let post = Ocsigen_http_client.post_string
+  let post = Ocsigen_http_client.get
       ~https:true
       ~host: (databaseaccount ^ ".documents.azure.com")
       ~uri:"/dbs"
       ~headers
       ~port:443
-      ~content:post_content
-      ~content_type
+      (* ~content:"" *)
+      (* ~content:post_content *)
+      (* ~content_type *)
       ()
   in
   post
     
-(* let post_content = create "mknaack" "test"  *)
+(* let post_content = create "mknaack" "test" *)
 (* let _ = print_endline post_content *)
                                  
 (* let content_type = "application", "vnd.eventstore.events+json" *)
@@ -124,8 +111,8 @@ let create databaseaccount name =
 
 
 
-(* let p = create endpoint "test" *)
-(* let px = p >>= content   *)
+let p = create endpoint "test"
+let px = p >>= content
 
-(* let result = Lwt_main.run px *)
-(* let _ = print_string result *)
+let result = Lwt_main.run px
+let _ = print_string result

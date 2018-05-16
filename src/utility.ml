@@ -8,6 +8,20 @@
 (*   let _ = print_n 4 in *)
 (*   () *)
 
+(*let date _ =
+  let expected_result = "Wed, 16 May 2018 20:08:23 +0000" in
+
+*)
+
+let string_replace old_value new_value string = 
+  let regexp = Str.regexp_string old_value in
+  let result = Str.global_replace regexp new_value string in
+  result
+
+let x_ms_date time =
+  let s = Netdate.mk_mail_date time in
+  string_replace "+0000" "GMT" s 
+
 let authorization_token_using_master_key verb resource_type resource_id date master_key =
   let key =  B64.decode master_key in
   let text =
@@ -25,8 +39,15 @@ let authorization_token_using_master_key verb resource_type resource_id date mas
   in
   let master_token = "master" in
   let token_version = "1.0" in
-  Uri.pct_encode ~component:`Userinfo ("type=" ^ master_token ^ "&ver=" ^ token_version ^ "&sig=" ^ signature)
-
+  let result = Uri.pct_encode ~component:`Userinfo ("type=" ^ master_token ^ "&ver=" ^ token_version ^ "&sig=" ^ signature) in
+  let result2 = string_replace "%3D" "%3d" result in
+  let result3 = string_replace "%2B" "%2b" result2 in
+  let result4 = string_replace "%2F" "%2f" result3 in
+  (* let regexp_3d = Str.regexp_string "%3D" in *)
+  (* let result2 = Str.global_replace regexp_3d "%3d" result in *)
+  (* let regexp_2b = Str.regexp_string "%2B" in *)
+  (* let result3 = Str.global_replace regexp_2b "%2b" result2 in *)
+  result4
 (*
 C#:
 
