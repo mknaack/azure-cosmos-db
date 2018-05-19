@@ -2,6 +2,6 @@
 
 (executable
  ((name test)
-  (libraries (src ounit))
+  (libraries (src oUnit))
  )
 )
