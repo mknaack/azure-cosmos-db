@@ -1,0 +1,15 @@
+type databases = {
+  id: string;
+  rid: string;
+  self: string;
+  etag: string;
+  colls: string;
+  users: string;
+  ts: string;
+}
+
+type list_databases = {
+  rid: string;
+  databases: databases;
+  count: int;
+}

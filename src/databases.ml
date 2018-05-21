@@ -33,7 +33,6 @@ let list_databases databaseaccount =
     let now = Unix.time () in
     Utility.x_ms_date now
   in
-  let _ = print_endline ms_date in
   let headers =
     Http_headers.empty
   |> Http_headers.add (Http_headers.name "authorization") (authorization ms_date)
@@ -50,15 +49,6 @@ let list_databases databaseaccount =
   in
   get
     
-(* let p = list_databases endpoint *)
-(* let px = p >>= content *)
-(* let result = Lwt_main.run px *)
-(* let _ = print_string result *)
-
-
-
-
-
 
 (* (\* create database: *\) *)
 
@@ -129,7 +119,6 @@ let list_databases databaseaccount =
 (*     let now = Unix.time () in *)
 (*     Utility.x_ms_date now *)
 (*   in *)
-(*   let _ = print_endline ms_date in *)
 (*   let headers = *)
 (*     Http_headers.empty *)
 (*   |> Http_headers.add (Http_headers.name "authorization") (authorization ms_date) *)

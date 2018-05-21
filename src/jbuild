@@ -10,8 +10,17 @@
 (library
  ((name src)
   (public_name src)
-  (libraries (lwt yojson ocsigenserver netstring base64 uri))
+  (libraries (lwt yojson ocsigenserver netstring base64 uri atdgen))
   (flags (:standard -annot))
  )
 )
 
+(rule
+ ((targets (json_converter_j.ml json_converter_j.mli))
+  (deps    (json_converter.atd))
+  (action  (run atdgen -j -j-std ${^}))))
+
+(rule
+ ((targets (json_converter_t.ml json_converter_t.mli))
+  (deps    (json_converter.atd))
+  (action  (run atdgen -t -j-std ${^}))))
