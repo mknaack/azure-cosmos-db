@@ -48,7 +48,10 @@ let list_databases databaseaccount =
       ()
   in
   get
-    
+
+let convert_list_databases s =
+  Json_converter_j.list_databases_of_string s
+
 
 (* (\* create database: *\) *)
 

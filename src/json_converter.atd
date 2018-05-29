@@ -1,15 +1,15 @@
 type databases = {
   id: string;
-  rid: string;
-  self: string;
-  etag: string;
-  colls: string;
-  users: string;
-  ts: string;
+  _rid: string;
+  _self: string;
+  _etag: string;
+  _colls: string;
+  _users: string;
+  _ts: int;
 }
 
 type list_databases = {
-  rid: string;
-  databases: databases;
-  count: int;
+  _rid: string;
+  databases <json name="Databases">: databases list;
+  _count: int;
 }
