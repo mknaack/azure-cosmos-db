@@ -49,7 +49,6 @@ let convert_list_databases_test _ =
     _count = 1;
   } : Src.Json_converter_j.list_databases)
   in
-  (* assert_equal ~printer:printer_to_string (List.hd expected_result.databases)._users (List.hd result.databases)._users *)
   assert_equal expected_result result
 
 let tests = [

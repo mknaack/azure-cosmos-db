@@ -2,7 +2,7 @@
 
 (executable
  ((name test)
-  (libraries (lwt src))
+  (libraries (lwt Azure_Cosmos_DB))
   (flags (:standard -annot))
  )
 )

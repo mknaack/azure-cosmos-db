@@ -2,6 +2,6 @@
 
 (executable
  ((name test)
-  (libraries (src oUnit))
+  (libraries (Azure_Cosmos_DB oUnit))
  )
 )
