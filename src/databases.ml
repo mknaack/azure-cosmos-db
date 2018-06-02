@@ -15,19 +15,20 @@ module type Auth_key = sig
 end
 
 module type Account = sig
-  type verb = Get | Post | Put
+  type verb = Get | Post | Put | Delete
   val authorization : verb -> string -> string
   val endpoint : string
 end
 
 module Auth (Keys : Auth_key) : Account = struct
-  type verb = Get | Post | Put
+  type verb = Get | Post | Put | Delete
 
   let string_of_verb = function
     | Get -> "GET"
     | Post -> "POST"
     | Put -> "PUT"
-
+    | Delete -> "DELETE"
+  
   let authorization verb date = (* "type=master&ver=1.0&sig=" ^ key *)
     let verb = string_of_verb verb in (* get, post, put *)
     let resource_type = "dbs" in (* "dbs", "colls", "docs". *)
@@ -47,6 +48,8 @@ let content = function
   | _ -> return ""
 
 (* list databases: *)
+let convert_list_databases s =
+  Json_converter_j.list_databases_of_string s
 
 module Database (Account : Account) = struct
   let headers verb =
@@ -70,9 +73,6 @@ module Database (Account : Account) = struct
         ()
     in
     get
-
-  let convert_list_databases s =
-    Json_converter_j.list_databases_of_string s
 
   (* (\* create database: *\) *)
 
