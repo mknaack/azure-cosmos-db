@@ -16,7 +16,7 @@ module D = Database(MyAuth)
 let p = D.list_databases ()
 let px = p >>= content
 let result = Lwt_main.run px
-let dbs = D.convert_list_databases result
+(* let dbs = D.convert_list_databases result *)
 (* let dbs_names = List.map (fun x -> x) dbs.databases *)
 (* let xxx = List.map (fun x -> x.) dbs_names *)
 let _ = print_string result

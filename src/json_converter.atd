@@ -1,3 +1,7 @@
+type create_database = {
+  id: string;
+}
+
 type databases = {
   id: string;
   _rid: string;

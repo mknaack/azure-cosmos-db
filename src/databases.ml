@@ -78,12 +78,8 @@ module Database (Account : Account) = struct
 
   let create name =
     let post_content =
-      let json_content =
-        `Assoc [
-          ("id", `String name);
-        ]
-      in
-      Yojson.pretty_to_string json_content
+      let value = ({id = name}: Json_converter_j.create_database) in
+      Json_converter_j.string_of_create_database value
     in
     let content_type = "application", "json" in
     let headers = headers Account.Post in
