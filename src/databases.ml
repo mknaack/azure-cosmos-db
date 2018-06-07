@@ -40,8 +40,34 @@ module Auth (Keys : Auth_key) : Account = struct
   let endpoint = Keys.endpoint
 end
 
+
+
+
+let status_of_header http_header =
+  let h = Ocsigen_http_frame.Http_header.get_headers http_header in
+  let header_value_safe name =
+    try
+          Http_headers.find_all name h
+    with
+    | Not_found -> ["No " ^ Http_headers.name_to_string name]
+  in
+  (* let status = Ocsigen_http_frame.Http_header.get_headers_values http_header (Http_headers.name "Content-Length") in *)
+  (* match status with *)
+  (* | [] -> return "Empty" *)
+  (* | x::xs -> return x *)
+  let names = [
+    Http_headers.status;
+    Http_headers.content_length;
+    Http_headers.accept;
+  ]
+  in
+  return (List.fold_left (^) " " (List.flatten (List.map header_value_safe names)))
+
+let status = function
+  | { Ocsigen_http_frame.frame_header = http_header } -> status_of_header http_header
+
 let content = function
-  | { Ocsigen_http_frame.frame_content = Some v } ->
+  | { Ocsigen_http_frame.frame_content = Some v; frame_header = http_header } ->
       let r = Ocsigen_stream.string_of_stream 100000 (Ocsigen_stream.get v) in
       let _ = Ocsigen_stream.finalize v in
       r
