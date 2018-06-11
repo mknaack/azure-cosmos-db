@@ -23,6 +23,14 @@ let _ = print_string result
 (* let dbs_names =  List.map (fun x -> x.id) dbs.databases *)
 
 
+(* get database *)
+
+let p = D.get "test"
+let px = p >>= content
+
+let result = Lwt_main.run px
+let _ = print_string result
+
 (* create database *)
 
 let p = D.create "test"
