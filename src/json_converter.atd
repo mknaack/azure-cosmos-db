@@ -17,3 +17,9 @@ type list_databases = {
   databases <json name="Databases">: databases list;
   _count: int;
 }
+
+type create_collection = {
+  id: string;
+  indexingPolicy: string option;
+  partitionKey: string option;
+}
