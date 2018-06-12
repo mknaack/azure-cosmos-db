@@ -2,8 +2,6 @@ open Lwt
 open Src
 open Databases
 
-(* list_databases *)
-
 module MyAuthKeys : Auth_key = struct
   let master_key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg=="
   let endpoint = "mknnack"
@@ -13,32 +11,21 @@ module MyAuth = Auth(MyAuthKeys)
 
 module D = Database(MyAuth)
 
-let p = D.list_databases ()
-let px = p >>= content
-let result = Lwt_main.run px
-(* let dbs = D.convert_list_databases result *)
-(* let dbs_names = List.map (fun x -> x) dbs.databases *)
-(* let xxx = List.map (fun x -> x.) dbs_names *)
-let _ = print_string result
-(* let dbs_names =  List.map (fun x -> x.id) dbs.databases *)
+let dbname = "test"
 
+let do_command name  p =
+  let px = p >>= content in
+  let result = Lwt_main.run px in
+  print_endline (name ^ ":");
+  print_endline result
 
-(* get database *)
+let _ = do_command "create" (D.create dbname)
 
-let p = D.get "test"
-let px = p >>= content
+let _ = do_command "list_databases" (D.list_databases ())
 
-let result = Lwt_main.run px
-let _ = print_string result
+let _ = do_command "get" (D.get dbname)
 
-(* create database *)
-
-let p = D.create "test"
-let px = p >>= content
-
-let result = Lwt_main.run px
-let _ = print_string result
-
+let _ = do_command "delete" (D.delete dbname)
 
 
 

@@ -108,4 +108,31 @@ module Database (Account : Account) = struct
         ()
     in
     get
+
+  let delete ?v6 ?https ?port ?headers ~host ~uri () =
+    Ocsigen_lib.Ip_address.get_inet_addr ?v6 host >>= fun inet_addr ->
+    Ocsigen_http_client.raw_request
+      ?https
+      ?port
+      ?headers
+      ~http_method:Ocsigen_http_frame.Http_header.DELETE
+      ~content:None
+      ~host:(match port with None -> host | Some p -> host^":"^string_of_int p)
+      ~inet_addr
+      ~uri
+      ()
+      ()
+  
+  let delete name =
+    let headers = headers Account.Delete in
+    let command = delete
+        ~https:true
+        ~host
+        ~uri: ("/dbs/" ^ name)
+        ~headers: (headers ("dbs/" ^ name))
+        ~port:443
+        ()
+    in
+    command
+    
 end
