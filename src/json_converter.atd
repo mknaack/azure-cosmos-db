@@ -18,8 +18,30 @@ type list_databases = {
   _count: int;
 }
 
+type indexes = {
+  dataType: string;
+  precision: int;
+  kind: string;
+}
+
+type includedPaths = {
+  path: string;
+  indexes: indexes list;
+}
+
+type indexingPolicy = {
+  automatic: bool;
+  indexingMode: string;
+  includedPaths: includedPaths list;
+}
+
+type partitionKey = {
+    paths: string list;
+    kind: string;
+}
+
 type create_collection = {
   id: string;
-  indexingPolicy: string option;
-  partitionKey: string option;
+  ?indexingPolicy: indexingPolicy option;
+  ?partitionKey: partitionKey option;
 }

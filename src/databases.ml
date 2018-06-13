@@ -16,7 +16,7 @@ end
 module Auth (Keys : Auth_key) : Account = struct
   type verb = Get | Post | Put | Delete
   type resource = Dbs | Colls | Docs
-                  
+
   let string_of_verb = function
     | Get -> "GET"
     | Post -> "POST"
@@ -27,7 +27,7 @@ module Auth (Keys : Auth_key) : Account = struct
     | Dbs -> "dbs"
     | Colls -> "colls"
     | Docs -> "docs"
-  
+
   let authorization verb resource date db_name = (* "type=master&ver=1.0&sig=" ^ key *)
     let verb = string_of_verb verb in (* get, post, put *)
     let resource_type = string_of_resource resource in (* "dbs", "colls", "docs". *)
@@ -61,7 +61,7 @@ module Database (Account : Account) = struct
       |> Http_headers.add (Http_headers.name "x-ms-date") ms_date
 
   let host = Account.endpoint ^ ".documents.azure.com"
-  
+
   let list_databases () =
     let headers = headers Account.Dbs Account.Get in
     let get = Ocsigen_http_client.get
@@ -120,7 +120,7 @@ module Database (Account : Account) = struct
       ~uri
       ()
       ()
-  
+
   let delete name =
     let headers = headers Account.Dbs Account.Delete in
     let command = delete
@@ -146,7 +146,7 @@ module Database (Account : Account) = struct
       in
       get
 
-    
+
     let create dbname coll_name =
       let post_content =
         let value = ({id = coll_name; indexingPolicy = None; partitionKey = None}: Json_converter_j.create_collection) in
@@ -158,13 +158,13 @@ module Database (Account : Account) = struct
           ~https:true
           ~host
           ~uri:("/dbs/" ^ dbname ^ "/colls")
-          ~headers: (headers ("dbs/" ^ dbname ^ "/colls"))
+          ~headers: (headers ("dbs/" ^ dbname))
           ~port:443
           ~content:post_content
           ~content_type
           ()
       in
       post
-    
+
   end
 end
