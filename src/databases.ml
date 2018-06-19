@@ -166,5 +166,17 @@ module Database (Account : Account) = struct
       in
       post
 
+  let get name coll_name =
+    let headers = headers  Account.Colls Account.Get in
+    let get = Ocsigen_http_client.get
+        ~https:true
+        ~host
+        ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
+        ~headers: (headers ("dbs/" ^ name^ "/colls/" ^ coll_name))
+        ~port:443
+        ()
+    in
+    get
+
   end
 end

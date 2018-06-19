@@ -12,6 +12,7 @@ module MyAuth = Auth(MyAuthKeys)
 module D = Database(MyAuth)
 
 let dbname = "test"
+let collection_name = "testCollection"
 
 let do_command name  p =
   let px = p >>= content in
@@ -23,9 +24,11 @@ let _ = do_command "create database" (D.create dbname)
 
 let _ = do_command "list databases" (D.list_databases ())
 
-let _ = do_command "create collection" (D.Collection.create dbname "testCollection")
+let _ = do_command "create collection" (D.Collection.create dbname collection_name)
 
 let _ = do_command "list collection" (D.Collection.list dbname)
+
+let _ = do_command "get collection" (D.Collection.get dbname collection_name)
 
 let _ = do_command "get database" (D.get dbname)
 
