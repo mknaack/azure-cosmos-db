@@ -24,13 +24,15 @@ let _ = do_command "create database" (D.create dbname)
 
 let _ = do_command "list databases" (D.list_databases ())
 
+let _ = do_command "get database" (D.get dbname)
+
 let _ = do_command "create collection" (D.Collection.create dbname collection_name)
 
 let _ = do_command "list collection" (D.Collection.list dbname)
 
 let _ = do_command "get collection" (D.Collection.get dbname collection_name)
 
-let _ = do_command "get database" (D.get dbname)
+let _ = do_command "delete collection" (D.Collection.delete dbname collection_name)
 
 let _ = do_command "delete database" (D.delete dbname)
 

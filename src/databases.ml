@@ -49,6 +49,20 @@ let content = function
 let convert_list_databases s =
   Json_converter_j.list_databases_of_string s
 
+let delete_raw ?v6 ?https ?port ?headers ~host ~uri () =
+  Ocsigen_lib.Ip_address.get_inet_addr ?v6 host >>= fun inet_addr ->
+  Ocsigen_http_client.raw_request
+    ?https
+    ?port
+    ?headers
+    ~http_method:Ocsigen_http_frame.Http_header.DELETE
+    ~content:None
+    ~host:(match port with None -> host | Some p -> host^":"^string_of_int p)
+    ~inet_addr
+    ~uri
+    ()
+    ()
+
 module Database (Account : Account) = struct
   let headers resource verb db_name =
     let ms_date =
@@ -107,23 +121,9 @@ module Database (Account : Account) = struct
     in
     get
 
-  let delete ?v6 ?https ?port ?headers ~host ~uri () =
-    Ocsigen_lib.Ip_address.get_inet_addr ?v6 host >>= fun inet_addr ->
-    Ocsigen_http_client.raw_request
-      ?https
-      ?port
-      ?headers
-      ~http_method:Ocsigen_http_frame.Http_header.DELETE
-      ~content:None
-      ~host:(match port with None -> host | Some p -> host^":"^string_of_int p)
-      ~inet_addr
-      ~uri
-      ()
-      ()
-
   let delete name =
     let headers = headers Account.Dbs Account.Delete in
-    let command = delete
+    let command = delete_raw
         ~https:true
         ~host
         ~uri: ("/dbs/" ^ name)
@@ -177,6 +177,18 @@ module Database (Account : Account) = struct
         ()
     in
     get
+
+  let delete name coll_name =
+    let headers = headers Account.Colls Account.Delete in
+    let command = delete_raw
+        ~https:true
+        ~host
+        ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
+        ~headers: (headers ("dbs/" ^ name ^ "/colls/" ^ coll_name))
+        ~port:443
+        ()
+    in
+    command
 
   end
 end
