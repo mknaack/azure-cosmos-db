@@ -51,9 +51,21 @@ let convert_list_databases_test _ =
   in
   assert_equal expected_result result
 
+let string_of_bool_true _ =
+  let result = Utility.string_of_bool true in
+  let expected_result = "true" in
+  assert_equal ~printer:printer_to_string expected_result result
+
+let string_of_bool_false _ =
+  let result = Utility.string_of_bool false in
+  let expected_result = "false" in
+  assert_equal ~printer:printer_to_string expected_result result
+
 let tests = [
   "x_ms_date" >:: x_ms_date;
   "auth_key_test" >:: auth_key_test;
   "auth_key_test_get_list" >:: auth_key_test_get_list;
   "convert_list_databases_test" >:: convert_list_databases_test;
+  "string_of_bool_true" >:: string_of_bool_true;
+  "string_of_bool_false" >:: string_of_bool_false;
 ]

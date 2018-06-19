@@ -190,5 +190,47 @@ module Database (Account : Account) = struct
     in
     command
 
+  (*
+TODO:
+ - Replace a collection
+ - Get partition key ranges for a collection
+*)
+    module Document = struct
+      type indexing_directive =
+        | Include
+        | Exclude
+
+      let string_of_indexing_directive = function
+        | Include -> "Include"
+        | Exclude -> "Exclude"
+
+      let create ?is_upsert ?indexing_directive dbname coll_name =
+        let post_content =
+          let value = ({id = coll_name; indexingPolicy = None; partitionKey = None}: Json_converter_j.create_collection) in
+          Json_converter_j.string_of_create_collection value
+        in
+        let content_type = "application", "json" in
+        let headers s =
+          let apply_to_header_if_some name string_of values headers = match values with
+            | None -> headers
+            | Some value -> Http_headers.add name (string_of value) headers
+          in
+          headers Account.Docs Account.Post s
+          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert
+          (* |> Http_headers.add (Http_headers.name "x-ms-indexing-directive") (string_of_indexing_directive indexing_directive) *)
+          |> apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
+        in
+        let post = Ocsigen_http_client.post_string
+            ~https:true
+            ~host
+            ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
+            ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
+            ~port:443
+            ~content:post_content
+            ~content_type
+            ()
+        in
+        post
+    end
   end
 end
