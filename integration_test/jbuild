@@ -6,3 +6,13 @@
   (flags (:standard -annot))
  )
 )
+
+(rule
+ ((targets (json_types_j.ml json_types_j.mli))
+  (deps    (json_types.atd))
+  (action  (run atdgen -j -j-std ${^}))))
+
+(rule
+ ((targets (json_types_t.ml json_types_t.mli))
+  (deps    (json_types.atd))
+  (action  (run atdgen -t -j-std ${^}))))
