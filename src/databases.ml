@@ -63,7 +63,9 @@ let delete_raw ?v6 ?https ?port ?headers ~host ~uri () =
     ()
     ()
 
-module Database (Account : Account) = struct
+module Database (Auth_key : Auth_key) = struct
+  module Account = Auth(Auth_key)
+
   let headers resource verb db_name =
     let ms_date =
       let now = Unix.time () in
@@ -204,11 +206,7 @@ TODO:
         | Include -> "Include"
         | Exclude -> "Exclude"
 
-      let create ?is_upsert ?indexing_directive dbname coll_name =
-        let post_content =
-          let value = ({id = coll_name; indexingPolicy = None; partitionKey = None}: Json_converter_j.create_collection) in
-          Json_converter_j.string_of_create_collection value
-        in
+      let create ?is_upsert ?indexing_directive dbname coll_name content =
         let content_type = "application", "json" in
         let headers s =
           let apply_to_header_if_some name string_of values headers = match values with
@@ -217,7 +215,6 @@ TODO:
           in
           headers Account.Docs Account.Post s
           |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert
-          (* |> Http_headers.add (Http_headers.name "x-ms-indexing-directive") (string_of_indexing_directive indexing_directive) *)
           |> apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
         in
         let post = Ocsigen_http_client.post_string
@@ -226,7 +223,7 @@ TODO:
             ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
             ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
             ~port:443
-            ~content:post_content
+            ~content:content
             ~content_type
             ()
         in

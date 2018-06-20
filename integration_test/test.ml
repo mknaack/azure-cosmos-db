@@ -7,9 +7,7 @@ module MyAuthKeys : Auth_key = struct
   let endpoint = "mknnack"
 end
 
-module MyAuth = Auth(MyAuthKeys)
-
-module D = Database(MyAuth)
+module D = Database(MyAuthKeys)
 
 let dbname = "test"
 let collection_name = "testCollection"
