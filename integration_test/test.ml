@@ -37,6 +37,8 @@ let _ = do_command "get collection" (D.Collection.get dbname collection_name)
 
 let _ = do_command "create document" (D.Collection.Document.create dbname collection_name create_value)
 
+let _ = do_command "list document" (D.Collection.Document.list dbname collection_name)
+
 let _ = do_command "delete collection" (D.Collection.delete dbname collection_name)
 
 let _ = do_command "delete database" (D.delete dbname)

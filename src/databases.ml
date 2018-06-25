@@ -138,16 +138,13 @@ module Database (Auth_key : Auth_key) = struct
   module Collection = struct
     let list dbname =
       let headers = headers Account.Colls Account.Get in
-      let get = Ocsigen_http_client.get
-          ~https:true
-          ~host
-          ~uri:("/dbs/" ^ dbname ^ "/colls")
-          ~headers: (headers ("dbs/" ^ dbname))
-          ~port:443
+      Ocsigen_http_client.get
+        ~https:true
+        ~host
+        ~uri:("/dbs/" ^ dbname ^ "/colls")
+        ~headers: (headers ("dbs/" ^ dbname))
+        ~port:443
         ()
-      in
-      get
-
 
     let create dbname coll_name =
       let post_content =
@@ -206,28 +203,51 @@ TODO:
         | Include -> "Include"
         | Exclude -> "Exclude"
 
+      let apply_to_header_if_some name string_of values headers = match values with
+        | None -> headers
+        | Some value -> Http_headers.add name (string_of value) headers
+
       let create ?is_upsert ?indexing_directive dbname coll_name content =
         let content_type = "application", "json" in
         let headers s =
-          let apply_to_header_if_some name string_of values headers = match values with
-            | None -> headers
-            | Some value -> Http_headers.add name (string_of value) headers
-          in
           headers Account.Docs Account.Post s
           |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert
           |> apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
         in
-        let post = Ocsigen_http_client.post_string
-            ~https:true
-            ~host
-            ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
-            ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
-            ~port:443
-            ~content:content
-            ~content_type
-            ()
+        Ocsigen_http_client.post_string
+          ~https:true
+          ~host
+          ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
+          ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
+          ~port:443
+          ~content:content
+          ~content_type
+          ()
+
+      let list ?max_item_count ?continuation ?consistency_level ?session_token ?a_im ?if_none_match ?partition_key_range_id dbname coll_name =
+        let apply_a_im_to_header_if_some name values headers = match values with
+          | None -> headers
+          | Some false -> headers
+          | Some true -> Http_headers.add name "Incremental feed" headers
         in
-        post
+        let headers s =
+          headers Account.Docs Account.Get s
+          |> apply_to_header_if_some (Http_headers.name "x-ms-max-item-count") string_of_int max_item_count
+          |> apply_to_header_if_some (Http_headers.name "x-ms-continuation") (fun x -> x) continuation
+          |> apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") (fun x -> x) consistency_level
+          |> apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
+          |> apply_a_im_to_header_if_some (Http_headers.name "A-IM") a_im
+          |> apply_to_header_if_some (Http_headers.name "If-None-Match") (fun x -> x) if_none_match
+          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkeyrangeid") (fun x -> x) partition_key_range_id
+        in
+        Ocsigen_http_client.get
+          ~https:true
+          ~host
+          ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
+          ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
+          ~port:443
+          ()
+
     end
   end
 end
