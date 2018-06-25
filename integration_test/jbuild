@@ -3,6 +3,6 @@
 (executable
  ((name test)
   (libraries (lwt Azure_Cosmos_DB))
-  (flags (:standard -annot))
+  (flags (:standard -annot -short-paths))
  )
 )
