@@ -17,3 +17,31 @@ type list_databases = {
   databases <json name="Databases">: databases list;
   _count: int;
 }
+
+type indexes = {
+  dataType: string;
+  precision: int;
+  kind: string;
+}
+
+type includedPaths = {
+  path: string;
+  indexes: indexes list;
+}
+
+type indexingPolicy = {
+  automatic: bool;
+  indexingMode: string;
+  includedPaths: includedPaths list;
+}
+
+type partitionKey = {
+    paths: string list;
+    kind: string;
+}
+
+type create_collection = {
+  id: string;
+  ?indexingPolicy: indexingPolicy option;
+  ?partitionKey: partitionKey option;
+}
