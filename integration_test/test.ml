@@ -1,6 +1,7 @@
 open Lwt
 open Src
 open Databases
+open Json_j
 
 module MyAuthKeys : Auth_key = struct
   let master_key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg=="
@@ -18,6 +19,10 @@ let do_command name  p =
   print_endline (name ^ ":");
   print_endline result
 
+let create_value =
+  ({id = "create_value"; firstName = "A First name"; lastName = "a Last name"}: create_document)
+  |> string_of_create_document
+
 let _ = do_command "create database" (D.create dbname)
 
 let _ = do_command "list databases" (D.list_databases ())
@@ -30,14 +35,10 @@ let _ = do_command "list collection" (D.Collection.list dbname)
 
 let _ = do_command "get collection" (D.Collection.get dbname collection_name)
 
-let create_document_json = ({id = "asdf"; firstName = "first name"; lastName = "last name"}: Json_types_j.create_document)
-let create_document_value = Json_types_j.string_of_create_document create_document_json
+let _ = do_command "create document" (D.Collection.Document.create dbname collection_name create_value)
 
-let _ = do_command "create document" (D.Collection.Document.create dbname collection_name create_document_value)
+let _ = do_command "list document" (D.Collection.Document.list dbname collection_name)
 
 let _ = do_command "delete collection" (D.Collection.delete dbname collection_name)
 
 let _ = do_command "delete database" (D.delete dbname)
-
-
-
