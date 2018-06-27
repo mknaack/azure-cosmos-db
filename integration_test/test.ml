@@ -1,36 +1,44 @@
 open Lwt
 open Src
 open Databases
-
-(* list_databases *)
+open Json_j
 
 module MyAuthKeys : Auth_key = struct
   let master_key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg=="
   let endpoint = "mknnack"
 end
 
-module MyAuth = Auth(MyAuthKeys)
+module D = Database(MyAuthKeys)
 
-module D = Database(MyAuth)
+let dbname = "test"
+let collection_name = "testCollection"
 
-let p = D.list_databases ()
-let px = p >>= content
-let result = Lwt_main.run px
-(* let dbs = D.convert_list_databases result *)
-(* let dbs_names = List.map (fun x -> x) dbs.databases *)
-(* let xxx = List.map (fun x -> x.) dbs_names *)
-let _ = print_string result
-(* let dbs_names =  List.map (fun x -> x.id) dbs.databases *)
+let do_command name  p =
+  let px = p >>= content in
+  let result = Lwt_main.run px in
+  print_endline (name ^ ":");
+  print_endline result
 
+let create_value =
+  ({id = "create_value"; firstName = "A First name"; lastName = "a Last name"}: create_document)
+  |> string_of_create_document
 
-(* create database *)
+let _ = do_command "create database" (D.create dbname)
 
-let p = D.create "test"
-let px = p >>= content
+let _ = do_command "list databases" (D.list_databases ())
 
-let result = Lwt_main.run px
-let _ = print_string result
+let _ = do_command "get database" (D.get dbname)
 
+let _ = do_command "create collection" (D.Collection.create dbname collection_name)
 
+let _ = do_command "list collection" (D.Collection.list dbname)
 
+let _ = do_command "get collection" (D.Collection.get dbname collection_name)
 
+let _ = do_command "create document" (D.Collection.Document.create dbname collection_name create_value)
+
+let _ = do_command "list document" (D.Collection.Document.list dbname collection_name)
+
+let _ = do_command "delete collection" (D.Collection.delete dbname collection_name)
+
+let _ = do_command "delete database" (D.delete dbname)

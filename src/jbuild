@@ -11,7 +11,7 @@
  ((name src)
   (public_name Azure_Cosmos_DB)
   (libraries (lwt yojson ocsigenserver netstring base64 uri atdgen))
-  (flags (:standard -annot))
+  (flags (:standard -annot -short-paths))
  )
 )
 

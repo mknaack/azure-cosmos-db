@@ -3,6 +3,16 @@
 (executable
  ((name test)
   (libraries (lwt Azure_Cosmos_DB))
-  (flags (:standard -annot))
+  (flags (:standard -annot -short-paths))
  )
 )
+
+(rule
+ ((targets (json_j.ml json_j.mli))
+  (deps    (json.atd))
+  (action  (run atdgen -j -j-std ${^}))))
+
+(rule
+ ((targets (json_t.ml json_t.mli))
+  (deps    (json.atd))
+  (action  (run atdgen -t -j-std ${^}))))
