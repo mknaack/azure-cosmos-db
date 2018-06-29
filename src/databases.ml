@@ -145,7 +145,7 @@ module Database (Auth_key : Auth_key) = struct
     post
 
   let get name =
-    let headers = headers  Account.Dbs Account.Get in
+    let headers = headers Account.Dbs Account.Get in
     let get = Ocsigen_http_client.get
         ~https:true
         ~host
@@ -199,7 +199,7 @@ module Database (Auth_key : Auth_key) = struct
       post
 
   let get name coll_name =
-    let headers = headers  Account.Colls Account.Get in
+    let headers = headers Account.Colls Account.Get in
     let get = Ocsigen_http_client.get
         ~https:true
         ~host
@@ -280,6 +280,37 @@ TODO:
           ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
           ~port:443
           ()
+
+      type consistency_level =
+        | Strong
+        | Bounded
+        | Session
+        | Eventual
+
+      let string_of_consistency_level = function
+        | Strong -> "Strong"
+        | Bounded -> "Bounded"
+        | Session -> "Session"
+        | Eventual -> "Eventual"
+
+      let get ?if_none_match ?partition_key ?consistency_level ?session_token dbname coll_name doc_id =
+        let headers s =
+          headers Account.Docs Account.Get s
+          |> apply_to_header_if_some (Http_headers.name "If-None-Match") (fun x -> x) if_none_match
+          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
+          |> apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") string_of_consistency_level consistency_level
+          |> apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
+        in
+        let get = Ocsigen_http_client.get
+        ~https:true
+        ~host
+        ~uri: ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+        ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id))
+        ~port:443
+        ()
+    in
+    get
+
 
     end
   end
