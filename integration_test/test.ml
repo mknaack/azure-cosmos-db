@@ -13,11 +13,16 @@ module D = Database(MyAuthKeys)
 let dbname = "test"
 let collection_name = "testCollection"
 
-let do_command name  p =
-  let px = p >>= content in
-  let result = Lwt_main.run px in
+let do_command name p =
+  let px = p >>=
+    fun l -> let res = content l in
+    res >>= fun content ->
+    return (status l, content)
+  in
+  let header, content = Lwt_main.run px in
   print_endline (name ^ ":");
-  print_endline result
+  print_endline ("Header: " ^ header);
+  print_endline ("Content: " ^ content)
 
 let create_value =
   ({id = "create_value"; firstName = "A First name"; lastName = "a Last name"}: create_document)

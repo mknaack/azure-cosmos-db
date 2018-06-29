@@ -38,38 +38,45 @@ module Auth (Keys : Auth_key) : Account = struct
   let endpoint = Keys.endpoint
 end
 
-
-
-
-let status_of_header http_header =
-  let h = Ocsigen_http_frame.Http_header.get_headers http_header in
-  let header_value_safe name =
-    try
-          Http_headers.find_all name h
-    with
-    | Not_found -> ["No " ^ Http_headers.name_to_string name]
+let status_of_header {Ocsigen_http_frame.Http_header.mode = mode; proto = proto; headers = headers } =
+  let string_of_mode = function
+    | Ocsigen_http_frame.Http_header.Query _ -> "Query"
+    | Answer i -> "Status code: " ^ string_of_int i
+    | Nofirstline -> ""
   in
-  (* let status = Ocsigen_http_frame.Http_header.get_headers_values http_header (Http_headers.name "Content-Length") in *)
-  (* match status with *)
-  (* | [] -> return "Empty" *)
-  (* | x::xs -> return x *)
+  let string_of_proto = function
+    | Ocsigen_http_frame.Http_header.HTTP10 -> "HTTP/1.0"
+    | HTTP11 -> "HTTP/1.1"
+  in
+  let header_value_safe name =
+    let string_name = Http_headers.name_to_string name in
+    try
+          (string_name ^ ": ") :: ((Http_headers.find_all name headers) @ [", "])
+    with
+    | Not_found -> ["No " ^ string_name ^ ", "]
+  in
   let names = [
-    Http_headers.status;
     Http_headers.content_length;
-    Http_headers.accept;
+    Http_headers.name "x-ms-request-charge";
+    Http_headers.name "x-ms-session-token";
   ]
   in
-  return (List.fold_left (^) " " (List.flatten (List.map header_value_safe names)))
+  "Protocol " ^ string_of_proto proto ^ "\n" ^
+  "Mode " ^ string_of_mode mode ^ "\n" ^
+  (List.fold_left (^) " " (List.flatten (List.map header_value_safe names)))
 
 let status = function
-  | { Ocsigen_http_frame.frame_header = http_header } -> status_of_header http_header
+  | { Ocsigen_http_frame.frame_content = _; frame_header = http_header; frame_abort = _ } ->
+    status_of_header http_header
 
-let content = function
-  | { Ocsigen_http_frame.frame_content = Some v; frame_header = http_header } ->
-      let r = Ocsigen_stream.string_of_stream 100000 (Ocsigen_stream.get v) in
-      let _ = Ocsigen_stream.finalize v in
-      r
-  | _ -> return ""
+let content { Ocsigen_http_frame.frame_content = content; frame_header = http_header; frame_abort = _ } =
+  match content with
+  |  Some v ->
+    let r = Ocsigen_stream.string_of_stream 100000 (Ocsigen_stream.get v) in
+    let _ = Ocsigen_stream.finalize v in
+    r
+  | None ->
+    return ""
 
 (* list databases: *)
 let convert_list_databases s =
