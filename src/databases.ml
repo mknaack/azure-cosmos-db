@@ -69,7 +69,7 @@ let status = function
   | { Ocsigen_http_frame.frame_content = _; frame_header = http_header; frame_abort = _ } ->
     status_of_header http_header
 
-let content { Ocsigen_http_frame.frame_content = content; frame_header = http_header; frame_abort = _ } =
+let content { Ocsigen_http_frame.frame_content = content; frame_header = _; frame_abort = _ } =
   match content with
   |  Some v ->
     let r = Ocsigen_stream.string_of_stream 100000 (Ocsigen_stream.get v) in
@@ -81,20 +81,6 @@ let content { Ocsigen_http_frame.frame_content = content; frame_header = http_he
 (* list databases: *)
 let convert_list_databases s =
   Json_converter_j.list_databases_of_string s
-
-let delete_raw ?v6 ?https ?port ?headers ~host ~uri () =
-  Ocsigen_lib.Ip_address.get_inet_addr ?v6 host >>= fun inet_addr ->
-  Ocsigen_http_client.raw_request
-    ?https
-    ?port
-    ?headers
-    ~http_method:Ocsigen_http_frame.Http_header.DELETE
-    ~content:None
-    ~host:(match port with None -> host | Some p -> host^":"^string_of_int p)
-    ~inet_addr
-    ~uri
-    ()
-    ()
 
 module Database (Auth_key : Auth_key) = struct
   module Account = Auth(Auth_key)
@@ -158,7 +144,7 @@ module Database (Auth_key : Auth_key) = struct
 
   let delete name =
     let headers = headers Account.Dbs Account.Delete in
-    let command = delete_raw
+    let command = Ocsigen_extra.delete
         ~https:true
         ~host
         ~uri: ("/dbs/" ^ name)
@@ -212,7 +198,7 @@ module Database (Auth_key : Auth_key) = struct
 
   let delete name coll_name =
     let headers = headers Account.Colls Account.Delete in
-    let command = delete_raw
+    let command = Ocsigen_extra.delete
         ~https:true
         ~host
         ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
@@ -308,10 +294,28 @@ TODO:
         ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id))
         ~port:443
         ()
-    in
-    get
+        in
+        get
 
-
+      let replace ?indexing_directive ?partition_key ?if_match dbname coll_name doc_id content =
+        let content_type = "application", "json" in
+        let headers s =
+          headers Account.Docs Account.Put s
+          (* |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert *)
+          |> apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
+          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
+          |> apply_to_header_if_some (Http_headers.name "If-Match") (fun x -> x) if_match
+        in
+        Ocsigen_extra.put_string
+          ~https:true
+          ~host
+          ~uri: ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+          ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id))
+          ~port:443
+          ~content
+          ~content_type
+          ()
+        
     end
   end
 end
