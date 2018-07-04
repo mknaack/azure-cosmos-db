@@ -51,7 +51,7 @@ let status_of_header {Ocsigen_http_frame.Http_header.mode = mode; proto = proto;
   let header_value_safe name =
     let string_name = Http_headers.name_to_string name in
     try
-          (string_name ^ ": ") :: ((Http_headers.find_all name headers) @ [", "])
+      (string_name ^ ": ") :: ((Http_headers.find_all name headers) @ [", "])
     with
     | Not_found -> ["No " ^ string_name ^ ", "]
   in
@@ -89,11 +89,11 @@ module Database (Auth_key : Auth_key) = struct
     let ms_date =
       let now = Unix.time () in
       Utility.x_ms_date now
-      in
-      Http_headers.empty
-      |> Http_headers.add (Http_headers.name "authorization") (Account.authorization verb resource  ms_date db_name)
-      |> Http_headers.add (Http_headers.name "x-ms-version") "2017-02-22"
-      |> Http_headers.add (Http_headers.name "x-ms-date") ms_date
+    in
+    Http_headers.empty
+    |> Http_headers.add (Http_headers.name "authorization") (Account.authorization verb resource  ms_date db_name)
+    |> Http_headers.add (Http_headers.name "x-ms-version") "2017-02-22"
+    |> Http_headers.add (Http_headers.name "x-ms-date") ms_date
 
   let host = Account.endpoint ^ ".documents.azure.com"
 
@@ -184,29 +184,29 @@ module Database (Auth_key : Auth_key) = struct
       in
       post
 
-  let get name coll_name =
-    let headers = headers Account.Colls Account.Get in
-    let get = Ocsigen_http_client.get
-        ~https:true
-        ~host
-        ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
-        ~headers: (headers ("dbs/" ^ name^ "/colls/" ^ coll_name))
-        ~port:443
-        ()
-    in
-    get
+    let get name coll_name =
+      let headers = headers Account.Colls Account.Get in
+      let get = Ocsigen_http_client.get
+          ~https:true
+          ~host
+          ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
+          ~headers: (headers ("dbs/" ^ name^ "/colls/" ^ coll_name))
+          ~port:443
+          ()
+      in
+      get
 
-  let delete name coll_name =
-    let headers = headers Account.Colls Account.Delete in
-    let command = Ocsigen_extra.delete
-        ~https:true
-        ~host
-        ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
-        ~headers: (headers ("dbs/" ^ name ^ "/colls/" ^ coll_name))
-        ~port:443
-        ()
-    in
-    command
+    let delete name coll_name =
+      let headers = headers Account.Colls Account.Delete in
+      let command = Ocsigen_extra.delete
+          ~https:true
+          ~host
+          ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
+          ~headers: (headers ("dbs/" ^ name ^ "/colls/" ^ coll_name))
+          ~port:443
+          ()
+      in
+      command
 
   (*
 TODO:
@@ -288,12 +288,12 @@ TODO:
           |> apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
         in
         let get = Ocsigen_http_client.get
-        ~https:true
-        ~host
-        ~uri: ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
-        ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id))
-        ~port:443
-        ()
+            ~https:true
+            ~host
+            ~uri: ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+            ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id))
+            ~port:443
+            ()
         in
         get
 
@@ -315,7 +315,7 @@ TODO:
           ~content
           ~content_type
           ()
-        
+
     end
   end
 end
