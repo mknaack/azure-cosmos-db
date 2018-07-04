@@ -301,7 +301,6 @@ TODO:
         let content_type = "application", "json" in
         let headers s =
           headers Account.Docs Account.Put s
-          (* |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert *)
           |> apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
           |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
           |> apply_to_header_if_some (Http_headers.name "If-Match") (fun x -> x) if_match
@@ -314,6 +313,16 @@ TODO:
           ~port:443
           ~content
           ~content_type
+          ()
+
+      let delete dbname coll_name doc_id =
+        let headers = headers Account.Docs Account.Delete in
+        Ocsigen_extra.delete
+          ~https:true
+          ~host
+          ~uri: ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+          ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id))
+          ~port:443
           ()
 
     end
