@@ -1,8 +1,15 @@
 opam-version: "1.2"
 name: "azure-cosmos-db"
 version: "0.1.0"
-maintainer: "Morten Knaack"
-
+maintainer: "Morten Knaack <knaack@gmail>"
+authors: "Morten Knaack <knaack@gmail>"
 depends: [
   "dune" {build}
-o]
+  "lwt"
+  "atdgen"
+  "ocsigenserver"
+  "base64"
+  "uri"
+  "oUnit" {test}
+]
+available: [ocaml-version >= "4.06.0"]
