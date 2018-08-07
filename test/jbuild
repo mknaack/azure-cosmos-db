@@ -1,8 +1,0 @@
-(jbuild_version 1)
-
-(executable
- ((name test)
-  (libraries (Azure_Cosmos_DB oUnit))
-  (flags (:standard -annot -short-paths))
- )
-)

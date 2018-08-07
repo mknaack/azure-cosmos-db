@@ -5,15 +5,18 @@
   (flags (:standard -annot -short-paths))
 )
 
-
 (rule
-  (targets json_converter_j.ml json_converter_j.mli)
-  (deps json_converter.atd)
-  (action (run atdgen -j -j-std ${^}))
+  (targets json_converter_j.ml
+           json_converter_j.mli)
+  (deps    json_converter.atd)
+  (action  (run atdgen -j -j-std %{deps}))
 )
 
+
 (rule
-  (targets json_converter_t.ml json_converter_t.mli)
-  (deps json_converter.atd)
-  (action (run atdgen -t -j-std ${^}))
+  (targets json_converter_t.ml
+           json_converter_t.mli)
+  (deps    json_converter.atd)
+  (action  (run atdgen -t %{deps}))
 )
+
