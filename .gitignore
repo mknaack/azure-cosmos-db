@@ -10,4 +10,5 @@
 *.opt
 *.merlin
 _build
+*.install
 *~

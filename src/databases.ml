@@ -1,5 +1,4 @@
 open Lwt
-open Yojson
 
 module type Auth_key = sig
   val master_key : string

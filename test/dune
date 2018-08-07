@@ -1,0 +1,6 @@
+(executable
+  (name test)
+  (libraries azure-cosmos-db oUnit)
+  (flags (:standard -annot -short-paths))
+)
+
