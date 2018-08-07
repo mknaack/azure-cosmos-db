@@ -12,15 +12,27 @@ module D = Database(MyAuthKeys)
 
 let dbname = "test"
 let collection_name = "testCollection"
+let document_id = "document_id"
 
-let do_command name  p =
-  let px = p >>= content in
-  let result = Lwt_main.run px in
+let do_command name p =
+  let px = p >>=
+    fun l -> let res = content l in
+    res >>= fun content ->
+    return (status l, content)
+  in
+  let header, content = Lwt_main.run px in
   print_endline (name ^ ":");
-  print_endline result
+  print_endline ("Header: " ^ header);
+  print_endline ("Content: " ^ content)
+
+
 
 let create_value =
-  ({id = "create_value"; firstName = "A First name"; lastName = "a Last name"}: create_document)
+  ({id = document_id; firstName = "A First name"; lastName = "a Last name"}: create_document)
+  |> string_of_create_document
+
+let replace_value =
+  ({id = document_id; firstName = "Something different"; lastName = "a Last name"}: create_document)
   |> string_of_create_document
 
 let _ = do_command "create database" (D.create dbname)
@@ -38,6 +50,12 @@ let _ = do_command "get collection" (D.Collection.get dbname collection_name)
 let _ = do_command "create document" (D.Collection.Document.create dbname collection_name create_value)
 
 let _ = do_command "list document" (D.Collection.Document.list dbname collection_name)
+
+let _ = do_command "get document" (D.Collection.Document.get dbname collection_name document_id)
+
+let _ = do_command "replace document" (D.Collection.Document.replace dbname collection_name document_id replace_value)
+
+let _ = do_command "delete document" (D.Collection.Document.delete dbname collection_name document_id)
 
 let _ = do_command "delete collection" (D.Collection.delete dbname collection_name)
 
