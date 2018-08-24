@@ -10,6 +10,6 @@ depends: [
   "ocsigenserver"
   "base64"
   "uri"
-  "oUnit" {test}
+  "alcotest-lwt" {test}
 ]
 available: [ocaml-version >= "4.06.0"]

@@ -1,5 +1,5 @@
 (test
   (name test)
-  (libraries azure-cosmos-db oUnit)
+  (libraries azure-cosmos-db alcotest)
   (flags (:standard -annot -short-paths))
 )
