@@ -6,7 +6,7 @@ build:
 all: build
 
 unit_test:
-	dune exec test/test.exe
+	dune runtest
 
 integration_test:
 	dune exec integration_test/test.exe
