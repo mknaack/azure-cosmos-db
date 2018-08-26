@@ -26,26 +26,27 @@ let auth_key_test_get_list () =
   let expected_result = "type%3dmaster%26ver%3d1.0%26sig%3dcK0fCpDW9YvCbmmrIVxaGL%2fq9o%2flFlPc8GdCphvow3c%3d" in
   Alcotest.(check string) "Same string" expected_result result
 
-(* let convert_list_databases_test () = *)
-(*   let data = "{\"_rid\":\"\",\"Databases\":[{\"id\":\"test\",\"_rid\":\"1zxpAA==\",\"_self\":\"dbs\\/1zxpAA==\\/\",\"_etag\":\"\\\"00007e01-0000-0000-0000-5b0042840000\\\"\",\"_colls\":\"colls\\/\",\"_users\":\"users\\/\",\"_ts\":1526743684}],\"_count\":1}" in *)
-(*   let result = Databases.convert_list_databases data in *)
-(*   let expected_databases = ({ *)
-(*         id = "test"; *)
-(*         _rid = "1zxpAA=="; *)
-(*         _self = "dbs/1zxpAA==/"; *)
-(*         _etag = "\"00007e01-0000-0000-0000-5b0042840000\""; *)
-(*         _colls = "colls/"; *)
-(*         _users = "users/"; *)
-(*         _ts = 1526743684; *)
-(*       } : Src.Json_converter_j.databases) *)
-(*   in *)
-(*   let expected_result = ({ *)
-(*     _rid = ""; *)
-(*     databases = [expected_databases]; *)
-(*     _count = 1; *)
-(*   } : Src.Json_converter_j.list_databases) *)
-(*   in *)
-(*   Alcotest.(check equal) "Same record" expected_result result *)
+let convert_list_databases_test () =
+  let data = "{\"_rid\":\"\",\"Databases\":[{\"id\":\"test\",\"_rid\":\"1zxpAA==\",\"_self\":\"dbs\\/1zxpAA==\\/\",\"_etag\":\"\\\"00007e01-0000-0000-0000-5b0042840000\\\"\",\"_colls\":\"colls\\/\",\"_users\":\"users\\/\",\"_ts\":1526743684}],\"_count\":1}" in
+  let result = Databases.convert_list_databases data in
+  let expected_databases = ({
+        id = "test";
+        _rid = "1zxpAA==";
+        _self = "dbs/1zxpAA==/";
+        _etag = "\"00007e01-0000-0000-0000-5b0042840000\"";
+        _colls = "colls/";
+        _users = "users/";
+        _ts = 1526743684;
+      } : Src.Json_converter_j.databases)
+  in
+  let expected_result = ({
+    _rid = "";
+    databases = [expected_databases];
+    _count = 1;
+  } : Src.Json_converter_j.list_databases)
+  in
+  let is_same = expected_result = result in
+  Alcotest.(check bool) "Same record" true is_same
 
 let string_of_bool_true () =
   let result = Utility.string_of_bool true in
@@ -61,7 +62,7 @@ let utility_test =[
   "x_ms_date", `Quick, x_ms_date;
   "auth_key_test", `Quick, auth_key_test;
   "auth_key_test_get_list", `Quick, auth_key_test_get_list;
-  (* "convert_list_databases_test", `Quick, convert_list_databases_test; *)
+  "convert_list_databases_test", `Quick, convert_list_databases_test;
   "string_of_bool_true", `Quick, string_of_bool_true;
   "string_of_bool_false", `Quick, string_of_bool_false;
 ]
