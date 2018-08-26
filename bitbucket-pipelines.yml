@@ -7,7 +7,7 @@ pipelines:
           - opam
         script:
           - eval $(opam config env)
-          - opam pin -yn azure-cosmos-db
+          - opam pin add -yn azure-cosmos-db .
           - opam install -t azure-cosmos-db
 
 definitions:
