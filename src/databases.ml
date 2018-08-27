@@ -324,6 +324,28 @@ TODO:
           ~port:443
           ()
 
+      let query ?max_item_count ?continuation ?consistency_level ?session_token ?is_partition dbname coll_name query =
+        let headers s =
+          headers Account.Docs Account.Post s
+          |> Http_headers.add (Http_headers.name "x-ms-documentdb-isquery") (Utility.string_of_bool true)
+          |> apply_to_header_if_some (Http_headers.name "x-ms-max-item-count") string_of_int max_item_count
+          |> apply_to_header_if_some (Http_headers.name "x-ms-continuation") (fun x -> x) continuation
+          |> apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") (fun x -> x) consistency_level
+          |> apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
+          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-query-enablecrosspartition") Utility.string_of_bool is_partition
+        in
+        let content =   Json_converter_j.string_of_query query in
+        let content_type = "application", "query+json" in
+        Ocsigen_http_client.post_string
+          ~https:true
+          ~host
+          ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
+          ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
+          ~port:443
+          ~content:content
+          ~content_type
+          ()
+
     end
   end
 end

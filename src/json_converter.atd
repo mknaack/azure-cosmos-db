@@ -45,3 +45,13 @@ type create_collection = {
   ?indexingPolicy: indexingPolicy option;
   ?partitionKey: partitionKey option;
 }
+
+type parameter = {
+  name: string;
+  value: string;
+}
+
+type query = {
+  query: string;
+  parameters: parameter list;
+}

@@ -68,6 +68,14 @@ let create_document_test _ () =
 let list_document_test _ () =
   test_command (D.Collection.Document.list dbname collection_name) 200
 
+let query_document_test _ () =
+  let query =
+    Json_converter_t.{query = "SELECT * FROM " ^ collection_name ^ " f WHERE f.firstName = @fname";
+     parameters = [{name = "@fname"; value = "A First name"}]
+    }
+  in
+  test_command (D.Collection.Document.query dbname collection_name query) 200
+
 let get_document_test _ () =
   test_command (D.Collection.Document.get dbname collection_name document_id) 200
 
@@ -95,6 +103,7 @@ let test = [
 
   Alcotest_lwt.test_case "create document" `Slow create_document_test;
   Alcotest_lwt.test_case "list document" `Slow list_document_test;
+  Alcotest_lwt.test_case "query document" `Slow query_document_test;
   Alcotest_lwt.test_case "get document" `Slow get_document_test;
   Alcotest_lwt.test_case "replace document" `Slow replace_document_test;
 
