@@ -1,5 +1,9 @@
 open Lwt
 
+(*
+ Azure cosmos database documentation: https://docs.microsoft.com/en-us/rest/api/cosmos-db/
+*)
+
 module type Auth_key = sig
   val master_key : string
   val endpoint : string
