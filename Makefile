@@ -13,3 +13,10 @@ integration_test:
 
 clean:
 	rm -rf _build *.install
+
+docker_base:
+	docker build -t azure-cosmos-db-base -f dockerfile.base .
+
+docker_build:
+	docker build -t azure-cosmos-db-build -f dockerfile.build .
+	docker run azure-cosmos-db-build
