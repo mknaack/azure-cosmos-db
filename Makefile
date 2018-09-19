@@ -20,3 +20,7 @@ docker_base:
 docker_build:
 	docker build -t azure-cosmos-db-build -f dockerfile.build .
 	docker run azure-cosmos-db-build
+
+docker_base_tag:
+	docker tag azure-cosmos-db-base:latest mknaack/azure-cosmos-db-base:0.1
+	docker push mknaack/azure-cosmos-db-base:0.1

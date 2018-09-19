@@ -1,4 +1,4 @@
-FROM azure-cosmos-db-base
+FROM mknaack/azure-cosmos-db-base:0.1
 
 WORKDIR /home/opam
 COPY --chown=opam . /home/opam
