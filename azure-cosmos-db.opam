@@ -1,6 +1,10 @@
 opam-version: "1.2"
 name: "azure-cosmos-db"
 version: "0.1.0"
+synopsis: "Azure cosmos db interface"
+description: """
+Provides an interface to the Azure Cosmos db.
+"""
 maintainer: "Morten Knaack <knaack@gmail>"
 authors: "Morten Knaack <knaack@gmail>"
 depends: [
@@ -12,4 +16,6 @@ depends: [
   "uri"
   "alcotest-lwt" {test}
 ]
+homepage: "https://bitbucket.org/knaack/azure-cosmos-db"
 available: [ocaml-version >= "4.06.0"]
+build: ["dune" "build" "-p" name]
