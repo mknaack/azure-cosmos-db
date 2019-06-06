@@ -1,0 +1,5 @@
+FROM ocaml/opam2
+
+RUN git pull origin master
+RUN opam update
+RUN opam depext -i dune lwt atdgen ocsigenserver base64 uri alcotest-lwt merlin ocp-index

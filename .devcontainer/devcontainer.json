@@ -1,0 +1,13 @@
+{
+    "name": "Azure Cosmos DB",
+    "dockerFile": "Dockerfile",
+    "appPort": 8080,
+    "extensions": [
+        "freebroccolo.reasonml"
+    ],
+    "settings": {
+        "reason.path.ocamlfind": "/home/opam/.opam/4.07/bin/ocamlfind",    
+        "reason.path.ocamlmerlin": "/home/opam/.opam/4.07/bin/ocamlmerlin",
+        "reason.path.ocpindent": "/home/opam/.opam/4.07/bin/ocp-indent",    
+    },    
+}
