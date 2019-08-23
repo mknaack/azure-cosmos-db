@@ -23,18 +23,7 @@ let replace_value =
   |> string_of_create_document
 
 let test_command p expected_status =
-  let status_of_header {Ocsigen_http_frame.Http_header.mode = mode; _} =
-    let int_of_mode = function
-      | Ocsigen_http_frame.Http_header.Query _ -> 0
-      | Answer i -> i
-      | Nofirstline -> 0
-    in
-    int_of_mode mode
-  in
-  let status = function
-    | { Ocsigen_http_frame.frame_content = _; frame_header = http_header; frame_abort = _ } ->
-      status_of_header http_header
-  in
+  let status = get_status in
   let px = p >>=
     fun l -> let res = content l in
     res >>= fun _content ->

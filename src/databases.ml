@@ -72,6 +72,19 @@ let status = function
   | { Ocsigen_http_frame.frame_content = _; frame_header = http_header; frame_abort = _ } ->
     status_of_header http_header
 
+let get_status =
+  let status_of_header {Ocsigen_http_frame.Http_header.mode = mode; _} =
+    let int_of_mode = function
+      | Ocsigen_http_frame.Http_header.Query _ -> 0
+      | Answer i -> i
+      | Nofirstline -> 0
+    in
+    int_of_mode mode
+  in
+  function
+  | { Ocsigen_http_frame.frame_content = _; frame_header = http_header; frame_abort = _ } ->
+    status_of_header http_header
+
 let content { Ocsigen_http_frame.frame_content = content; frame_header = _; frame_abort = _ } =
   match content with
   |  Some v ->
