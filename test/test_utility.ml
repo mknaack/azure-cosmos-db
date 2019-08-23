@@ -1,11 +1,11 @@
-open Src
+open Cosmos
 
 let x_ms_date () =
   let value = 123.0 in
   let result = Utility.x_ms_date value in
   let expected_result = "Thu, 01 Jan 1970 00:02:03 GMT" in
-  Alcotest.(check string) "Same string" expected_result result  
-    
+  Alcotest.(check string) "Same string" expected_result result
+
 let auth_key_test () =
   let verb = "GET" in
   let resource_type = "dbs" in
@@ -37,13 +37,13 @@ let convert_list_databases_test () =
         _colls = "colls/";
         _users = "users/";
         _ts = 1526743684;
-      } : Src.Json_converter_j.databases)
+      } : Cosmos.Json_converter_j.databases)
   in
   let expected_result = ({
     _rid = "";
     databases = [expected_databases];
     _count = 1;
-  } : Src.Json_converter_j.list_databases)
+  } : Cosmos.Json_converter_j.list_databases)
   in
   let is_same = expected_result = result in
   Alcotest.(check bool) "Same record" true is_same

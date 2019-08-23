@@ -1,5 +1,5 @@
 (library
-  (name src)
+  (name cosmos)
   (public_name azure-cosmos-db)
   (libraries lwt yojson ocsigenserver netstring base64 uri atdgen)
   (flags (:standard -annot -bin-annot -w -32))
