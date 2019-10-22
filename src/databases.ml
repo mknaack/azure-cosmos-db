@@ -74,9 +74,9 @@ let status = function
 
 let content { Ocsigen_http_frame.frame_content = content; frame_header = _; frame_abort = _ } =
   match content with
-  |  Some v ->
+  | Some v ->
     let r = Ocsigen_stream.string_of_stream 100000 (Ocsigen_stream.get v) in
-    let _ = Ocsigen_stream.finalize v in
+    let _ = Ocsigen_stream.finalize v `Success in
     r
   | None ->
     return ""
