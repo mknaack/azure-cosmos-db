@@ -94,11 +94,32 @@ module Database (Auth_key : Auth_key) = struct
       Utility.x_ms_date now
     in
     Http_headers.empty
-    |> Http_headers.add (Http_headers.name "authorization") (Account.authorization verb resource  ms_date db_name)
+    |> Http_headers.add (Http_headers.name "authorization") (Account.authorization verb resource ms_date db_name)
     |> Http_headers.add (Http_headers.name "x-ms-version") "2017-02-22"
     |> Http_headers.add (Http_headers.name "x-ms-date") ms_date
 
   let host = Account.endpoint ^ ".documents.azure.com"
+
+type databases = Json_converter_t.list_databases
+
+  let list_databases_cohttp () : (int * string * databases) t =
+    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
+    let headers db_name =
+      let ms_date =
+        let now = Unix.time () in
+        Utility.x_ms_date now
+      in
+      let header = Cohttp.Header.init () in
+      let header = Cohttp.Header.add header "authorization" (Account.authorization Account.Get Account.Dbs ms_date db_name) in
+      let header = Cohttp.Header.add header "x-ms-version" "2017-02-22" in
+      let header = Cohttp.Header.add header "x-ms-date" ms_date in
+      header
+    in
+    Cohttp_lwt_unix.Client.get ~headers:(headers "") uri >>= fun (resp, body) ->
+    let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
+    body |> Cohttp_lwt.Body.to_string >|= fun body ->
+    let value = Json_converter_j.list_databases_of_string body in
+    (code, body, value)
 
   let list_databases () =
     let headers = headers Account.Dbs Account.Get in
