@@ -25,7 +25,7 @@ let x_ms_date time =
 let string_of_bool = function true -> "true" | false -> "false"
 
 let authorization_token_using_master_key verb resource_type resource_id date master_key =
-  let key =  B64.decode master_key in
+  let key =  Base64.decode_exn master_key in
   let text =
     (String.lowercase_ascii verb) ^ "\n" ^
     (String.lowercase_ascii resource_type) ^ "\n" ^
@@ -37,7 +37,7 @@ let authorization_token_using_master_key verb resource_type resource_id date mas
   let signature =
     let hash = Cryptokit.MAC.hmac_sha256 key in
     hash#add_substring body 0 (Bytes.length body);
-    B64.encode hash#result
+    Base64.encode_exn hash#result
   in
   let master_token = "master" in
   let token_version = "1.0" in
