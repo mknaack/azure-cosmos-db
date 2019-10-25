@@ -88,7 +88,7 @@ let convert_list_databases s =
 module Database (Auth_key : Auth_key) = struct
   module Account = Auth(Auth_key)
 
-  let headers resource verb db_name =
+  let old_headers resource verb db_name =
     let ms_date =
       let now = Unix.time () in
       Utility.x_ms_date now
@@ -100,29 +100,32 @@ module Database (Auth_key : Auth_key) = struct
 
   let host = Account.endpoint ^ ".documents.azure.com"
 
-type databases = Json_converter_t.list_databases
-
-  let list_databases_cohttp () : (int * string * databases) t =
-    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
-    let headers db_name =
-      let ms_date =
-        let now = Unix.time () in
-        Utility.x_ms_date now
-      in
-      let header = Cohttp.Header.init () in
-      let header = Cohttp.Header.add header "authorization" (Account.authorization Account.Get Account.Dbs ms_date db_name) in
-      let header = Cohttp.Header.add header "x-ms-version" "2017-02-22" in
-      let header = Cohttp.Header.add header "x-ms-date" ms_date in
-      header
+  let headers resource verb db_name =
+    let ms_date =
+      let now = Unix.time () in
+      Utility.x_ms_date now
     in
-    Cohttp_lwt_unix.Client.get ~headers:(headers "") uri >>= fun (resp, body) ->
+    let header = Cohttp.Header.init () in
+    let header = Cohttp.Header.add header "authorization" (Account.authorization verb resource ms_date db_name) in
+    let header = Cohttp.Header.add header "x-ms-version" "2017-02-22" in
+    let header = Cohttp.Header.add header "x-ms-date" ms_date in
+    header
+
+  let json_headers resource verb db_name =
+    let header = headers resource verb db_name in
+    let header = Cohttp.Header.add header "content_type" "application/json" in
+    header
+
+  let list_databases () =
+    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
+    Cohttp_lwt_unix.Client.get ~headers:(headers Account.Dbs Account.Get "") uri >>= fun (resp, body) ->
     let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
     body |> Cohttp_lwt.Body.to_string >|= fun body ->
     let value = Json_converter_j.list_databases_of_string body in
-    (code, body, value)
+    (code, value)
 
-  let list_databases () =
-    let headers = headers Account.Dbs Account.Get in
+  let old_list_databases () =
+    let headers = old_headers Account.Dbs Account.Get in
     let get = Ocsigen_http_client.get
         ~https:true
         ~host
@@ -136,17 +139,41 @@ type databases = Json_converter_t.list_databases
   (* create database: *)
 
   let create name =
+    let body =
+      let value = ({id = name}: Json_converter_j.create_database) in
+      let json = Json_converter_j.string_of_create_database value in
+      print_endline ("json: " ^ json);
+      let body = Cohttp_lwt.Body.of_string json in
+      body
+    in
+    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
+    print_endline (Uri.to_string uri);
+    let headers = (json_headers Account.Dbs Account.Post "") in
+    print_endline ("Headers: \n" ^ Cohttp.Header.to_string headers );
+    Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
+    let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
+    print_endline ("Code: " ^ string_of_int code);
+    body |> Cohttp_lwt.Body.to_string >|= fun body ->
+    let value = match code with
+      | 200 -> Some (Json_converter_j.create_database_result_of_string body)
+      | _ -> None
+    in
+    (code, value)
+
+  let old_create name =
     let post_content =
       let value = ({id = name}: Json_converter_j.create_database) in
       Json_converter_j.string_of_create_database value
     in
     let content_type = "application", "json" in
-    let headers = headers Account.Dbs Account.Post in
+    let headers = old_headers Account.Dbs Account.Post "" in
+    Http_headers.iter (fun name value -> print_endline ("Header: " ^ (Http_headers.name_to_string name) ^  " : " ^ value)) headers;
+    (* print_endline ("headers: " ^ Http_headers.string_of headers); *)
     let post = Ocsigen_http_client.post_string
         ~https:true
         ~host
         ~uri:"/dbs"
-        ~headers: (headers "")
+        ~headers: (headers)
         ~port:443
         ~content:post_content
         ~content_type
@@ -155,7 +182,7 @@ type databases = Json_converter_t.list_databases
     post
 
   let get name =
-    let headers = headers Account.Dbs Account.Get in
+    let headers = old_headers Account.Dbs Account.Get in
     let get = Ocsigen_http_client.get
         ~https:true
         ~host
@@ -167,7 +194,7 @@ type databases = Json_converter_t.list_databases
     get
 
   let delete name =
-    let headers = headers Account.Dbs Account.Delete in
+    let headers = old_headers Account.Dbs Account.Delete in
     let command = Ocsigen_extra.delete
         ~https:true
         ~host
@@ -180,7 +207,7 @@ type databases = Json_converter_t.list_databases
 
   module Collection = struct
     let list dbname =
-      let headers = headers Account.Colls Account.Get in
+      let headers = old_headers Account.Colls Account.Get in
       Ocsigen_http_client.get
         ~https:true
         ~host
@@ -195,7 +222,7 @@ type databases = Json_converter_t.list_databases
         Json_converter_j.string_of_create_collection value
       in
       let content_type = "application", "json" in
-      let headers = headers Account.Colls Account.Post in
+      let headers = old_headers Account.Colls Account.Post in
       let post = Ocsigen_http_client.post_string
           ~https:true
           ~host
@@ -209,7 +236,7 @@ type databases = Json_converter_t.list_databases
       post
 
     let get name coll_name =
-      let headers = headers Account.Colls Account.Get in
+      let headers = old_headers Account.Colls Account.Get in
       let get = Ocsigen_http_client.get
           ~https:true
           ~host
@@ -221,7 +248,7 @@ type databases = Json_converter_t.list_databases
       get
 
     let delete name coll_name =
-      let headers = headers Account.Colls Account.Delete in
+      let headers = old_headers Account.Colls Account.Delete in
       let command = Ocsigen_extra.delete
           ~https:true
           ~host
@@ -253,7 +280,7 @@ TODO:
       let create ?is_upsert ?indexing_directive dbname coll_name content =
         let content_type = "application", "json" in
         let headers s =
-          headers Account.Docs Account.Post s
+          old_headers Account.Docs Account.Post s
           |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert
           |> apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
         in
@@ -274,7 +301,7 @@ TODO:
           | Some true -> Http_headers.add name "Incremental feed" headers
         in
         let headers s =
-          headers Account.Docs Account.Get s
+          old_headers Account.Docs Account.Get s
           |> apply_to_header_if_some (Http_headers.name "x-ms-max-item-count") string_of_int max_item_count
           |> apply_to_header_if_some (Http_headers.name "x-ms-continuation") (fun x -> x) continuation
           |> apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") (fun x -> x) consistency_level
@@ -305,7 +332,7 @@ TODO:
 
       let get ?if_none_match ?partition_key ?consistency_level ?session_token dbname coll_name doc_id =
         let headers s =
-          headers Account.Docs Account.Get s
+          old_headers Account.Docs Account.Get s
           |> apply_to_header_if_some (Http_headers.name "If-None-Match") (fun x -> x) if_none_match
           |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
           |> apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") string_of_consistency_level consistency_level
@@ -324,7 +351,7 @@ TODO:
       let replace ?indexing_directive ?partition_key ?if_match dbname coll_name doc_id content =
         let content_type = "application", "json" in
         let headers s =
-          headers Account.Docs Account.Put s
+          old_headers Account.Docs Account.Put s
           |> apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
           |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
           |> apply_to_header_if_some (Http_headers.name "If-Match") (fun x -> x) if_match
@@ -340,7 +367,7 @@ TODO:
           ()
 
       let delete dbname coll_name doc_id =
-        let headers = headers Account.Docs Account.Delete in
+        let headers = old_headers Account.Docs Account.Delete in
         Ocsigen_extra.delete
           ~https:true
           ~host
@@ -351,7 +378,7 @@ TODO:
 
       let query ?max_item_count ?continuation ?consistency_level ?session_token ?is_partition dbname coll_name query =
         let headers s =
-          headers Account.Docs Account.Post s
+          old_headers Account.Docs Account.Post s
           |> Http_headers.add (Http_headers.name "x-ms-documentdb-isquery") (Utility.string_of_bool true)
           |> apply_to_header_if_some (Http_headers.name "x-ms-max-item-count") string_of_int max_item_count
           |> apply_to_header_if_some (Http_headers.name "x-ms-continuation") (fun x -> x) continuation

@@ -44,22 +44,30 @@ let test_command p expected_status =
   in
   px
 
+(* let create_database_test_old _ () =
+ *   test_command (D.old_create dbname) 200 *)
+
 let create_database_test _switch () =
-  test_command (D.create dbname) 201
+  let res = D.create dbname in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 201 code in
+  let _ =
+    match body with
+    | Some {id; _} -> Alcotest.(check string) "Create name is correct" dbname id
+    | None -> ()
+  in
+  return ()
 
 let list_databases_cohttop _ () =
-  let res = D.list_databases_cohttp () in
-  res >>= fun (code, _body, {_rid; databases; _count = count}) ->
-  (* Printf.printf "Response code: %d\n" code;
-   * Printf.printf "Body: %s\n" body; *)
+  let res = D.list_databases () in
+  res >>= fun (code, {_rid; databases; _count = count}) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
   let _ = Alcotest.(check int) "Count" 1 count in
   let _ = Alcotest.(check string) "Name of databases" dbname ((List.hd databases).id) in
-  (* let _ = Alcotest.(check string) "Body" "Something" body in *)
   return ()
 
 let list_databases_test _ () =
-  test_command (D.list_databases ()) 200
+  test_command (D.old_list_databases ()) 200
 
 let get_database_test _ () =
   test_command (D.get dbname) 200
@@ -102,9 +110,9 @@ let delete_collection_test _ () =
 let delete_database_test _ () =
   test_command (D.delete dbname) 204
 
-
 let test = [
   Alcotest_lwt.test_case "create database" `Slow create_database_test;
+  (* Alcotest_lwt.test_case "create database (old)" `Slow create_database_test_old; *)
   Alcotest_lwt.test_case "list database" `Slow list_databases_test;
   Alcotest_lwt.test_case "list database cohttp" `Slow list_databases_cohttop;
   Alcotest_lwt.test_case "get database" `Slow get_database_test;
