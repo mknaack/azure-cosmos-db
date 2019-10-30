@@ -147,12 +147,9 @@ module Database (Auth_key : Auth_key) = struct
       body
     in
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
-    print_endline (Uri.to_string uri);
     let headers = (json_headers Account.Dbs Account.Post "") in
-    print_endline ("Headers: \n" ^ Cohttp.Header.to_string headers );
     Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
     let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
-    print_endline ("Code: " ^ string_of_int code);
     body |> Cohttp_lwt.Body.to_string >|= fun body ->
     let value = match code with
       | 200 -> Some (Json_converter_j.create_database_result_of_string body)
@@ -182,6 +179,18 @@ module Database (Auth_key : Auth_key) = struct
     post
 
   let get name =
+    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) () in
+    Cohttp_lwt_unix.Client.get ~headers:(headers Account.Dbs Account.Get ("dbs/" ^ name)) uri >>= fun (resp, body) ->
+    let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
+    body |> Cohttp_lwt.Body.to_string >|= fun body ->
+    let _ = print_endline body in
+    let value = match code with
+      | 200 -> Some (Json_converter_j.database_of_string body)
+      | _ -> None
+    in
+    (code, value)
+  
+  let old_get name =
     let headers = old_headers Account.Dbs Account.Get in
     let get = Ocsigen_http_client.get
         ~https:true

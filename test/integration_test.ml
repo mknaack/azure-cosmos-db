@@ -70,7 +70,19 @@ let list_databases_test _ () =
   test_command (D.old_list_databases ()) 200
 
 let get_database_test _ () =
-  test_command (D.get dbname) 200
+  let res = D.get dbname in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match body with
+    | Some {_rid; id; _self; _etag; _colls; _users; _ts} ->
+      Alcotest.(check string) "Name of database" dbname id
+    | None -> ()
+  in
+  return ()
+
+let old_get_database_test _ () =
+  test_command (D.old_get dbname) 200
 
 let create_collection_test _ () =
   test_command (D.Collection.create dbname collection_name) 201
@@ -116,6 +128,7 @@ let test = [
   Alcotest_lwt.test_case "list database" `Slow list_databases_test;
   Alcotest_lwt.test_case "list database cohttp" `Slow list_databases_cohttop;
   Alcotest_lwt.test_case "get database" `Slow get_database_test;
+  Alcotest_lwt.test_case "get database (old)" `Slow old_get_database_test;
 
   Alcotest_lwt.test_case "create collection" `Slow create_collection_test;
   Alcotest_lwt.test_case "list collection" `Slow list_collection_test;
