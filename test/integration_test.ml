@@ -120,7 +120,10 @@ let delete_collection_test _ () =
   test_command (D.Collection.delete dbname collection_name) 204
 
 let delete_database_test _ () =
-  test_command (D.delete dbname) 204
+  let res = D.delete dbname in
+  res >>= fun code ->
+  let _ = Alcotest.(check int) "Status same int" 204 code in
+  return ()
 
 let test = [
   Alcotest_lwt.test_case "create database" `Slow create_database_test;

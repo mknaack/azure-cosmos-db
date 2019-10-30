@@ -116,10 +116,12 @@ module Database (Auth_key : Auth_key) = struct
     let header = Cohttp.Header.add header "content_type" "application/json" in
     header
 
+  let get_code resp = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status
+  
   let list_databases () =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
     Cohttp_lwt_unix.Client.get ~headers:(headers Account.Dbs Account.Get "") uri >>= fun (resp, body) ->
-    let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
+    let code = get_code resp in
     body |> Cohttp_lwt.Body.to_string >|= fun body ->
     let value = Json_converter_j.list_databases_of_string body in
     (code, value)
@@ -149,7 +151,7 @@ module Database (Auth_key : Auth_key) = struct
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
     let headers = (json_headers Account.Dbs Account.Post "") in
     Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
-    let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
+    let code = get_code resp in
     body |> Cohttp_lwt.Body.to_string >|= fun body ->
     let value = match code with
       | 200 -> Some (Json_converter_j.create_database_result_of_string body)
@@ -165,7 +167,6 @@ module Database (Auth_key : Auth_key) = struct
     let content_type = "application", "json" in
     let headers = old_headers Account.Dbs Account.Post "" in
     Http_headers.iter (fun name value -> print_endline ("Header: " ^ (Http_headers.name_to_string name) ^  " : " ^ value)) headers;
-    (* print_endline ("headers: " ^ Http_headers.string_of headers); *)
     let post = Ocsigen_http_client.post_string
         ~https:true
         ~host
@@ -181,9 +182,8 @@ module Database (Auth_key : Auth_key) = struct
   let get name =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) () in
     Cohttp_lwt_unix.Client.get ~headers:(headers Account.Dbs Account.Get ("dbs/" ^ name)) uri >>= fun (resp, body) ->
-    let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
+    let code = get_code resp in
     body |> Cohttp_lwt.Body.to_string >|= fun body ->
-    let _ = print_endline body in
     let value = match code with
       | 200 -> Some (Json_converter_j.database_of_string body)
       | _ -> None
@@ -203,6 +203,13 @@ module Database (Auth_key : Auth_key) = struct
     get
 
   let delete name =
+    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) () in
+    Cohttp_lwt_unix.Client.delete ~headers:(headers Account.Dbs Account.Delete ("dbs/" ^ name)) uri >>= fun (resp, body) ->
+    let code = get_code resp in
+    body |> Cohttp_lwt.Body.to_string >|= fun _ ->
+    (code)
+  
+  let old_delete name =
     let headers = old_headers Account.Dbs Account.Delete in
     let command = Ocsigen_extra.delete
         ~https:true
