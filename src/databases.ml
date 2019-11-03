@@ -2,6 +2,7 @@ open Lwt
 
 (*
  Azure cosmos database documentation: https://docs.microsoft.com/en-us/rest/api/cosmos-db/
+dune build @check
 *)
 
 module type Auth_key = sig
@@ -223,35 +224,61 @@ module Database (Auth_key : Auth_key) = struct
 
   module Collection = struct
     let list dbname =
-      let headers = old_headers Account.Colls Account.Get in
-      Ocsigen_http_client.get
-        ~https:true
-        ~host
-        ~uri:("/dbs/" ^ dbname ^ "/colls")
-        ~headers: (headers ("dbs/" ^ dbname))
-        ~port:443
-        ()
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ dbname ^ "/colls")  () in
+      Cohttp_lwt_unix.Client.get ~headers:(headers Account.Colls Account.Get ("dbs/" ^ dbname)) uri >>= fun (resp, body) ->
+      let code = get_code resp in
+      body |> Cohttp_lwt.Body.to_string >|= fun body ->
+      let value = Json_converter_j.list_collections_of_string body in
+      (* let value = body in *)
+      (code, value)
+    
+  let create dbname coll_name =
+    let body =
+      ({id = coll_name; indexingPolicy = None; partitionKey = None}: Json_converter_j.create_collection) |>
+      Json_converter_j.string_of_create_collection |>
+      Cohttp_lwt.Body.of_string
+    in
+    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("/dbs/" ^ dbname ^ "/colls") () in
+    let headers = (json_headers Account.Colls Account.Post ("dbs/" ^ dbname)) in
+    Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
+    let code = get_code resp in
+    body |> Cohttp_lwt.Body.to_string >|= fun body ->
+    let value = match code with
+      | 200 -> Some (Json_converter_j.create_collection_result_of_string body)
+      | _ -> None
+    in
+    (code, value)
 
-    let create dbname coll_name =
-      let post_content =
-        let value = ({id = coll_name; indexingPolicy = None; partitionKey = None}: Json_converter_j.create_collection) in
-        Json_converter_j.string_of_create_collection value
-      in
-      let content_type = "application", "json" in
-      let headers = old_headers Account.Colls Account.Post in
-      let post = Ocsigen_http_client.post_string
-          ~https:true
-          ~host
-          ~uri:("/dbs/" ^ dbname ^ "/colls")
-          ~headers: (headers ("dbs/" ^ dbname))
-          ~port:443
-          ~content:post_content
-          ~content_type
-          ()
-      in
-      post
+  (* let old_list dbname =
+     *   let headers = old_headers Account.Colls Account.Get in
+     *   Ocsigen_http_client.get
+     *     ~https:true
+     *     ~host
+     *     ~uri:("/dbs/" ^ dbname ^ "/colls")
+     *     ~headers: (headers ("dbs/" ^ dbname))
+     *     ~port:443
+     *     () *)
 
-    let get name coll_name =
+    (* let old_create dbname coll_name =
+     *   let post_content =
+     *     let value = ({id = coll_name; indexingPolicy = None; partitionKey = None}: Json_converter_j.create_collection) in
+     *     Json_converter_j.string_of_create_collection value
+     *   in
+     *   let content_type = "application", "json" in
+     *   let headers = old_headers Account.Colls Account.Post in
+     *   let post = Ocsigen_http_client.post_string
+     *       ~https:true
+     *       ~host
+     *       ~uri:("/dbs/" ^ dbname ^ "/colls")
+     *       ~headers: (headers ("dbs/" ^ dbname))
+     *       ~port:443
+     *       ~content:post_content
+     *       ~content_type
+     *       ()
+     *   in
+     *   post *)
+
+    let old_get name coll_name =
       let headers = old_headers Account.Colls Account.Get in
       let get = Ocsigen_http_client.get
           ~https:true
@@ -262,8 +289,8 @@ module Database (Auth_key : Auth_key) = struct
           ()
       in
       get
-
-    let delete name coll_name =
+        
+    let old_delete name coll_name =
       let headers = old_headers Account.Colls Account.Delete in
       let command = Ocsigen_extra.delete
           ~https:true

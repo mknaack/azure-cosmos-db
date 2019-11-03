@@ -56,6 +56,42 @@ type create_collection = {
   ?partitionKey: partitionKey option;
 }
 
+type create_collection_result = {
+  id: string;
+  indexing_policy <json name="indexingPolicy">: indexingPolicy;
+  partition_key <json name="partitionKey">: partitionKey;
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+  docs <json name="_docs">: string;
+  sprocs <json name="_sprocs">: string;
+  triggers <json name="_triggers">: string;
+  udfs <json name="_udfs">: string;
+  conflicts <json name="_conflicts">: string;
+}
+
+type collection = {
+  id: string;
+  indexing_policy <json name="indexingPolicy">: indexingPolicy;
+(*  partition_key <json name="partitionKey">: partitionKey;*)
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+  docs <json name="_docs">: string;
+  sprocs <json name="_sprocs">: string;
+  triggers <json name="_triggers">: string;
+  udfs <json name="_udfs">: string;
+  conflicts <json name="_conflicts">: string;
+}
+
+type list_collections = {
+  rid <json name="_rid">: string;
+  document_collections <json name="DocumentCollections">: collection list;
+  count <json name="_count">: int;
+}
+
 type parameter = {
   name: string;
   value: string;
