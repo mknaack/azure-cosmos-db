@@ -108,8 +108,20 @@ let list_collection_test _ () =
   let _ = Alcotest.(check int) "Count" 1 count in
   return ()
 
-let old_get_collection_test _ () =
-  test_command (D.Collection.old_get dbname collection_name) 200
+(* let old_get_collection_test _ () =
+ *   test_command (D.Collection.old_get dbname collection_name) 200 *)
+
+let get_collection_test _ () =
+  let res = D.Collection.get dbname collection_name in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match body with
+    | Some Json_converter_t.{id; rid = _; self = _; etag = _; ts = _; sprocs = _; triggers = _; docs = _; udfs = _; conflicts = _; indexing_policy = _} ->
+      Alcotest.(check string) "Name of database" collection_name id
+    | None -> ()
+  in
+  return ()
 
 let create_document_test _ () =
   test_command (D.Collection.Document.create dbname collection_name create_value) 201
@@ -134,8 +146,14 @@ let replace_document_test _ () =
 let delete_document_test _ () =
   test_command (D.Collection.Document.delete dbname collection_name document_id) 204
 
-let old_delete_collection_test _ () =
-  test_command (D.Collection.old_delete dbname collection_name) 204
+(* let old_delete_collection_test _ () =
+ *   test_command (D.Collection.old_delete dbname collection_name) 204 *)
+
+let delete_collection_test _ () =
+  let res = D.Collection.delete dbname collection_name in
+  res >>= fun code ->
+  let _ = Alcotest.(check int) "Status same int" 204 code in
+  return ()
 
 let delete_database_test _ () =
   let res = D.delete dbname in
@@ -155,7 +173,8 @@ let test = [
   Alcotest_lwt.test_case "create collection" `Slow create_collection_test;
   (* Alcotest_lwt.test_case "list collection (old)" `Slow old_list_collection_test; *)
   Alcotest_lwt.test_case "list collection" `Slow list_collection_test;
-  Alcotest_lwt.test_case "get collection (old)" `Slow old_get_collection_test;
+  (* Alcotest_lwt.test_case "get collection (old)" `Slow old_get_collection_test; *)
+  Alcotest_lwt.test_case "get collection" `Slow get_collection_test;
 
   Alcotest_lwt.test_case "create document" `Slow create_document_test;
   Alcotest_lwt.test_case "list document" `Slow list_document_test;
@@ -164,6 +183,7 @@ let test = [
   Alcotest_lwt.test_case "replace document" `Slow replace_document_test;
 
   Alcotest_lwt.test_case "delete document" `Slow delete_document_test;
-  Alcotest_lwt.test_case "delete collection (old)" `Slow old_delete_collection_test;
+  Alcotest_lwt.test_case "delete collection" `Slow delete_collection_test;
+  (* Alcotest_lwt.test_case "delete collection (old)" `Slow old_delete_collection_test; *)
   Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
 ]

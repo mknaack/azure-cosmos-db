@@ -208,7 +208,7 @@ module Database (Auth_key : Auth_key) = struct
     Cohttp_lwt_unix.Client.delete ~headers:(headers Account.Dbs Account.Delete ("dbs/" ^ name)) uri >>= fun (resp, body) ->
     let code = get_code resp in
     body |> Cohttp_lwt.Body.to_string >|= fun _ ->
-    (code)
+    code
   
   let old_delete name =
     let headers = old_headers Account.Dbs Account.Delete in
@@ -278,29 +278,51 @@ module Database (Auth_key : Auth_key) = struct
      *   in
      *   post *)
 
-    let old_get name coll_name =
-      let headers = old_headers Account.Colls Account.Get in
-      let get = Ocsigen_http_client.get
-          ~https:true
-          ~host
-          ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
-          ~headers: (headers ("dbs/" ^ name^ "/colls/" ^ coll_name))
-          ~port:443
-          ()
-      in
-      get
-        
-    let old_delete name coll_name =
-      let headers = old_headers Account.Colls Account.Delete in
-      let command = Ocsigen_extra.delete
-          ~https:true
-          ~host
-          ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
-          ~headers: (headers ("dbs/" ^ name ^ "/colls/" ^ coll_name))
-          ~port:443
-          ()
-      in
-      command
+  let get name coll_name =
+    let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
+    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+    Cohttp_lwt_unix.Client.get ~headers:(headers Account.Colls Account.Get ("dbs/" ^ name^ "/colls/" ^ coll_name)) uri >>= fun (resp, body) ->
+    let code = get_code resp in
+    body |> Cohttp_lwt.Body.to_string >|= fun body ->
+    let value = match code with
+      | 200 -> Some (Json_converter_j.collection_of_string body)
+      | _ -> None
+    in
+    (code, value)
+
+    (* let old_get name coll_name =
+     *   let headers = old_headers Account.Colls Account.Get in
+     *   let get = Ocsigen_http_client.get
+     *       ~https:true
+     *       ~host
+     *       ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
+     *       ~headers: (headers ("dbs/" ^ name^ "/colls/" ^ coll_name))
+     *       ~port:443
+     *       ()
+     *   in
+     *   get *)
+
+  let delete name coll_name =
+    let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
+    let header_path = "dbs/" ^ name ^ "/colls/" ^ coll_name in
+    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+    Cohttp_lwt_unix.Client.delete ~headers:(headers Account.Colls Account.Delete header_path) uri >>= fun (resp, body) ->
+    let code = get_code resp in
+    body |> Cohttp_lwt.Body.to_string >|= fun _ ->
+    code
+
+  
+    (* let old_delete name coll_name =
+     *   let headers = old_headers Account.Colls Account.Delete in
+     *   let command = Ocsigen_extra.delete
+     *       ~https:true
+     *       ~host
+     *       ~uri: ("/dbs/" ^ name ^ "/colls/" ^ coll_name)
+     *       ~headers: (headers ("dbs/" ^ name ^ "/colls/" ^ coll_name))
+     *       ~port:443
+     *       ()
+     *   in
+     *   command *)
 
   (*
 TODO:
