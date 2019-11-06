@@ -143,11 +143,9 @@ module Database (Auth_key : Auth_key) = struct
 
   let create name =
     let body =
-      let value = ({id = name}: Json_converter_j.create_database) in
-      let json = Json_converter_j.string_of_create_database value in
-      print_endline ("json: " ^ json);
-      let body = Cohttp_lwt.Body.of_string json in
-      body
+      ({id = name}: Json_converter_j.create_database)
+      |> Json_converter_j.string_of_create_database
+      |> Cohttp_lwt.Body.of_string
     in
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
     let headers = (json_headers Account.Dbs Account.Post "") in
@@ -338,16 +336,23 @@ TODO:
         | Include -> "Include"
         | Exclude -> "Exclude"
 
-      let apply_to_header_if_some name string_of values headers = match values with
+      let old_apply_to_header_if_some name string_of values headers = match values with
         | None -> headers
         | Some value -> Http_headers.add name (string_of value) headers
 
+      let apply_to_header_if_some name string_of values headers = match values with
+        | None -> headers
+        | Some value -> Cohttp.Header.add headers name (string_of value)
+
+      let add_header name value header =
+        Cohttp.Header.add header name value
+      
       let create ?is_upsert ?indexing_directive dbname coll_name content =
         let content_type = "application", "json" in
         let headers s =
           old_headers Account.Docs Account.Post s
-          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert
-          |> apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
         in
         Ocsigen_http_client.post_string
           ~https:true
@@ -367,13 +372,13 @@ TODO:
         in
         let headers s =
           old_headers Account.Docs Account.Get s
-          |> apply_to_header_if_some (Http_headers.name "x-ms-max-item-count") string_of_int max_item_count
-          |> apply_to_header_if_some (Http_headers.name "x-ms-continuation") (fun x -> x) continuation
-          |> apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") (fun x -> x) consistency_level
-          |> apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-max-item-count") string_of_int max_item_count
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-continuation") (fun x -> x) continuation
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") (fun x -> x) consistency_level
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
           |> apply_a_im_to_header_if_some (Http_headers.name "A-IM") a_im
-          |> apply_to_header_if_some (Http_headers.name "If-None-Match") (fun x -> x) if_none_match
-          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkeyrangeid") (fun x -> x) partition_key_range_id
+          |> old_apply_to_header_if_some (Http_headers.name "If-None-Match") (fun x -> x) if_none_match
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkeyrangeid") (fun x -> x) partition_key_range_id
         in
         Ocsigen_http_client.get
           ~https:true
@@ -398,10 +403,10 @@ TODO:
       let get ?if_none_match ?partition_key ?consistency_level ?session_token dbname coll_name doc_id =
         let headers s =
           old_headers Account.Docs Account.Get s
-          |> apply_to_header_if_some (Http_headers.name "If-None-Match") (fun x -> x) if_none_match
-          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
-          |> apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") string_of_consistency_level consistency_level
-          |> apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
+          |> old_apply_to_header_if_some (Http_headers.name "If-None-Match") (fun x -> x) if_none_match
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") string_of_consistency_level consistency_level
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
         in
         let get = Ocsigen_http_client.get
             ~https:true
@@ -417,9 +422,9 @@ TODO:
         let content_type = "application", "json" in
         let headers s =
           old_headers Account.Docs Account.Put s
-          |> apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
-          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
-          |> apply_to_header_if_some (Http_headers.name "If-Match") (fun x -> x) if_match
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
+          |> old_apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
+          |> old_apply_to_header_if_some (Http_headers.name "If-Match") (fun x -> x) if_match
         in
         Ocsigen_extra.put_string
           ~https:true
@@ -432,36 +437,68 @@ TODO:
           ()
 
       let delete dbname coll_name doc_id =
-        let headers = old_headers Account.Docs Account.Delete in
-        Ocsigen_extra.delete
-          ~https:true
-          ~host
-          ~uri: ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
-          ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id))
-          ~port:443
-          ()
+        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id in
+        let headers = headers Account.Docs Account.Delete ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id) in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        Cohttp_lwt_unix.Client.delete ~headers uri >>= fun (resp, body) ->
+        let code = get_code resp in
+        body |> Cohttp_lwt.Body.to_string >|= fun _ ->
+        code
+
+      (* let delete dbname coll_name doc_id =
+       *   let headers = old_headers Account.Docs Account.Delete in
+       *   Ocsigen_extra.delete
+       *     ~https:true
+       *     ~host
+       *     ~uri: ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+       *     ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id))
+       *     ~port:443
+       *     () *)
 
       let query ?max_item_count ?continuation ?consistency_level ?session_token ?is_partition dbname coll_name query =
         let headers s =
-          old_headers Account.Docs Account.Post s
-          |> Http_headers.add (Http_headers.name "x-ms-documentdb-isquery") (Utility.string_of_bool true)
-          |> apply_to_header_if_some (Http_headers.name "x-ms-max-item-count") string_of_int max_item_count
-          |> apply_to_header_if_some (Http_headers.name "x-ms-continuation") (fun x -> x) continuation
-          |> apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") (fun x -> x) consistency_level
-          |> apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
-          |> apply_to_header_if_some (Http_headers.name "x-ms-documentdb-query-enablecrosspartition") Utility.string_of_bool is_partition
+          let h = headers Account.Docs Account.Post s in
+          Cohttp.Header.add h "x-ms-documentdb-isquery" (Utility.string_of_bool true)
+          |> apply_to_header_if_some "x-ms-max-item-count" string_of_int max_item_count
+          |> apply_to_header_if_some "x-ms-continuation" (fun x -> x) continuation
+          |> apply_to_header_if_some "x-ms-consistency-level" (fun x -> x) consistency_level
+          |> apply_to_header_if_some "x-ms-session-token" (fun x -> x) session_token
+          |> apply_to_header_if_some "x-ms-documentdb-query-enablecrosspartition" Utility.string_of_bool is_partition
+          |> add_header "content-type" "application/query+json"
         in
-        let content =   Json_converter_j.string_of_query query in
-        let content_type = "application", "query+json" in
-        Ocsigen_http_client.post_string
-          ~https:true
-          ~host
-          ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
-          ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
-          ~port:443
-          ~content:content
-          ~content_type
-          ()
+        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
+        let headers = headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
+        let body =
+          Json_converter_j.string_of_query query
+          |> Cohttp_lwt.Body.of_string
+        in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
+        let code = get_code resp in
+        body |> Cohttp_lwt.Body.to_string >|= fun _ ->
+        (code, body)
+      
+      (* let old_query ?max_item_count ?continuation ?consistency_level ?session_token ?is_partition dbname coll_name query =
+       *   let headers s =
+       *     old_headers Account.Docs Account.Post s
+       *     |> Http_headers.add (Http_headers.name "x-ms-documentdb-isquery") (Utility.string_of_bool true)
+       *     |> old_apply_to_header_if_some (Http_headers.name "x-ms-max-item-count") string_of_int max_item_count
+       *     |> old_apply_to_header_if_some (Http_headers.name "x-ms-continuation") (fun x -> x) continuation
+       *     |> old_apply_to_header_if_some (Http_headers.name "x-ms-consistency-level") (fun x -> x) consistency_level
+       *     |> old_apply_to_header_if_some (Http_headers.name "x-ms-session-token") (fun x -> x) session_token
+       *     |> old_apply_to_header_if_some (Http_headers.name "x-ms-documentdb-query-enablecrosspartition") Utility.string_of_bool is_partition
+       *   in
+       *   let content = Json_converter_j.string_of_query query in
+       *   let content_type = "application", "query+json" in
+       *   Ocsigen_http_client.post_string
+       *     ~https:true
+       *     ~host
+       *     ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
+       *     ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
+       *     ~port:443
+       *     ~content:content
+       *     ~content_type
+       *     () *)
 
     end
   end

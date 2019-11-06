@@ -135,7 +135,11 @@ let query_document_test _ () =
      parameters = [{name = "@fname"; value = "A First name"}]
     }
   in
-  test_command (D.Collection.Document.query dbname collection_name query) 200
+  let res = D.Collection.Document.query dbname collection_name query in
+  res >>= fun (code, _) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  return ()
+  (* test_command (D.Collection.Document.query dbname collection_name query) 200 *)
 
 let get_document_test _ () =
   test_command (D.Collection.Document.get dbname collection_name document_id) 200
@@ -143,8 +147,14 @@ let get_document_test _ () =
 let replace_document_test _ () =
   test_command (D.Collection.Document.replace dbname collection_name document_id replace_value) 200
 
+(* let delete_document_test _ () =
+ *   test_command (D.Collection.Document.delete dbname collection_name document_id) 204 *)
+
 let delete_document_test _ () =
-  test_command (D.Collection.Document.delete dbname collection_name document_id) 204
+  let res = D.Collection.Document.delete dbname collection_name document_id in
+  res >>= fun code ->
+  let _ = Alcotest.(check int) "Status same int" 204 code in
+  return ()
 
 (* let old_delete_collection_test _ () =
  *   test_command (D.Collection.old_delete dbname collection_name) 204 *)
