@@ -348,23 +348,64 @@ TODO:
         Cohttp.Header.add header name value
       
       let create ?is_upsert ?indexing_directive dbname coll_name content =
-        let content_type = "application", "json" in
-        let headers s =
-          old_headers Account.Docs Account.Post s
-          |> old_apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert
-          |> old_apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
+        let body = Cohttp_lwt.Body.of_string content in
+        let path = ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs") in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let headers =
+          json_headers Account.Docs Account.Post ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+          |> apply_to_header_if_some "x-ms-documentdb-is-upsert" Utility.string_of_bool is_upsert
+          |> apply_to_header_if_some "x-ms-indexing-directive" string_of_indexing_directive indexing_directive
         in
-        Ocsigen_http_client.post_string
-          ~https:true
-          ~host
-          ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
-          ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
-          ~port:443
-          ~content:content
-          ~content_type
-          ()
+        Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
+        let code = get_code resp in
+        body |> Cohttp_lwt.Body.to_string >|= fun body ->
+        let value = match code with
+          | 200 -> Some (Json_converter_j.create_collection_result_of_string body)
+          | _ -> None
+        in
+        (code, value)
+
+      (* let old_create ?is_upsert ?indexing_directive dbname coll_name content =
+       *   let content_type = "application", "json" in
+       *   let headers s =
+       *     old_headers Account.Docs Account.Post s
+       *     |> old_apply_to_header_if_some (Http_headers.name "x-ms-documentdb-is-upsert") Utility.string_of_bool is_upsert
+       *     |> old_apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
+       *   in
+       *   Ocsigen_http_client.post_string
+       *     ~https:true
+       *     ~host
+       *     ~uri:("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs")
+       *     ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
+       *     ~port:443
+       *     ~content:content
+       *     ~content_type
+       *     () *)
 
       let list ?max_item_count ?continuation ?consistency_level ?session_token ?a_im ?if_none_match ?partition_key_range_id dbname coll_name =
+        let apply_a_im_to_header_if_some name values headers = match values with
+          | None -> headers
+          | Some false -> headers
+          | Some true -> Cohttp.Header.add headers name "Incremental feed"
+        in
+        let path = ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs") in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let headers =
+          json_headers Account.Docs Account.Get ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+          |> apply_to_header_if_some "x-ms-max-item-count" string_of_int max_item_count
+          |> apply_to_header_if_some "x-ms-continuation" (fun x -> x) continuation
+          |> apply_to_header_if_some "x-ms-consistency-level" (fun x -> x) consistency_level
+          |> apply_to_header_if_some "x-ms-session-token" (fun x -> x) session_token
+          |> apply_a_im_to_header_if_some "A-IM" a_im
+          |> apply_to_header_if_some "If-None-Match" (fun x -> x) if_none_match
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkeyrangeid" (fun x -> x) partition_key_range_id
+        in
+        Cohttp_lwt_unix.Client.get ~headers uri >>= fun (resp, body) ->
+        let code = get_code resp in
+        body |> Cohttp_lwt.Body.to_string >|= fun body ->
+        (code, body)
+        
+      let old_list ?max_item_count ?continuation ?consistency_level ?session_token ?a_im ?if_none_match ?partition_key_range_id dbname coll_name =
         let apply_a_im_to_header_if_some name values headers = match values with
           | None -> headers
           | Some false -> headers

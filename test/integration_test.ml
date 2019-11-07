@@ -124,10 +124,18 @@ let get_collection_test _ () =
   return ()
 
 let create_document_test _ () =
-  test_command (D.Collection.Document.create dbname collection_name create_value) 201
+  let res = D.Collection.Document.create dbname collection_name create_value in
+  res >>= fun (code, _) ->
+  let _ = Alcotest.(check int) "Status same int" 201 code in
+  return ()
+(* test_command (D.Collection.Document.create dbname collection_name create_value) 201 *)
 
 let list_document_test _ () =
-  test_command (D.Collection.Document.list dbname collection_name) 200
+  let res = D.Collection.Document.list dbname collection_name in
+  res >>= fun (code, _) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  return ()
+  (* test_command (D.Collection.Document.list dbname collection_name) 200 *)
 
 let query_document_test _ () =
   let query =
