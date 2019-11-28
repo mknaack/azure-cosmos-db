@@ -66,8 +66,8 @@ let list_databases _ () =
   let _ = Alcotest.(check string) "Name of databases" dbname ((List.hd databases).id) in
   return ()
 
-let old_list_databases_test _ () =
-  test_command (D.old_list_databases ()) 200
+(* let old_list_databases_test _ () =
+ *   test_command (D.old_list_databases ()) 200 *)
 
 let get_database_test _ () =
   let res = D.get dbname in
@@ -81,8 +81,8 @@ let get_database_test _ () =
   in
   return ()
 
-let old_get_database_test _ () =
-  test_command (D.old_get dbname) 200
+(* let old_get_database_test _ () =
+ *   test_command (D.old_get dbname) 200 *)
 
 (* let old_create_collection_test _ () =
  *   test_command (D.Collection.old_create dbname collection_name) 201 *)
@@ -150,10 +150,18 @@ let query_document_test _ () =
   (* test_command (D.Collection.Document.query dbname collection_name query) 200 *)
 
 let get_document_test _ () =
-  test_command (D.Collection.Document.get dbname collection_name document_id) 200
+  let res = D.Collection.Document.get dbname collection_name document_id in
+  res >>= fun (code, _) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  return ()
+  (* test_command (D.Collection.Document.get dbname collection_name document_id) 200 *)
 
 let replace_document_test _ () =
-  test_command (D.Collection.Document.replace dbname collection_name document_id replace_value) 200
+  let res = D.Collection.Document.replace dbname collection_name document_id replace_value in
+  res >>= fun (code, _) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  return ()
+  (* test_command (D.Collection.Document.replace dbname collection_name document_id replace_value) 200 *)
 
 (* let delete_document_test _ () =
  *   test_command (D.Collection.Document.delete dbname collection_name document_id) 204 *)
