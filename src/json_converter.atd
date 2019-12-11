@@ -2,7 +2,17 @@ type create_database = {
   id: string;
 }
 
-type databases = {
+type create_database_result = {
+  id: string;
+  _rid: string;
+  _ts: int;
+  _self: string;
+  _etag: string;
+  _colls: string;
+  _users: string;
+}
+
+type database = {
   id: string;
   _rid: string;
   _self: string;
@@ -14,7 +24,7 @@ type databases = {
 
 type list_databases = {
   _rid: string;
-  databases <json name="Databases">: databases list;
+  databases <json name="Databases">: database list;
   _count: int;
 }
 
@@ -44,6 +54,42 @@ type create_collection = {
   id: string;
   ?indexingPolicy: indexingPolicy option;
   ?partitionKey: partitionKey option;
+}
+
+type create_collection_result = {
+  id: string;
+  indexing_policy <json name="indexingPolicy">: indexingPolicy;
+  partition_key <json name="partitionKey">: partitionKey;
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+  docs <json name="_docs">: string;
+  sprocs <json name="_sprocs">: string;
+  triggers <json name="_triggers">: string;
+  udfs <json name="_udfs">: string;
+  conflicts <json name="_conflicts">: string;
+}
+
+type collection = {
+  id: string;
+  indexing_policy <json name="indexingPolicy">: indexingPolicy;
+(*  partition_key <json name="partitionKey">: partitionKey;*)
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+  docs <json name="_docs">: string;
+  sprocs <json name="_sprocs">: string;
+  triggers <json name="_triggers">: string;
+  udfs <json name="_udfs">: string;
+  conflicts <json name="_conflicts">: string;
+}
+
+type list_collections = {
+  rid <json name="_rid">: string;
+  document_collections <json name="DocumentCollections">: collection list;
+  count <json name="_count">: int;
 }
 
 type parameter = {
