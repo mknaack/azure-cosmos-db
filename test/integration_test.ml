@@ -4,8 +4,12 @@ open Databases
 open Json_j
 
 module MyAuthKeys : Auth_key = struct
-  let master_key = "SB1mrDcsPfPnHN2lCLYLTXDJMEqXsjvWqS2BXbvBbro94dxVHem3gyXKLPruSeMVE7ZKf36EGC5ArCkJqJaoOg=="
-  let endpoint = "mknnack"
+  let getenv s =
+    match Sys.getenv_opt s with
+    | None -> failwith ("Environment variable " ^ s ^ " not defined")
+    | Some x -> x
+  let master_key = getenv "AZURE_COSMOS_KEY"
+  let endpoint = getenv "AZURE_COSMOS_ENDPOINT"
 end
 
 module D = Database(MyAuthKeys)
