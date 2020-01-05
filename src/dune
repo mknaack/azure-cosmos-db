@@ -2,7 +2,6 @@
   (name src)
   (public_name azure-cosmos-db)
   (libraries lwt yojson ocsigenserver netstring base64 uri atdgen cohttp cohttp-lwt-unix)
-  (flags (:standard -annot -bin-annot -w -32))
 )
 
 (rule

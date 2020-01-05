@@ -42,62 +42,12 @@ module Auth (Keys : Auth_key) : Account = struct
   let endpoint = Keys.endpoint
 end
 
-let status_of_header {Ocsigen_http_frame.Http_header.mode = mode; proto = proto; headers = headers } =
-  let string_of_mode = function
-    | Ocsigen_http_frame.Http_header.Query _ -> "Query"
-    | Answer i -> "Status code: " ^ string_of_int i
-    | Nofirstline -> ""
-  in
-  let string_of_proto = function
-    | Ocsigen_http_frame.Http_header.HTTP10 -> "HTTP/1.0"
-    | HTTP11 -> "HTTP/1.1"
-  in
-  let header_value_safe name =
-    let string_name = Http_headers.name_to_string name in
-    try
-      (string_name ^ ": ") :: ((Http_headers.find_all name headers) @ [", "])
-    with
-    | Not_found -> ["No " ^ string_name ^ ", "]
-  in
-  let names = [
-    Http_headers.content_length;
-    Http_headers.name "x-ms-request-charge";
-    Http_headers.name "x-ms-session-token";
-  ]
-  in
-  "Protocol " ^ string_of_proto proto ^ "\n" ^
-  "Mode " ^ string_of_mode mode ^ "\n" ^
-  (List.fold_left (^) " " (List.flatten (List.map header_value_safe names)))
-
-let status = function
-  | { Ocsigen_http_frame.frame_content = _; frame_header = http_header; frame_abort = _ } ->
-    status_of_header http_header
-
-let content { Ocsigen_http_frame.frame_content = content; frame_header = _; frame_abort = _ } =
-  match content with
-  | Some v ->
-    let r = Ocsigen_stream.string_of_stream 100000 (Ocsigen_stream.get v) in
-    let _ = Ocsigen_stream.finalize v `Success in
-    r
-  | None ->
-    return ""
-
 (* list databases: *)
 let convert_list_databases s =
   Json_converter_j.list_databases_of_string s
 
 module Database (Auth_key : Auth_key) = struct
   module Account = Auth(Auth_key)
-
-  let old_headers resource verb db_name =
-    let ms_date =
-      let now = Unix.time () in
-      Utility.x_ms_date now
-    in
-    Http_headers.empty
-    |> Http_headers.add (Http_headers.name "authorization") (Account.authorization verb resource ms_date db_name)
-    |> Http_headers.add (Http_headers.name "x-ms-version") "2017-02-22"
-    |> Http_headers.add (Http_headers.name "x-ms-date") ms_date
 
   let host = Account.endpoint ^ ".documents.azure.com"
 
@@ -118,7 +68,7 @@ module Database (Auth_key : Auth_key) = struct
     header
 
   let get_code resp = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status
-  
+
   let list_databases () =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
     Cohttp_lwt_unix.Client.get ~headers:(headers Account.Dbs Account.Get "") uri >>= fun (resp, body) ->
@@ -156,7 +106,7 @@ module Database (Auth_key : Auth_key) = struct
       | _ -> None
     in
     (code, value)
-  
+
   let delete name =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) () in
     Cohttp_lwt_unix.Client.delete ~headers:(headers Account.Dbs Account.Delete ("dbs/" ^ name)) uri >>= fun (resp, body) ->
@@ -172,7 +122,7 @@ module Database (Auth_key : Auth_key) = struct
       body |> Cohttp_lwt.Body.to_string >|= fun body ->
       let value = Json_converter_j.list_collections_of_string body in
       (code, value)
-    
+
   let create dbname coll_name =
     let body =
       ({id = coll_name; indexingPolicy = None; partitionKey = None}: Json_converter_j.create_collection) |>
@@ -225,17 +175,13 @@ TODO:
         | Include -> "Include"
         | Exclude -> "Exclude"
 
-      let old_apply_to_header_if_some name string_of values headers = match values with
-        | None -> headers
-        | Some value -> Http_headers.add name (string_of value) headers
-
       let apply_to_header_if_some name string_of values headers = match values with
         | None -> headers
         | Some value -> Cohttp.Header.add headers name (string_of value)
 
       let add_header name value header =
         Cohttp.Header.add header name value
-      
+
       let create ?is_upsert ?indexing_directive dbname coll_name content =
         let body = Cohttp_lwt.Body.of_string content in
         let path = ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs") in
@@ -318,24 +264,6 @@ TODO:
         let code = get_code resp in
         body |> Cohttp_lwt.Body.to_string >|= fun _ ->
         code, body
-
-      let old_replace ?indexing_directive ?partition_key ?if_match dbname coll_name doc_id content =
-        let content_type = "application", "json" in
-        let headers s =
-          old_headers Account.Docs Account.Put s
-          |> old_apply_to_header_if_some (Http_headers.name "x-ms-indexing-directive") string_of_indexing_directive indexing_directive
-          |> old_apply_to_header_if_some (Http_headers.name "x-ms-documentdb-partitionkey") (fun x -> x) partition_key
-          |> old_apply_to_header_if_some (Http_headers.name "If-Match") (fun x -> x) if_match
-        in
-        Ocsigen_extra.put_string
-          ~https:true
-          ~host
-          ~uri: ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
-          ~headers: (headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id))
-          ~port:443
-          ~content
-          ~content_type
-          ()
 
       let delete dbname coll_name doc_id =
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id in
