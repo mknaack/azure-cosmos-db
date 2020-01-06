@@ -37,7 +37,7 @@ let convert_list_databases_test () =
         _colls = "colls/";
         _users = "users/";
         _ts = 1526743684;
-      } : Cosmos.Json_converter_j.databases)
+      } : Cosmos.Json_converter_j.database)
   in
   let expected_result = ({
     _rid = "";
