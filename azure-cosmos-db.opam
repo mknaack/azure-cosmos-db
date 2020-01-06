@@ -12,7 +12,6 @@ depends: [
   "dune" {build}
   "lwt"
   "atdgen"
-  "ocsigenserver"
   "base64"
   "uri"
   "cohttp"
@@ -20,4 +19,8 @@ depends: [
   "alcotest-lwt" {with-test}
 ]
 homepage: "https://bitbucket.org/knaack/azure-cosmos-db"
-build: ["dune" "build" "-p" name]
+bug-reports: "https://bitbucket.org/knaack/azure-cosmos-db/issues"
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+ ]
