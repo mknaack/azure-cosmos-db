@@ -20,6 +20,7 @@ depends: [
   "alcotest-lwt" {with-test}
 ]
 homepage: "https://bitbucket.org/knaack/azure-cosmos-db"
+bug-reports: "https://bitbucket.org/knaack/azure-cosmos-db/issues"
 build: [
   ["dune" "build" "-p" name "-j" jobs]
   ["dune" "runtest" "-p" name "-j" jobs] {with-test}
