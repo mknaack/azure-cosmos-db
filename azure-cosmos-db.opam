@@ -1,6 +1,7 @@
 opam-version: "2.0"
 name: "azure-cosmos-db"
 version: "0.1.0"
+license: "MIT"
 synopsis: "Azure cosmos db interface"
 description: """
 Provides an interface to the Azure Cosmos db.
