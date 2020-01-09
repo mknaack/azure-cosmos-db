@@ -39,6 +39,18 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         (int * Json_converter_t.create_collection_result option) Lwt.t
+      type list_result_meta_data = {
+        rid: string;
+        self: string;
+        etag: string;
+        ts: int;
+        attachments: string;
+      }
+      type list_result = {
+          rid: string;
+          documents: (string * list_result_meta_data) list;
+          count: int;
+        }
       val list :
         ?max_item_count:int ->
         ?continuation:string ->
@@ -47,7 +59,7 @@ module Database (Auth_key : Auth_key) : sig
         ?a_im:bool ->
         ?if_none_match:string ->
         ?partition_key_range_id:string ->
-        string -> string -> (int * string) Lwt.t
+        string -> string -> (int * list_result option) Lwt.t
       type consistency_level = Strong | Bounded | Session | Eventual
       val string_of_consistency_level : consistency_level -> string
       val get :
@@ -70,7 +82,7 @@ module Database (Auth_key : Auth_key) : sig
         ?session_token:string ->
         ?is_partition:bool ->
         string ->
-        string -> Json_converter_t.query -> (int * Cohttp_lwt.Body.t) Lwt.t
+        string -> Json_converter_t.query -> (int * list_result option) Lwt.t
     end
   end
 end
