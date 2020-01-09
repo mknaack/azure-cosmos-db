@@ -95,8 +95,21 @@ let create_document_test _ () =
 
 let list_document_test _ () =
   let res = D.Collection.Document.list dbname collection_name in
-  res >>= fun (code, _) ->
+  res >>= fun (code, values) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match values with
+    | Some {rid = _; documents; count} ->
+      let docs = List.map create_document_of_string documents in
+      let {id; firstName; lastName} = List.hd docs in
+      Alcotest.(check int) "Count field" count 1;
+      Alcotest.(check int) "Count list" count (List.length documents);
+      Alcotest.(check string) "id" id "document_id";
+      Alcotest.(check string) "firstName" firstName "A First name";
+      Alcotest.(check string) "lastName" lastName "a Last name"
+    | _ ->
+      Alcotest.(check int) "list_document_test fail" 1 0
+  in
   return ()
 
 let query_document_test _ () =
@@ -106,8 +119,21 @@ let query_document_test _ () =
     }
   in
   let res = D.Collection.Document.query dbname collection_name query in
-  res >>= fun (code, _) ->
+  res >>= fun (code, values) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match values with
+    | Some {rid = _; documents; count} ->
+      let docs = List.map create_document_of_string documents in
+      let {id; firstName; lastName} = List.hd docs in
+      Alcotest.(check int) "Count field" count 1;
+      Alcotest.(check int) "Count list" count (List.length documents);
+      Alcotest.(check string) "id" id "document_id";
+      Alcotest.(check string) "firstName" firstName "A First name";
+      Alcotest.(check string) "lastName" lastName "a Last name"
+    | _ ->
+      Alcotest.(check int) "list_document_test fail" 1 0
+  in
   return ()
 
 let get_document_test _ () =

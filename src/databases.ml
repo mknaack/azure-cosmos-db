@@ -198,8 +198,23 @@ TODO:
           | 200 -> Some (Json_converter_j.create_collection_result_of_string body)
           | _ -> None
         in
-        (code, value)
+        code, value
 
+      type list_result = {
+          rid: string;
+          documents: string list;
+          count: int;
+        }
+
+      let convert_to_list_result value =
+        let open Yojson.Basic.Util in
+        let json = Yojson.Basic.from_string value in
+        let rid = json |> member "_rid" |> to_string in
+        let count = json |> member "_count" |> to_int in
+        let docs = json |> member "Documents" |> to_list in
+        let string_docs = List.map Yojson.Basic.to_string docs in
+        Some { rid; documents = string_docs; count }
+      
       let list ?max_item_count ?continuation ?consistency_level ?session_token ?a_im ?if_none_match ?partition_key_range_id dbname coll_name =
         let apply_a_im_to_header_if_some name values headers = match values with
           | None -> headers
@@ -221,7 +236,11 @@ TODO:
         Cohttp_lwt_unix.Client.get ~headers uri >>= fun (resp, body) ->
         let code = get_code resp in
         body |> Cohttp_lwt.Body.to_string >|= fun body ->
-        (code, body)
+        let value = match code with
+          | 200 -> convert_to_list_result body
+          | _ -> None
+        in
+        code, value
 
       type consistency_level =
         | Strong
@@ -294,8 +313,12 @@ TODO:
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
         Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
         let code = get_code resp in
-        body |> Cohttp_lwt.Body.to_string >|= fun _ ->
-        (code, body)
+        body |> Cohttp_lwt.Body.to_string >|= fun body ->
+        let value = match code with
+          | 200 -> convert_to_list_result body
+          | _ -> None
+        in
+        code, value
     end
   end
 end
