@@ -39,9 +39,16 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         (int * Json_converter_t.create_collection_result option) Lwt.t
+      type list_result_meta_data = {
+        rid: string;
+        self: string;
+        etag: string;
+        ts: int;
+        attachments: string;
+      }
       type list_result = {
           rid: string;
-          documents: string list;
+          documents: (string * list_result_meta_data) list;
           count: int;
         }
       val list :

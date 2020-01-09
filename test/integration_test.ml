@@ -100,7 +100,7 @@ let list_document_test _ () =
   let _ =
     match values with
     | Some {rid = _; documents; count} ->
-      let docs = List.map create_document_of_string documents in
+      let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
       let {id; firstName; lastName} = List.hd docs in
       Alcotest.(check int) "Count field" count 1;
       Alcotest.(check int) "Count list" count (List.length documents);
@@ -124,7 +124,7 @@ let query_document_test _ () =
   let _ =
     match values with
     | Some {rid = _; documents; count} ->
-      let docs = List.map create_document_of_string documents in
+      let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
       let {id; firstName; lastName} = List.hd docs in
       Alcotest.(check int) "Count field" count 1;
       Alcotest.(check int) "Count list" count (List.length documents);
