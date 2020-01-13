@@ -34,32 +34,38 @@ type indexes = {
   kind: string;
 }
 
-type includedPaths = {
+type included_paths = {
   path: string;
   indexes: indexes list;
 }
 
-type indexingPolicy = {
+type indexing_policy = {
   automatic: bool;
-  indexingMode: string;
-  includedPaths: includedPaths list;
+  indexing_mode <json name="indexingMode">: string;
+  included_paths <json name="includedPaths">: included_paths list;
 }
 
-type partitionKey = {
+type partitionKey_result = {
     paths: string list;
     kind: string;
 }
 
+type create_partition_key = {
+    paths: string list;
+    kind: string;
+    ?version: int option;
+}
+
 type create_collection = {
   id: string;
-  ?indexingPolicy: indexingPolicy option;
-  ?partitionKey: partitionKey option;
+  ?indexing_policy <json name="indexingPolicy">: indexing_policy option;
+  ?partition_key <json name="partitionKey">: create_partition_key option;
 }
 
 type create_collection_result = {
   id: string;
-  indexing_policy <json name="indexingPolicy">: indexingPolicy;
-  partition_key <json name="partitionKey">: partitionKey;
+  indexing_policy <json name="indexingPolicy">: indexing_policy;
+  partition_key <json name="partitionKey">: partitionKey_result;
   rid <json name="_rid">: string;
   ts <json name="_ts">: int;
   self <json name="_self">: string;
@@ -73,7 +79,7 @@ type create_collection_result = {
 
 type collection = {
   id: string;
-  indexing_policy <json name="indexingPolicy">: indexingPolicy;
+  indexing_policy <json name="indexingPolicy">: indexing_policy;
 (*  partition_key <json name="partitionKey">: partitionKey;*)
   rid <json name="_rid">: string;
   ts <json name="_ts">: int;
