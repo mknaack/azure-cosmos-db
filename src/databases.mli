@@ -23,6 +23,8 @@ module Database (Auth_key : Auth_key) : sig
   sig
     val list : string -> (int * Json_converter_t.list_collections) Lwt.t
     val create :
+      ?indexing_policy:Json_converter_t.indexing_policy option ->
+      ?partition_key:Json_converter_t.create_partition_key option ->
       string ->
       string ->
       (int * Json_converter_t.create_collection_result option) Lwt.t
@@ -35,6 +37,7 @@ module Database (Auth_key : Auth_key) : sig
       val create :
         ?is_upsert:bool ->
         ?indexing_directive:indexing_directive ->
+        ?partition_key:string ->
         string ->
         string ->
         string ->
@@ -74,7 +77,9 @@ module Database (Auth_key : Auth_key) : sig
         ?if_match:string ->
         string ->
         string -> string -> string -> (int * Cohttp_lwt.Body.t) Lwt.t
-      val delete : string -> string -> string -> int Lwt.t
+      val delete :
+         ?partition_key:string ->
+         string -> string -> string -> int Lwt.t
       val query :
         ?max_item_count:int ->
         ?continuation:string ->
