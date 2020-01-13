@@ -95,8 +95,21 @@ let create_document_test _ () =
 
 let list_document_test _ () =
   let res = D.Collection.Document.list dbname collection_name in
-  res >>= fun (code, _) ->
+  res >>= fun (code, values) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match values with
+    | Some {rid = _; documents; count} ->
+      let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
+      let {id; firstName; lastName} = List.hd docs in
+      Alcotest.(check int) "Count field" count 1;
+      Alcotest.(check int) "Count list" count (List.length documents);
+      Alcotest.(check string) "id" id "document_id";
+      Alcotest.(check string) "firstName" firstName "A First name";
+      Alcotest.(check string) "lastName" lastName "a Last name"
+    | _ ->
+      Alcotest.(check int) "list_document_test fail" 1 0
+  in
   return ()
 
 let query_document_test _ () =
@@ -106,8 +119,21 @@ let query_document_test _ () =
     }
   in
   let res = D.Collection.Document.query dbname collection_name query in
-  res >>= fun (code, _) ->
+  res >>= fun (code, values) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match values with
+    | Some {rid = _; documents; count} ->
+      let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
+      let {id; firstName; lastName} = List.hd docs in
+      Alcotest.(check int) "Count field" count 1;
+      Alcotest.(check int) "Count list" count (List.length documents);
+      Alcotest.(check string) "id" id "document_id";
+      Alcotest.(check string) "firstName" firstName "A First name";
+      Alcotest.(check string) "lastName" lastName "a Last name"
+    | _ ->
+      Alcotest.(check int) "list_document_test fail" 1 0
+  in
   return ()
 
 let get_document_test _ () =
@@ -130,6 +156,30 @@ let delete_document_test _ () =
 
 let delete_collection_test _ () =
   let res = D.Collection.delete dbname collection_name in
+  res >>= fun code ->
+  let _ = Alcotest.(check int) "Status same int" 204 code in
+  return ()
+
+let create_collection_with_partition_key_test _ () =
+  let partition_key = Some Json_converter_t.({paths = ["/lastName"]; kind = "Hash"; version = None}) in
+  let res = D.Collection.create ~partition_key dbname collection_name in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 201 code in
+  let _ =
+    match body with
+    | Some {id; _} -> Alcotest.(check string) "Create name is correct" collection_name id
+    | None -> ()
+  in
+  return ()
+
+let create_document_with_partition_key_test _ () =
+  let res = D.Collection.Document.create ~partition_key:"a Last name" dbname collection_name create_value in
+  res >>= fun (code, _) ->
+  let _ = Alcotest.(check int) "Status same int" 201 code in
+  return ()
+
+let delete_document_with_partition_key_test _ () =
+  let res = D.Collection.Document.delete ~partition_key:"a Last name" dbname collection_name document_id in
   res >>= fun code ->
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
@@ -157,5 +207,14 @@ let test = [
 
   Alcotest_lwt.test_case "delete document" `Slow delete_document_test;
   Alcotest_lwt.test_case "delete collection" `Slow delete_collection_test;
+  Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
+]
+
+let test_partition_key = [
+  Alcotest_lwt.test_case "create database" `Slow create_database_test;
+  Alcotest_lwt.test_case "create collection with partition key" `Slow create_collection_with_partition_key_test;
+  Alcotest_lwt.test_case "create document with partition key" `Slow create_document_with_partition_key_test;
+  Alcotest_lwt.test_case "delete document with partition key" `Slow delete_document_with_partition_key_test;
+  Alcotest_lwt.test_case "delete collection with partition key" `Slow delete_collection_test;
   Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
 ]

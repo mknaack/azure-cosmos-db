@@ -123,9 +123,9 @@ module Database (Auth_key : Auth_key) = struct
       let value = Json_converter_j.list_collections_of_string body in
       (code, value)
 
-  let create dbname coll_name =
+  let create ?(indexing_policy=None) ?(partition_key=None) dbname coll_name =
     let body =
-      ({id = coll_name; indexingPolicy = None; partitionKey = None}: Json_converter_j.create_collection) |>
+      ({id = coll_name; indexing_policy; partition_key}: Json_converter_j.create_collection) |>
       Json_converter_j.string_of_create_collection |>
       Cohttp_lwt.Body.of_string
     in
@@ -175,6 +175,8 @@ TODO:
         | Include -> "Include"
         | Exclude -> "Exclude"
 
+      let string_of_partition_key s = "[\"" ^ s ^ "\"]"
+
       let apply_to_header_if_some name string_of values headers = match values with
         | None -> headers
         | Some value -> Cohttp.Header.add headers name (string_of value)
@@ -182,7 +184,7 @@ TODO:
       let add_header name value header =
         Cohttp.Header.add header name value
 
-      let create ?is_upsert ?indexing_directive dbname coll_name content =
+      let create ?is_upsert ?indexing_directive ?partition_key dbname coll_name content =
         let body = Cohttp_lwt.Body.of_string content in
         let path = ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs") in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
@@ -190,6 +192,7 @@ TODO:
           json_headers Account.Docs Account.Post ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
           |> apply_to_header_if_some "x-ms-documentdb-is-upsert" Utility.string_of_bool is_upsert
           |> apply_to_header_if_some "x-ms-indexing-directive" string_of_indexing_directive indexing_directive
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
         in
         Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
         let code = get_code resp in
@@ -198,7 +201,39 @@ TODO:
           | 200 -> Some (Json_converter_j.create_collection_result_of_string body)
           | _ -> None
         in
-        (code, value)
+        code, value
+
+      type list_result_meta_data = {
+        rid: string;
+        self: string;
+        etag: string;
+        ts: int;
+        attachments: string;
+      }
+
+      let convert_to_list_result_meta_data json =
+        let open Yojson.Basic.Util in
+        let rid = json |> member "_rid" |> to_string in
+        let self = json |> member "_self" |> to_string in
+        let etag = json |> member "_etag" |> to_string in
+        let ts = json |> member "_ts" |> to_int in
+        let attachments = json |> member "_attachments" |> to_string in
+        { rid; self; etag; ts; attachments; }
+
+      type list_result = {
+          rid: string;
+          documents: (string * list_result_meta_data) list;
+          count: int;
+        }
+
+      let convert_to_list_result value =
+        let open Yojson.Basic.Util in
+        let json = Yojson.Basic.from_string value in
+        let rid = json |> member "_rid" |> to_string in
+        let count = json |> member "_count" |> to_int in
+        let docs = json |> member "Documents" |> to_list in
+        let string_docs = List.map (fun x -> Yojson.Basic.to_string x, convert_to_list_result_meta_data x) docs in
+        Some { rid; documents = string_docs; count }
 
       let list ?max_item_count ?continuation ?consistency_level ?session_token ?a_im ?if_none_match ?partition_key_range_id dbname coll_name =
         let apply_a_im_to_header_if_some name values headers = match values with
@@ -221,7 +256,11 @@ TODO:
         Cohttp_lwt_unix.Client.get ~headers uri >>= fun (resp, body) ->
         let code = get_code resp in
         body |> Cohttp_lwt.Body.to_string >|= fun body ->
-        (code, body)
+        let value = match code with
+          | 200 -> convert_to_list_result body
+          | _ -> None
+        in
+        code, value
 
       type consistency_level =
         | Strong
@@ -265,9 +304,11 @@ TODO:
         body |> Cohttp_lwt.Body.to_string >|= fun _ ->
         code, body
 
-      let delete dbname coll_name doc_id =
+      let delete ?partition_key dbname coll_name doc_id =
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id in
-        let headers = headers Account.Docs Account.Delete ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id) in
+        let headers = headers Account.Docs Account.Delete ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
+        in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
         Cohttp_lwt_unix.Client.delete ~headers uri >>= fun (resp, body) ->
         let code = get_code resp in
@@ -294,8 +335,12 @@ TODO:
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
         Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
         let code = get_code resp in
-        body |> Cohttp_lwt.Body.to_string >|= fun _ ->
-        (code, body)
+        body |> Cohttp_lwt.Body.to_string >|= fun body ->
+        let value = match code with
+          | 200 -> convert_to_list_result body
+          | _ -> None
+        in
+        code, value
     end
   end
 end
