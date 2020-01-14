@@ -16,6 +16,8 @@ module D = Database(MyAuthKeys)
 
 let dbname = "test"
 let collection_name = "testCollection"
+let dbname_partition = "testPartition"
+let collection_name_partition = "testPartition"
 let document_id = "document_id"
 
 let create_value =
@@ -160,30 +162,6 @@ let delete_collection_test _ () =
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
 
-let create_collection_with_partition_key_test _ () =
-  let partition_key = Some Json_converter_t.({paths = ["/lastName"]; kind = "Hash"; version = None}) in
-  let res = D.Collection.create ~partition_key dbname collection_name in
-  res >>= fun (code, body) ->
-  let _ = Alcotest.(check int) "Status same int" 201 code in
-  let _ =
-    match body with
-    | Some {id; _} -> Alcotest.(check string) "Create name is correct" collection_name id
-    | None -> ()
-  in
-  return ()
-
-let create_document_with_partition_key_test _ () =
-  let res = D.Collection.Document.create ~partition_key:"a Last name" dbname collection_name create_value in
-  res >>= fun (code, _) ->
-  let _ = Alcotest.(check int) "Status same int" 201 code in
-  return ()
-
-let delete_document_with_partition_key_test _ () =
-  let res = D.Collection.Document.delete ~partition_key:"a Last name" dbname collection_name document_id in
-  res >>= fun code ->
-  let _ = Alcotest.(check int) "Status same int" 204 code in
-  return ()
-
 let delete_database_test _ () =
   let res = D.delete dbname in
   res >>= fun code ->
@@ -210,11 +188,58 @@ let test = [
   Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
 ]
 
+let create_database_with_partition_key_test _ () =
+  let res = D.create dbname_partition in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 201 code in
+  let _ =
+    match body with
+    | Some {id; _} -> Alcotest.(check string) "Create name is correct" dbname id
+    | None -> ()
+  in
+  return ()
+
+let create_collection_with_partition_key_test _ () =
+  let partition_key = Some Json_converter_t.({paths = ["/lastName"]; kind = "Hash"; version = None}) in
+  let res = D.Collection.create ~partition_key dbname_partition collection_name_partition in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 201 code in
+  let _ =
+    match body with
+    | Some {id; _} -> Alcotest.(check string) "Create name is correct" collection_name id
+    | None -> ()
+  in
+  return ()
+
+let create_document_with_partition_key_test _ () =
+  let res = D.Collection.Document.create ~partition_key:"a Last name" dbname_partition collection_name_partition create_value in
+  res >>= fun (code, _) ->
+  let _ = Alcotest.(check int) "Status same int" 201 code in
+  return ()
+
+let delete_document_with_partition_key_test _ () =
+  let res = D.Collection.Document.delete ~partition_key:"a Last name" dbname_partition collection_name_partition document_id in
+  res >>= fun code ->
+  let _ = Alcotest.(check int) "Status same int" 204 code in
+  return ()
+
+let delete_collection_with_partition_key_test _ () =
+  let res = D.Collection.delete dbname_partition collection_name_partition in
+  res >>= fun code ->
+  let _ = Alcotest.(check int) "Status same int" 204 code in
+  return ()
+
+let delete_database_with_partition_test _ () =
+  let res = D.delete dbname_partition in
+  res >>= fun code ->
+  let _ = Alcotest.(check int) "Status same int" 204 code in
+  return ()
+
 let test_partition_key = [
-  Alcotest_lwt.test_case "create database" `Slow create_database_test;
+  Alcotest_lwt.test_case "create database" `Slow create_database_with_partition_key_test;
   Alcotest_lwt.test_case "create collection with partition key" `Slow create_collection_with_partition_key_test;
   Alcotest_lwt.test_case "create document with partition key" `Slow create_document_with_partition_key_test;
   Alcotest_lwt.test_case "delete document with partition key" `Slow delete_document_with_partition_key_test;
-  Alcotest_lwt.test_case "delete collection with partition key" `Slow delete_collection_test;
-  Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
+  Alcotest_lwt.test_case "delete collection with partition key" `Slow delete_collection_with_partition_key_test;
+  Alcotest_lwt.test_case "delete database" `Slow delete_database_with_partition_test;
 ]
