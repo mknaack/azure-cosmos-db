@@ -14,7 +14,6 @@ depends: [
   "lwt"
   "atdgen"
   "base64"
-  "ocsigenserver"
   "uri"
   "cohttp"
   "cohttp-lwt-unix"
