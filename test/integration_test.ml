@@ -3,13 +3,16 @@ open Cosmos
 open Databases
 open Json_j
 
+let master_key_env = "AZURE_COSMOS_KEY"
+let endpoint_env = "AZURE_COSMOS_ENDPOINT"
+
 module MyAuthKeys : Auth_key = struct
   let getenv s =
     match Sys.getenv_opt s with
-    | None -> failwith ("Environment variable " ^ s ^ " not defined")
+    | None -> ""
     | Some x -> x
-  let master_key = getenv "AZURE_COSMOS_KEY"
-  let endpoint = getenv "AZURE_COSMOS_ENDPOINT"
+  let master_key = getenv master_key_env
+  let endpoint = getenv endpoint_env
 end
 
 module D = Database(MyAuthKeys)
@@ -20,6 +23,16 @@ let dbname_partition = "testPartition"
 let collection_name_partition = "testPartition"
 let document_id = "document_id"
 
+let should_run () =
+  Option.is_some @@ Sys.getenv_opt master_key_env
+  && Option.is_some @@ Sys.getenv_opt endpoint_env
+
+let run_cosmos_test f =
+  if should_run () then
+    f ()
+  else
+    return ()
+
 let create_value =
   ({id = document_id; firstName = "A First name"; lastName = "a Last name"}: create_document)
   |> string_of_create_document
@@ -28,7 +41,7 @@ let replace_value =
   ({id = document_id; firstName = "Something different"; lastName = "a Last name"}: create_document)
   |> string_of_create_document
 
-let create_database_test _switch () =
+let create_database_test _ () =
   let res = D.create dbname in
   res >>= fun (code, body) ->
   let _ = Alcotest.(check int) "Status same int" 201 code in
@@ -117,8 +130,8 @@ let list_document_test _ () =
 let query_document_test _ () =
   let query =
     Json_converter_t.{query = "SELECT * FROM " ^ collection_name ^ " f WHERE f.firstName = @fname";
-     parameters = [{name = "@fname"; value = "A First name"}]
-    }
+                      parameters = [{name = "@fname"; value = "A First name"}]
+                     }
   in
   let res = D.Collection.Document.query dbname collection_name query in
   res >>= fun (code, values) ->
@@ -168,7 +181,7 @@ let delete_database_test _ () =
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
 
-let test = [
+let cosmos_test = [
   Alcotest_lwt.test_case "create database" `Slow create_database_test;
   Alcotest_lwt.test_case "list database" `Slow list_databases;
   Alcotest_lwt.test_case "get database" `Slow get_database_test;
@@ -187,6 +200,9 @@ let test = [
   Alcotest_lwt.test_case "delete collection" `Slow delete_collection_test;
   Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
 ]
+
+let test =
+  if should_run () then cosmos_test else []
 
 let create_database_with_partition_key_test _ () =
   let res = D.create dbname_partition in
@@ -235,7 +251,7 @@ let delete_database_with_partition_test _ () =
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
 
-let test_partition_key = [
+let test_partition_key_cosmos = [
   Alcotest_lwt.test_case "create database" `Slow create_database_with_partition_key_test;
   Alcotest_lwt.test_case "create collection with partition key" `Slow create_collection_with_partition_key_test;
   Alcotest_lwt.test_case "create document with partition key" `Slow create_document_with_partition_key_test;
@@ -243,3 +259,6 @@ let test_partition_key = [
   Alcotest_lwt.test_case "delete collection with partition key" `Slow delete_collection_with_partition_key_test;
   Alcotest_lwt.test_case "delete database" `Slow delete_database_with_partition_test;
 ]
+
+let test_partition_key =
+  if should_run () then test_partition_key_cosmos else []
