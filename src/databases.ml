@@ -42,6 +42,27 @@ module Auth (Keys : Auth_key) : Account = struct
   let endpoint = Keys.endpoint
 end
 
+module Response_headers = struct
+  type t = {
+    x_ms_continuation : string option;
+  }
+  let empty = {
+    x_ms_continuation = None;
+  }
+  let update t value_tuple =
+    let key, value = value_tuple in
+    let _ = print_endline @@ "key: " ^ key ^ " value: " ^ value in
+    match key with
+    | "x-ms-continuation" -> {x_ms_continuation = Some value}
+    | _ -> t
+  let get_header resp =
+    resp
+    |> Cohttp_lwt_unix.Response.headers
+    |> Cohttp.Header.to_list
+    |> List.fold_left update empty
+  let x_ms_continuation t = t.x_ms_continuation
+end
+
 (* list databases: *)
 let convert_list_databases s =
   Json_converter_j.list_databases_of_string s
@@ -68,6 +89,7 @@ module Database (Auth_key : Auth_key) = struct
     header
 
   let get_code resp = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status
+
 
   let list_databases () =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
@@ -123,43 +145,43 @@ module Database (Auth_key : Auth_key) = struct
       let value = Json_converter_j.list_collections_of_string body in
       (code, value)
 
-  let create ?(indexing_policy=None) ?(partition_key=None) dbname coll_name =
-    let body =
-      ({id = coll_name; indexing_policy; partition_key}: Json_converter_j.create_collection) |>
-      Json_converter_j.string_of_create_collection |>
-      Cohttp_lwt.Body.of_string
-    in
-    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("/dbs/" ^ dbname ^ "/colls") () in
-    let headers = (json_headers Account.Colls Account.Post ("dbs/" ^ dbname)) in
-    Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
-    let code = get_code resp in
-    body |> Cohttp_lwt.Body.to_string >|= fun body ->
-    let value = match code with
-      | 200 -> Some (Json_converter_j.create_collection_result_of_string body)
-      | _ -> None
-    in
-    (code, value)
+    let create ?(indexing_policy=None) ?(partition_key=None) dbname coll_name =
+      let body =
+        ({id = coll_name; indexing_policy; partition_key}: Json_converter_j.create_collection) |>
+        Json_converter_j.string_of_create_collection |>
+        Cohttp_lwt.Body.of_string
+      in
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("/dbs/" ^ dbname ^ "/colls") () in
+      let headers = (json_headers Account.Colls Account.Post ("dbs/" ^ dbname)) in
+      Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
+      let code = get_code resp in
+      body |> Cohttp_lwt.Body.to_string >|= fun body ->
+      let value = match code with
+        | 200 -> Some (Json_converter_j.create_collection_result_of_string body)
+        | _ -> None
+      in
+      (code, value)
 
-  let get name coll_name =
-    let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
-    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-    Cohttp_lwt_unix.Client.get ~headers:(headers Account.Colls Account.Get ("dbs/" ^ name^ "/colls/" ^ coll_name)) uri >>= fun (resp, body) ->
-    let code = get_code resp in
-    body |> Cohttp_lwt.Body.to_string >|= fun body ->
-    let value = match code with
-      | 200 -> Some (Json_converter_j.collection_of_string body)
-      | _ -> None
-    in
-    (code, value)
+    let get name coll_name =
+      let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      Cohttp_lwt_unix.Client.get ~headers:(headers Account.Colls Account.Get ("dbs/" ^ name^ "/colls/" ^ coll_name)) uri >>= fun (resp, body) ->
+      let code = get_code resp in
+      body |> Cohttp_lwt.Body.to_string >|= fun body ->
+      let value = match code with
+        | 200 -> Some (Json_converter_j.collection_of_string body)
+        | _ -> None
+      in
+      (code, value)
 
-  let delete name coll_name =
-    let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
-    let header_path = "dbs/" ^ name ^ "/colls/" ^ coll_name in
-    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-    Cohttp_lwt_unix.Client.delete ~headers:(headers Account.Colls Account.Delete header_path) uri >>= fun (resp, body) ->
-    let code = get_code resp in
-    body |> Cohttp_lwt.Body.to_string >|= fun _ ->
-    code
+    let delete name coll_name =
+      let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
+      let header_path = "dbs/" ^ name ^ "/colls/" ^ coll_name in
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      Cohttp_lwt_unix.Client.delete ~headers:(headers Account.Colls Account.Delete header_path) uri >>= fun (resp, body) ->
+      let code = get_code resp in
+      body |> Cohttp_lwt.Body.to_string >|= fun _ ->
+      code
 
   (*
 TODO:
@@ -221,10 +243,10 @@ TODO:
         { rid; self; etag; ts; attachments; }
 
       type list_result = {
-          rid: string;
-          documents: (string * list_result_meta_data) list;
-          count: int;
-        }
+        rid: string;
+        documents: (string * list_result_meta_data) list;
+        count: int;
+      }
 
       let convert_to_list_result value =
         let open Yojson.Basic.Util in
@@ -255,12 +277,13 @@ TODO:
         in
         Cohttp_lwt_unix.Client.get ~headers uri >>= fun (resp, body) ->
         let code = get_code resp in
+        let response_header = Response_headers.get_header resp in
         body |> Cohttp_lwt.Body.to_string >|= fun body ->
         let value = match code with
           | 200 -> convert_to_list_result body
           | _ -> None
         in
-        code, value
+        code, response_header, value
 
       type consistency_level =
         | Strong
@@ -287,7 +310,7 @@ TODO:
         Cohttp_lwt_unix.Client.get ~headers uri >>= fun (resp, body) ->
         let code = get_code resp in
         body |> Cohttp_lwt.Body.to_string >|= fun body ->
-        (code, body)
+        code, body
 
       let replace ?indexing_directive ?partition_key ?if_match dbname coll_name doc_id content =
         let body = Cohttp_lwt.Body.of_string content in
@@ -307,7 +330,7 @@ TODO:
       let delete ?partition_key dbname coll_name doc_id =
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id in
         let headers = headers Account.Docs Account.Delete ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
-          |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
+                      |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
         in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
         Cohttp_lwt_unix.Client.delete ~headers uri >>= fun (resp, body) ->

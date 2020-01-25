@@ -11,6 +11,13 @@ end
 val convert_list_databases : string ->
   Json_converter_t.list_databases
 
+module Response_headers : sig
+  type t = {
+    x_ms_continuation : string option;
+  }
+  val x_ms_continuation : t -> string option
+end
+
 module Database (Auth_key : Auth_key) : sig
 
   val get_code : Cohttp.Response.t -> int
@@ -62,7 +69,7 @@ module Database (Auth_key : Auth_key) : sig
         ?a_im:bool ->
         ?if_none_match:string ->
         ?partition_key_range_id:string ->
-        string -> string -> (int * list_result option) Lwt.t
+        string -> string -> (int * Response_headers.t * list_result option) Lwt.t
       type consistency_level = Strong | Bounded | Session | Eventual
       val string_of_consistency_level : consistency_level -> string
       val get :
