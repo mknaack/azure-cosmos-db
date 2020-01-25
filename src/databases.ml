@@ -51,7 +51,6 @@ module Response_headers = struct
   }
   let update t value_tuple =
     let key, value = value_tuple in
-    let _ = print_endline @@ "key: " ^ key ^ " value: " ^ value in
     match key with
     | "x-ms-continuation" -> {x_ms_continuation = Some value}
     | _ -> t

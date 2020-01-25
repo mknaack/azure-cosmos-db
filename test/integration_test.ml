@@ -114,7 +114,7 @@ let list_document_test _ () =
   let res = D.Collection.Document.list dbname collection_name in
   res >>= fun (code, headers, values) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
-  let _ = Alcotest.(check (option string)) "Continuation" None headers.x_ms_continuation in 
+  let _ = Alcotest.(check (option string)) "Continuation" None headers.x_ms_continuation in
   let _ =
     match values with
     | Some {rid = _; documents; count} ->
@@ -136,9 +136,7 @@ let list_multiple_documents_test _ () =
     make_values 10 []
   in
   let values = List.map create_value list_values in
-  let _ = List.iter print_endline values in
   let%lwt x = Lwt_list.map_p (fun x -> D.Collection.Document.create dbname collection_name x) values in
-  let _ = List.iter (fun (y, _) -> print_endline @@ string_of_int y) x in
   let all_is_inserted = List.fold_left (fun x (y, _) -> y = 201 && x) true x in
   let _ = Alcotest.(check bool) "all_is_inserted" true all_is_inserted in
   let%lwt code, headers, result = D.Collection.Document.list ~max_item_count:5 dbname collection_name in
