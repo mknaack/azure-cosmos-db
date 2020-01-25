@@ -1,4 +1,4 @@
-image: mknaack/azure-cosmos-db-base:0.3
+image: mknaack/azure-cosmos-db-base:0.4
 
 pipelines:
   default:

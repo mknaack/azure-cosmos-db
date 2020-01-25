@@ -12,6 +12,7 @@ depends: [
   "ocaml" {>= "4.06.0"}
   "dune" {build}
   "lwt"
+  "lwt_ppx"
   "atdgen"
   "ocsigenserver"
   "base64"

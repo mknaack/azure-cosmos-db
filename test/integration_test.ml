@@ -3,13 +3,16 @@ open Cosmos
 open Databases
 open Json_j
 
+let master_key_env = "AZURE_COSMOS_KEY"
+let endpoint_env = "AZURE_COSMOS_ENDPOINT"
+
 module MyAuthKeys : Auth_key = struct
   let getenv s =
     match Sys.getenv_opt s with
-    | None -> failwith ("Environment variable " ^ s ^ " not defined")
+    | None -> ""
     | Some x -> x
-  let master_key = getenv "AZURE_COSMOS_KEY"
-  let endpoint = getenv "AZURE_COSMOS_ENDPOINT"
+  let master_key = getenv master_key_env
+  let endpoint = getenv endpoint_env
 end
 
 module D = Database(MyAuthKeys)
@@ -20,15 +23,27 @@ let dbname_partition = "testPartition"
 let collection_name_partition = "testPartition"
 let document_id = "document_id"
 
-let create_value =
-  ({id = document_id; firstName = "A First name"; lastName = "a Last name"}: create_document)
+let should_run () =
+  Option.is_some @@ Sys.getenv_opt master_key_env
+  && Option.is_some @@ Sys.getenv_opt endpoint_env
+
+let run_cosmos_test f =
+  if should_run () then
+    f ()
+  else
+    return ()
+
+let create_value counter =
+  let string_counter = string_of_int counter in
+  ({id = document_id ^ string_counter; firstName = "A First name " ^ string_counter; lastName = "a Last name"}: create_document)
   |> string_of_create_document
 
-let replace_value =
-  ({id = document_id; firstName = "Something different"; lastName = "a Last name"}: create_document)
+let replace_value counter =
+  let string_counter = string_of_int counter in
+  ({id = document_id ^ string_counter; firstName = "Something different"; lastName = "a Last name"}: create_document)
   |> string_of_create_document
 
-let create_database_test _switch () =
+let create_database_test _ () =
   let res = D.create dbname in
   res >>= fun (code, body) ->
   let _ = Alcotest.(check int) "Status same int" 201 code in
@@ -90,15 +105,16 @@ let get_collection_test _ () =
   return ()
 
 let create_document_test _ () =
-  let res = D.Collection.Document.create dbname collection_name create_value in
+  let res = D.Collection.Document.create dbname collection_name (create_value 1) in
   res >>= fun (code, _) ->
   let _ = Alcotest.(check int) "Status same int" 201 code in
   return ()
 
 let list_document_test _ () =
   let res = D.Collection.Document.list dbname collection_name in
-  res >>= fun (code, values) ->
+  res >>= fun (code, headers, values) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ = Alcotest.(check (option string)) "Continuation" None headers.x_ms_continuation in 
   let _ =
     match values with
     | Some {rid = _; documents; count} ->
@@ -106,19 +122,45 @@ let list_document_test _ () =
       let {id; firstName; lastName} = List.hd docs in
       Alcotest.(check int) "Count field" count 1;
       Alcotest.(check int) "Count list" count (List.length documents);
-      Alcotest.(check string) "id" id "document_id";
-      Alcotest.(check string) "firstName" firstName "A First name";
+      Alcotest.(check string) "id" id "document_id1";
+      Alcotest.(check string) "firstName" firstName "A First name 1";
       Alcotest.(check string) "lastName" lastName "a Last name"
     | _ ->
       Alcotest.(check int) "list_document_test fail" 1 0
   in
   return ()
 
+let list_multiple_documents_test _ () =
+  let list_values =
+    let rec make_values i acc = if i <= 1 then acc else make_values (i - 1) (i::acc) in
+    make_values 10 []
+  in
+  let values = List.map create_value list_values in
+  let _ = List.iter print_endline values in
+  let%lwt x = Lwt_list.map_p (fun x -> D.Collection.Document.create dbname collection_name x) values in
+  let _ = List.iter (fun (y, _) -> print_endline @@ string_of_int y) x in
+  let all_is_inserted = List.fold_left (fun x (y, _) -> y = 201 && x) true x in
+  let _ = Alcotest.(check bool) "all_is_inserted" true all_is_inserted in
+  let%lwt code, headers, result = D.Collection.Document.list ~max_item_count:5 dbname collection_name in
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  let continuation = Option.get headers.x_ms_continuation in
+  let%lwt code2, headers2, result2 = D.Collection.Document.list ~max_item_count:5 ~continuation dbname collection_name in
+  let _ = Alcotest.(check int) "Status same int" 200 code2 in
+  let _ = Alcotest.(check (option string)) "Continuation" None headers2.x_ms_continuation in
+  let _ =
+    match result, result2 with
+    | Some {rid = _; documents = _; count}, Some {rid = _; documents = _; count = count2} ->
+      Alcotest.(check int) "Count field" (count + count2) 10;
+    | _ ->
+      Alcotest.(check int) "list_multiple_documents_test fail" 1 0
+  in
+  return ()
+
 let query_document_test _ () =
   let query =
     Json_converter_t.{query = "SELECT * FROM " ^ collection_name ^ " f WHERE f.firstName = @fname";
-     parameters = [{name = "@fname"; value = "A First name"}]
-    }
+                      parameters = [{name = "@fname"; value = "A First name 1"}]
+                     }
   in
   let res = D.Collection.Document.query dbname collection_name query in
   res >>= fun (code, values) ->
@@ -130,28 +172,28 @@ let query_document_test _ () =
       let {id; firstName; lastName} = List.hd docs in
       Alcotest.(check int) "Count field" count 1;
       Alcotest.(check int) "Count list" count (List.length documents);
-      Alcotest.(check string) "id" id "document_id";
-      Alcotest.(check string) "firstName" firstName "A First name";
+      Alcotest.(check string) "id" id "document_id1";
+      Alcotest.(check string) "firstName" firstName "A First name 1";
       Alcotest.(check string) "lastName" lastName "a Last name"
     | _ ->
-      Alcotest.(check int) "list_document_test fail" 1 0
+      Alcotest.(check int) "query_document_test fail" 1 0
   in
   return ()
 
 let get_document_test _ () =
-  let res = D.Collection.Document.get dbname collection_name document_id in
+  let res = D.Collection.Document.get dbname collection_name (document_id ^ "1") in
   res >>= fun (code, _) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
   return ()
 
 let replace_document_test _ () =
-  let res = D.Collection.Document.replace dbname collection_name document_id replace_value in
+  let res = D.Collection.Document.replace dbname collection_name (document_id ^ "1") (replace_value 1) in
   res >>= fun (code, _) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
   return ()
 
 let delete_document_test _ () =
-  let res = D.Collection.Document.delete dbname collection_name document_id in
+  let res = D.Collection.Document.delete dbname collection_name (document_id ^ "1") in
   res >>= fun code ->
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
@@ -168,7 +210,7 @@ let delete_database_test _ () =
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
 
-let test = [
+let cosmos_test = [
   Alcotest_lwt.test_case "create database" `Slow create_database_test;
   Alcotest_lwt.test_case "list database" `Slow list_databases;
   Alcotest_lwt.test_case "get database" `Slow get_database_test;
@@ -179,6 +221,7 @@ let test = [
 
   Alcotest_lwt.test_case "create document" `Slow create_document_test;
   Alcotest_lwt.test_case "list document" `Slow list_document_test;
+  Alcotest_lwt.test_case "list multiple documents" `Slow list_multiple_documents_test;
   Alcotest_lwt.test_case "query document" `Slow query_document_test;
   Alcotest_lwt.test_case "get document" `Slow get_document_test;
   Alcotest_lwt.test_case "replace document" `Slow replace_document_test;
@@ -187,6 +230,9 @@ let test = [
   Alcotest_lwt.test_case "delete collection" `Slow delete_collection_test;
   Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
 ]
+
+let test =
+  if should_run () then cosmos_test else []
 
 let create_database_with_partition_key_test _ () =
   let res = D.create dbname_partition in
@@ -212,13 +258,13 @@ let create_collection_with_partition_key_test _ () =
   return ()
 
 let create_document_with_partition_key_test _ () =
-  let res = D.Collection.Document.create ~partition_key:"a Last name" dbname_partition collection_name_partition create_value in
+  let res = D.Collection.Document.create ~partition_key:"a Last name" dbname_partition collection_name_partition (create_value 1) in
   res >>= fun (code, _) ->
   let _ = Alcotest.(check int) "Status same int" 201 code in
   return ()
 
 let delete_document_with_partition_key_test _ () =
-  let res = D.Collection.Document.delete ~partition_key:"a Last name" dbname_partition collection_name_partition document_id in
+  let res = D.Collection.Document.delete ~partition_key:"a Last name" dbname_partition collection_name_partition (document_id ^ "1") in
   res >>= fun code ->
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
@@ -235,7 +281,7 @@ let delete_database_with_partition_test _ () =
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
 
-let test_partition_key = [
+let test_partition_key_cosmos = [
   Alcotest_lwt.test_case "create database" `Slow create_database_with_partition_key_test;
   Alcotest_lwt.test_case "create collection with partition key" `Slow create_collection_with_partition_key_test;
   Alcotest_lwt.test_case "create document with partition key" `Slow create_document_with_partition_key_test;
@@ -243,3 +289,6 @@ let test_partition_key = [
   Alcotest_lwt.test_case "delete collection with partition key" `Slow delete_collection_with_partition_key_test;
   Alcotest_lwt.test_case "delete database" `Slow delete_database_with_partition_test;
 ]
+
+let test_partition_key =
+  if should_run () then test_partition_key_cosmos else []
