@@ -12,10 +12,21 @@ val convert_list_databases : string ->
   Json_converter_t.list_databases
 
 module Response_headers : sig
-  type t = {
-    x_ms_continuation : string option;
-  }
+  type t
+  val content_type : t -> string option
+  val date : t -> string option
+  val etag : t -> string option
+  val x_ms_activity_id : t -> string option
+  val x_ms_alt_content_path : t -> string option
   val x_ms_continuation : t -> string option
+  val x_ms_item_count : t -> string option
+  val x_ms_request_charge : t -> string option
+  val x_ms_resource_quota : t -> string option
+  val x_ms_resource_usage : t -> string option
+  val x_ms_retry_after_ms : t -> string option
+  val x_ms_schemaversion : t -> string option
+  val x_ms_serviceversion : t -> string option
+  val x_ms_session_token : t -> string option
 end
 
 module Database (Auth_key : Auth_key) : sig
@@ -94,7 +105,7 @@ module Database (Auth_key : Auth_key) : sig
         ?session_token:string ->
         ?is_partition:bool ->
         string ->
-        string -> Json_converter_t.query -> (int * list_result option) Lwt.t
+        string -> Json_converter_t.query -> (int * Response_headers.t * list_result option) Lwt.t
     end
   end
 end
