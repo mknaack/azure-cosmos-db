@@ -44,22 +44,74 @@ end
 
 module Response_headers = struct
   type t = {
+    content_type : string option;
+    date : string option;
+    etag : string option;
+    x_ms_activity_id : string option;
+    x_ms_alt_content_path : string option;
     x_ms_continuation : string option;
+    x_ms_item_count : string option;
+    x_ms_request_charge : string option;
+    x_ms_resource_quota : string option;
+    x_ms_resource_usage : string option;
+    x_ms_retry_after_ms : string option;
+    x_ms_schemaversion : string option;
+    x_ms_serviceversion : string option;
+    x_ms_session_token : string option;
   }
   let empty = {
+    content_type = None;
+    date = None;
+    etag = None;
+    x_ms_activity_id = None;
+    x_ms_alt_content_path = None;
     x_ms_continuation = None;
+    x_ms_item_count = None;
+    x_ms_request_charge = None;
+    x_ms_resource_quota = None;
+    x_ms_resource_usage = None;
+    x_ms_retry_after_ms = None;
+    x_ms_schemaversion = None;
+    x_ms_serviceversion = None;
+    x_ms_session_token = None;
   }
   let update t value_tuple =
     let key, value = value_tuple in
     match key with
-    | "x-ms-continuation" -> {x_ms_continuation = Some value}
+    | "Content-Type" -> {t with content_type = Some value}
+    | "Date" -> {t with date = Some value}
+    | "etag" -> {t with etag = Some value}
+    | "x-ms-activity-id" -> {t with x_ms_activity_id = Some value}
+    | "x-ms-alt-content-path" -> {t with x_ms_alt_content_path = Some value}
+    | "x-ms-continuation" -> {t with x_ms_continuation = Some value}
+    | "x-ms-item-count" -> {t with x_ms_item_count = Some value}
+    | "x-ms-request-charge" -> {t with x_ms_request_charge = Some value}
+    | "x-ms-resource-quota" -> {t with x_ms_resource_quota = Some value}
+    | "x-ms-resource-usage" -> {t with x_ms_resource_usage = Some value}
+    | "x-ms-retry-after-ms" -> {t with x_ms_retry_after_ms = Some value}
+    | "x-ms-schemaversion" -> {t with x_ms_schemaversion = Some value}
+    | "x-ms-serviceversion" -> {t with x_ms_serviceversion = Some value}
+    | "x-ms-session-token" -> {t with x_ms_session_token = Some value}
     | _ -> t
   let get_header resp =
     resp
     |> Cohttp_lwt_unix.Response.headers
     |> Cohttp.Header.to_list
     |> List.fold_left update empty
-  let x_ms_continuation t = t.x_ms_continuation
+   let content_type t = t.content_type
+   let date t = t.date
+   let etag t = t.etag
+   let x_ms_activity_id t = t.x_ms_activity_id
+   let x_ms_alt_content_path t = t.x_ms_alt_content_path
+   let x_ms_continuation t = t.x_ms_continuation
+   let x_ms_item_count t = t.x_ms_item_count
+   let x_ms_request_charge t = t.x_ms_request_charge
+   let x_ms_resource_quota t = t.x_ms_resource_quota
+   let x_ms_resource_usage t = t.x_ms_resource_usage
+   let x_ms_retry_after_ms t = t.x_ms_retry_after_ms
+   let x_ms_schemaversion t = t.x_ms_schemaversion
+   let x_ms_serviceversion t = t.x_ms_serviceversion
+   let x_ms_session_token t = t.x_ms_session_token
 end
 
 (* list databases: *)
@@ -182,11 +234,6 @@ module Database (Auth_key : Auth_key) = struct
       body |> Cohttp_lwt.Body.to_string >|= fun _ ->
       code
 
-  (*
-TODO:
- - Replace a collection
- - Get partition key ranges for a collection
-*)
     module Document = struct
       type indexing_directive =
         | Include
@@ -357,12 +404,13 @@ TODO:
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
         Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
         let code = get_code resp in
+        let response_header = Response_headers.get_header resp in
         body |> Cohttp_lwt.Body.to_string >|= fun body ->
         let value = match code with
           | 200 -> convert_to_list_result body
           | _ -> None
         in
-        code, value
+        code, response_header, value
     end
   end
 end

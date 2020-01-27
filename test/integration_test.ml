@@ -114,7 +114,7 @@ let list_document_test _ () =
   let res = D.Collection.Document.list dbname collection_name in
   res >>= fun (code, headers, values) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
-  let _ = Alcotest.(check (option string)) "Continuation" None headers.x_ms_continuation in
+  let _ = Alcotest.(check (option string)) "Continuation" None (Response_headers.x_ms_continuation headers) in
   let _ =
     match values with
     | Some {rid = _; documents; count} ->
@@ -141,10 +141,10 @@ let list_multiple_documents_test _ () =
   let _ = Alcotest.(check bool) "all_is_inserted" true all_is_inserted in
   let%lwt code, headers, result = D.Collection.Document.list ~max_item_count:5 dbname collection_name in
   let _ = Alcotest.(check int) "Status same int" 200 code in
-  let continuation = Option.get headers.x_ms_continuation in
+  let continuation = Option.get (Response_headers.x_ms_continuation headers) in
   let%lwt code2, headers2, result2 = D.Collection.Document.list ~max_item_count:5 ~continuation dbname collection_name in
   let _ = Alcotest.(check int) "Status same int" 200 code2 in
-  let _ = Alcotest.(check (option string)) "Continuation" None headers2.x_ms_continuation in
+  let _ = Alcotest.(check (option string)) "Continuation" None (Response_headers.x_ms_continuation headers2) in
   let _ =
     match result, result2 with
     | Some {rid = _; documents = _; count}, Some {rid = _; documents = _; count = count2} ->
@@ -161,7 +161,7 @@ let query_document_test _ () =
                      }
   in
   let res = D.Collection.Document.query dbname collection_name query in
-  res >>= fun (code, values) ->
+  res >>= fun (code, _, values) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
   let _ =
     match values with
