@@ -154,6 +154,25 @@ let list_multiple_documents_test _ () =
   in
   return ()
 
+let change_feed_test _ () =
+  (* list all documents *)
+  let%lwt code, headers, _result = D.Collection.Document.list ~a_im:true dbname collection_name in
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+
+  (* list all documents again, none returned *)
+  let if_none_match = Option.get @@ Response_headers.etag headers in
+  let%lwt code, _headers, _result = D.Collection.Document.list ~a_im:true ~if_none_match dbname collection_name in
+  let _ = Alcotest.(check int) "Status same int" 304 code in
+
+  (* insert record *)
+  let%lwt code, _ = D.Collection.Document.create dbname collection_name (create_value 20) in
+  let _ = Alcotest.(check int) "Status same int" 201 code in
+
+  (* list all documents, one returned *)
+  let%lwt code, _headers, _result = D.Collection.Document.list ~a_im:true ~if_none_match dbname collection_name in
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  return ()
+
 let query_document_test _ () =
   let query =
     Json_converter_t.{query = "SELECT * FROM " ^ collection_name ^ " f WHERE f.firstName = @fname";
@@ -220,6 +239,7 @@ let cosmos_test = [
   Alcotest_lwt.test_case "create document" `Slow create_document_test;
   Alcotest_lwt.test_case "list document" `Slow list_document_test;
   Alcotest_lwt.test_case "list multiple documents" `Slow list_multiple_documents_test;
+  Alcotest_lwt.test_case "change feed" `Slow change_feed_test;
   Alcotest_lwt.test_case "query document" `Slow query_document_test;
   Alcotest_lwt.test_case "get document" `Slow get_document_test;
   Alcotest_lwt.test_case "replace document" `Slow replace_document_test;
