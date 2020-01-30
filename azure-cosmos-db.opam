@@ -9,8 +9,8 @@ Provides an interface to the Azure Cosmos db.
 maintainer: "Morten Knaack <knaack@gmail>"
 authors: "Morten Knaack <knaack@gmail>"
 depends: [
-  "ocaml" {>= "4.06.0"}
-  "dune" {build}
+  "ocaml" {>= "4.08.0"}
+  "dune"
   "lwt"
   "lwt_ppx"
   "atdgen"
