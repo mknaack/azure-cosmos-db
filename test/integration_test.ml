@@ -54,6 +54,17 @@ let create_database_test _ () =
   in
   return ()
 
+let create_database_if_not_exists_test _ () =
+  let res = D.create_if_not_exists dbname in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match body with
+    | Some {id; _} -> Alcotest.(check string) "Create name is correct" dbname id
+    | None -> ()
+  in
+  return ()
+
 let list_databases _ () =
   let res = D.list_databases () in
   res >>= fun (code, {_rid; databases; _count = count}) ->
@@ -230,6 +241,7 @@ let delete_database_test _ () =
 
 let cosmos_test = [
   Alcotest_lwt.test_case "create database" `Slow create_database_test;
+  Alcotest_lwt.test_case "create database if not exists" `Slow create_database_if_not_exists_test;
   Alcotest_lwt.test_case "list database" `Slow list_databases;
   Alcotest_lwt.test_case "get database" `Slow get_database_test;
 
