@@ -57,9 +57,10 @@ let create_database_test _ () =
 let list_databases _ () =
   let res = D.list_databases () in
   res >>= fun (code, {_rid; databases; _count = count}) ->
+  let db = List.filter (fun (x : Json_converter_t.database)-> x.id = dbname) databases in
   let _ = Alcotest.(check int) "Status same int" 200 code in
-  let _ = Alcotest.(check int) "Count" 1 count in
-  let _ = Alcotest.(check string) "Name of databases" dbname ((List.hd databases).id) in
+  let _ = Alcotest.(check bool) "Count" true (count > 0) in
+  let _ = Alcotest.(check string) "Name of databases" dbname ((List.hd db).id) in
   return ()
 
 let get_database_test _ () =
