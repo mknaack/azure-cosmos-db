@@ -58,11 +58,13 @@ let string_of_bool_false () =
   let expected_result = "false" in
   Alcotest.(check string) "Same string" expected_result result
 
-let utility_test =[
-  "x_ms_date", `Quick, x_ms_date;
-  "auth_key_test", `Quick, auth_key_test;
-  "auth_key_test_get_list", `Quick, auth_key_test_get_list;
-  "convert_list_databases_test", `Quick, convert_list_databases_test;
-  "string_of_bool_true", `Quick, string_of_bool_true;
-  "string_of_bool_false", `Quick, string_of_bool_false;
+let utility_test =
+  let open Alcotest_lwt in
+ [
+  test_case_sync "x_ms_date" `Quick x_ms_date;
+  test_case_sync "auth_key_test" `Quick auth_key_test;
+  test_case_sync "auth_key_test_get_list" `Quick auth_key_test_get_list;
+  test_case_sync "convert_list_databases_test" `Quick convert_list_databases_test;
+  test_case_sync "string_of_bool_true" `Quick string_of_bool_true;
+  test_case_sync "string_of_bool_false" `Quick string_of_bool_false;
 ]
