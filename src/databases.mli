@@ -33,8 +33,8 @@ module Database (Auth_key : Auth_key) : sig
 
   val get_code : Cohttp.Response.t -> int
   val list_databases : unit -> (int * Json_converter_t.list_databases) Lwt.t
-  val create :
-    string -> (int * Json_converter_t.create_database_result option) Lwt.t
+  val create : string -> (int * Json_converter_t.database option) Lwt.t
+  val create_if_not_exists : string -> (int * Json_converter_t.database option) Lwt.t
   val get : string -> (int * Json_converter_t.database option) Lwt.t
   val delete : string -> int Lwt.t
   module Collection :
@@ -45,7 +45,13 @@ module Database (Auth_key : Auth_key) : sig
       ?partition_key:Json_converter_t.create_partition_key option ->
       string ->
       string ->
-      (int * Json_converter_t.create_collection_result option) Lwt.t
+      (int * Json_converter_t.collection option) Lwt.t
+    val create_if_not_exists :
+      ?indexing_policy:Json_converter_t.indexing_policy option ->
+      ?partition_key:Json_converter_t.create_partition_key option ->
+      string ->
+      string ->
+      (int * Json_converter_t.collection option) Lwt.t
     val get :
       string -> string -> (int * Json_converter_t.collection option) Lwt.t
     val delete : string -> string -> int Lwt.t
@@ -59,7 +65,7 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         string ->
-        (int * Json_converter_t.create_collection_result option) Lwt.t
+        (int * Json_converter_t.collection option) Lwt.t
       type list_result_meta_data = {
         rid: string;
         self: string;

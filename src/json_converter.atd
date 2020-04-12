@@ -2,16 +2,6 @@ type create_database = {
   id: string;
 }
 
-type create_database_result = {
-  id: string;
-  _rid: string;
-  _ts: int;
-  _self: string;
-  _etag: string;
-  _colls: string;
-  _users: string;
-}
-
 type database = {
   id: string;
   _rid: string;
@@ -62,25 +52,10 @@ type create_collection = {
   ?partition_key <json name="partitionKey">: create_partition_key option;
 }
 
-type create_collection_result = {
-  id: string;
-  indexing_policy <json name="indexingPolicy">: indexing_policy;
-  partition_key <json name="partitionKey">: partitionKey_result;
-  rid <json name="_rid">: string;
-  ts <json name="_ts">: int;
-  self <json name="_self">: string;
-  etag <json name="_etag">: string;
-  docs <json name="_docs">: string;
-  sprocs <json name="_sprocs">: string;
-  triggers <json name="_triggers">: string;
-  udfs <json name="_udfs">: string;
-  conflicts <json name="_conflicts">: string;
-}
-
 type collection = {
   id: string;
   indexing_policy <json name="indexingPolicy">: indexing_policy;
-(*  partition_key <json name="partitionKey">: partitionKey;*)
+  ?partition_key <json name="partitionKey">: partitionKey_result option;
   rid <json name="_rid">: string;
   ts <json name="_ts">: int;
   self <json name="_self">: string;

@@ -54,6 +54,17 @@ let create_database_test _ () =
   in
   return ()
 
+let create_database_if_not_exists_test _ () =
+  let res = D.create_if_not_exists dbname in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match body with
+    | Some {id; _} -> Alcotest.(check string) "Create name is correct" dbname id
+    | None -> ()
+  in
+  return ()
+
 let list_databases _ () =
   let res = D.list_databases () in
   res >>= fun (code, {_rid; databases; _count = count}) ->
@@ -86,6 +97,17 @@ let create_collection_test _ () =
   in
   return ()
 
+let create_collection_if_not_exists_test _ () =
+  let res = D.Collection.create_if_not_exists dbname collection_name in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match body with
+    | Some {id; _} -> Alcotest.(check string) "Create name is correct" collection_name id
+    | None -> ()
+  in
+  return ()
+
 let list_collection_test _ () =
   let res = D.Collection.list dbname in
   res >>= fun (code, {rid = _; document_collections = _; count}) ->
@@ -99,8 +121,20 @@ let get_collection_test _ () =
   let _ = Alcotest.(check int) "Status same int" 200 code in
   let _ =
     match body with
-    | Some Json_converter_t.{id; rid = _; self = _; etag = _; ts = _; sprocs = _; triggers = _; docs = _; udfs = _; conflicts = _; indexing_policy = _} ->
-      Alcotest.(check string) "Name of database" collection_name id
+    | Some Json_converter_t.{
+        id;
+        rid = _;
+        self = _;
+        etag = _;
+        ts = _;
+        sprocs = _;
+        triggers = _;
+        docs = _;
+        udfs = _;
+        conflicts = _;
+        indexing_policy = _;
+        partition_key = _
+      } -> Alcotest.(check string) "Name of database" collection_name id
     | None -> ()
   in
   return ()
@@ -230,10 +264,12 @@ let delete_database_test _ () =
 
 let cosmos_test = [
   Alcotest_lwt.test_case "create database" `Slow create_database_test;
+  Alcotest_lwt.test_case "create database if not exists" `Slow create_database_if_not_exists_test;
   Alcotest_lwt.test_case "list database" `Slow list_databases;
   Alcotest_lwt.test_case "get database" `Slow get_database_test;
 
   Alcotest_lwt.test_case "create collection" `Slow create_collection_test;
+  Alcotest_lwt.test_case "create collection if not exists" `Slow create_collection_if_not_exists_test;
   Alcotest_lwt.test_case "list collection" `Slow list_collection_test;
   Alcotest_lwt.test_case "get collection" `Slow get_collection_test;
 

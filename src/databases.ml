@@ -164,7 +164,7 @@ module Database (Auth_key : Auth_key) = struct
     let code = get_code resp in
     body |> Cohttp_lwt.Body.to_string >|= fun body ->
     let value = match code with
-      | 200 -> Some (Json_converter_j.create_database_result_of_string body)
+      | 200 -> Some (Json_converter_j.database_of_string body)
       | _ -> None
     in
     (code, value)
@@ -179,6 +179,12 @@ module Database (Auth_key : Auth_key) = struct
       | _ -> None
     in
     (code, value)
+
+  let create_if_not_exists name =
+    let%lwt exists = get name in
+    match exists with
+    | (404, _) -> create name
+    | result -> Lwt.return result
 
   let delete name =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) () in
@@ -208,7 +214,7 @@ module Database (Auth_key : Auth_key) = struct
       let code = get_code resp in
       body |> Cohttp_lwt.Body.to_string >|= fun body ->
       let value = match code with
-        | 200 -> Some (Json_converter_j.create_collection_result_of_string body)
+        | 200 -> Some (Json_converter_j.collection_of_string body)
         | _ -> None
       in
       (code, value)
@@ -224,6 +230,12 @@ module Database (Auth_key : Auth_key) = struct
         | _ -> None
       in
       (code, value)
+
+    let create_if_not_exists ?(indexing_policy=None) ?(partition_key=None) dbname coll_name =
+      let%lwt exists = get dbname coll_name in
+      match exists with
+      | (404, _) -> create ~indexing_policy ~partition_key dbname coll_name
+      | result -> Lwt.return result
 
     let delete name coll_name =
       let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
@@ -266,7 +278,7 @@ module Database (Auth_key : Auth_key) = struct
         let code = get_code resp in
         body |> Cohttp_lwt.Body.to_string >|= fun body ->
         let value = match code with
-          | 200 -> Some (Json_converter_j.create_collection_result_of_string body)
+          | 200 -> Some (Json_converter_j.collection_of_string body)
           | _ -> None
         in
         code, value
