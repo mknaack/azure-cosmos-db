@@ -28,7 +28,7 @@ let auth_key_test_get_list () =
 
 let convert_list_databases_test () =
   let data = "{\"_rid\":\"\",\"Databases\":[{\"id\":\"test\",\"_rid\":\"1zxpAA==\",\"_self\":\"dbs\\/1zxpAA==\\/\",\"_etag\":\"\\\"00007e01-0000-0000-0000-5b0042840000\\\"\",\"_colls\":\"colls\\/\",\"_users\":\"users\\/\",\"_ts\":1526743684}],\"_count\":1}" in
-  let result = Databases.convert_list_databases data in
+  let result = Json_converter_j.list_databases_of_string data in
   let expected_databases = ({
         id = "test";
         _rid = "1zxpAA==";

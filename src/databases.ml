@@ -114,10 +114,6 @@ module Response_headers = struct
    let x_ms_session_token t = t.x_ms_session_token
 end
 
-(* list databases: *)
-let convert_list_databases s =
-  Json_converter_j.list_databases_of_string s
-
 module Database (Auth_key : Auth_key) = struct
   module Account = Auth(Auth_key)
 

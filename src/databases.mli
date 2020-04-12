@@ -8,9 +8,6 @@ module Auth (Keys : Auth_key) : sig
   type resource = Dbs | Colls | Docs
 end
 
-val convert_list_databases : string ->
-  Json_converter_t.list_databases
-
 module Response_headers : sig
   type t
   val content_type : t -> string option
