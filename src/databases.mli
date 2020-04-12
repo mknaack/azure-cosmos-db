@@ -45,7 +45,13 @@ module Database (Auth_key : Auth_key) : sig
       ?partition_key:Json_converter_t.create_partition_key option ->
       string ->
       string ->
-      (int * Json_converter_t.create_collection_result option) Lwt.t
+      (int * Json_converter_t.collection option) Lwt.t
+    val create_if_not_exists :
+      ?indexing_policy:Json_converter_t.indexing_policy option ->
+      ?partition_key:Json_converter_t.create_partition_key option ->
+      string ->
+      string ->
+      (int * Json_converter_t.collection option) Lwt.t
     val get :
       string -> string -> (int * Json_converter_t.collection option) Lwt.t
     val delete : string -> string -> int Lwt.t
@@ -59,7 +65,7 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         string ->
-        (int * Json_converter_t.create_collection_result option) Lwt.t
+        (int * Json_converter_t.collection option) Lwt.t
       type list_result_meta_data = {
         rid: string;
         self: string;
