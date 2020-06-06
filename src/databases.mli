@@ -115,6 +115,7 @@ module Database (Auth_key : Auth_key) : sig
   module User : sig
     val create : string -> string -> (int * Json_converter_t.user option) Lwt.t
     val list : string -> (int * Json_converter_t.list_users) Lwt.t
+    val get : string -> string -> (int * Json_converter_t.user option) Lwt.t
     val delete : string -> string -> int Lwt.t
   end
 end
