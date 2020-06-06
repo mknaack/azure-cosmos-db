@@ -2,36 +2,7 @@ open Lwt
 open Cosmos
 open Databases
 open Json_j
-
-let master_key_env = "AZURE_COSMOS_KEY"
-let endpoint_env = "AZURE_COSMOS_ENDPOINT"
-
-module MyAuthKeys : Auth_key = struct
-  let getenv s =
-    match Sys.getenv_opt s with
-    | None -> ""
-    | Some x -> x
-  let master_key = getenv master_key_env
-  let endpoint = getenv endpoint_env
-end
-
-module D = Database(MyAuthKeys)
-
-let dbname = "test"
-let collection_name = "testCollection"
-let dbname_partition = "testPartition"
-let collection_name_partition = "testPartition"
-let document_id = "document_id"
-
-let should_run () =
-  Option.is_some @@ Sys.getenv_opt master_key_env
-  && Option.is_some @@ Sys.getenv_opt endpoint_env
-
-let run_cosmos_test f =
-  if should_run () then
-    f ()
-  else
-    return ()
+open Test_common
 
 let create_value counter =
   let string_counter = string_of_int counter in
