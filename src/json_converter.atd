@@ -82,3 +82,23 @@ type query = {
   query: string;
   parameters: parameter list;
 }
+
+type create_user = {
+  id: string;
+}
+
+type user = {
+  id: string;
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+  permissions <json name="_permissions">: string;
+}
+
+type list_users = {
+  rid <json name="_rid">: string;
+  users <json name="Users">: user list;
+  count <json name="_count">: int;
+}
+

@@ -5,7 +5,7 @@ end
 
 module Auth (Keys : Auth_key) : sig
   type verb = Get | Post | Put | Delete
-  type resource = Dbs | Colls | Docs
+  type resource = Dbs | Colls | Docs | Users
 end
 
 module Response_headers : sig
@@ -110,5 +110,14 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string -> Json_converter_t.query -> (int * Response_headers.t * list_result option) Lwt.t
     end
+  end
+
+  module User : sig
+    val create : string -> string -> (int * Json_converter_t.user option) Lwt.t
+    val list : string -> (int * Json_converter_t.list_users) Lwt.t
+    val get : string -> string -> (int * Json_converter_t.user option) Lwt.t
+    val replace : string -> string -> string -> (int * Json_converter_t.user option) Lwt.t
+    (* [replace dbname oldname newname] will replace the user name from oldname to newname *)
+    val delete : string -> string -> int Lwt.t
   end
 end
