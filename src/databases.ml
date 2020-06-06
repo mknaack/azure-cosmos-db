@@ -465,6 +465,24 @@ module Database (Auth_key : Auth_key) = struct
       in
       (code, value)
 
+    let replace dbname user_name new_user_name =
+      let body =
+        ({id = new_user_name}: Json_converter_j.create_user)
+        |> Json_converter_j.string_of_create_user
+        |> Cohttp_lwt.Body.of_string
+      in
+      let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
+      let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      Cohttp_lwt_unix.Client.put ~headers:(headers resource Account.Put header_path) ~body uri >>= fun (resp, body) ->
+      let code = get_code resp in
+      body |> Cohttp_lwt.Body.to_string >|= fun body ->
+      let value = match code with
+        | 200 -> Some (Json_converter_j.user_of_string body)
+        | _ -> None
+      in
+      (code, value)
+
     let delete dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in

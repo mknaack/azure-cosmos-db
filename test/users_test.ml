@@ -4,6 +4,7 @@ open Cosmos
 
 let dbname = "user_database"
 let user_name = "a_user_name"
+let replace_user_name = "replace_user_name"
 
 let create_database_test _ () =
   let res = D.create dbname in
@@ -47,8 +48,19 @@ let get_user_test _ () =
   in
   return ()
 
+let replace_user_test _ () =
+  let res = D.User.replace dbname user_name replace_user_name in
+  res >>= fun (code, body) ->
+  let _ = Alcotest.(check int) "Status same int" 200 code in
+  let _ =
+    match body with
+    | Some {id; _} -> Alcotest.(check string) "Replace name is correct" replace_user_name id
+    | None -> ()
+  in
+  return ()
+
 let delete_user_test _ () =
-  let res = D.User.delete dbname user_name in
+  let res = D.User.delete dbname replace_user_name in
   res >>= fun code ->
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
@@ -64,6 +76,7 @@ let user_tests = [
   Alcotest_lwt.test_case "create user" `Slow create_user_test;
   Alcotest_lwt.test_case "list user" `Slow list_user_test;
   Alcotest_lwt.test_case "get user" `Slow get_user_test;
+  Alcotest_lwt.test_case "replace user" `Slow replace_user_test;
   Alcotest_lwt.test_case "delete user" `Slow delete_user_test;
   Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
 ]
