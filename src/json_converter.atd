@@ -26,7 +26,7 @@ type indexes = {
 
 type included_paths = {
   path: string;
-  indexes: indexes list;
+  ~indexes <ocaml default="[]">: indexes list;
 }
 
 type indexing_policy = {
