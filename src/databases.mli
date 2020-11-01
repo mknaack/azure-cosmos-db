@@ -29,11 +29,22 @@ end
 module Database (Auth_key : Auth_key) : sig
 
   val get_code : Cohttp.Response.t -> int
+
   val list_databases : unit -> (int * Json_converter_t.list_databases) Lwt.t
+  (** [list_databases] returns a list of databases *)
+
   val create : string -> (int * Json_converter_t.database option) Lwt.t
+  (** [create database_name] creates a database in Cosmos with name database_name. *)
+
   val create_if_not_exists : string -> (int * Json_converter_t.database option) Lwt.t
+  (** [create_if_not_exists database_name] creates a database in Cosmos with name database_name if it not already exists. *)
+
   val get : string -> (int * Json_converter_t.database option) Lwt.t
+  (** [get database_name] returns info about the database *)
+
   val delete : string -> int Lwt.t
+  (** [delete database_name] deletes the database [database_name] from Cosmos *)
+
   module Collection :
   sig
     val list : string -> (int * Json_converter_t.list_collections) Lwt.t
