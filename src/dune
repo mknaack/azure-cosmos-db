@@ -1,7 +1,7 @@
 (library
   (name cosmos)
   (public_name azure-cosmos-db)
-  (libraries lwt yojson ocsigenserver netstring base64 uri atdgen cohttp cohttp-lwt-unix)
+  (libraries lwt yojson ocsigenserver netstring base64 uri atdgen cohttp cohttp-lwt-unix batteries)
   (preprocess (pps lwt_ppx))
 )
 

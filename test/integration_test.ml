@@ -138,8 +138,7 @@ let list_document_test _ () =
   return ()
 
 let create_a_lot_of_documents_test _ () =
-  (* let ids = List.range 10 `To 1010 in *)
-  let ids = List.range 10 `To 200 in
+  let ids = List.range 21 `To 100 in
   let results = Lwt_list.map_p (fun id ->
   let res = D.Collection.Document.create dbname collection_name (create_value id) in
   res
@@ -147,9 +146,10 @@ let create_a_lot_of_documents_test _ () =
   in
   results >>= fun result_list ->
   let results_length = List.filter (fun (code, _) -> code = 201) result_list |> List.length in
-  let length_429 = List.filter (fun (code, _) -> code = 201) result_list |> List.length in
+  let length_429 = List.filter (fun (code, _) -> code = 429) result_list |> List.length in
   let _ = Alcotest.(check int) "Documents that was rejected" 0 length_429 in
-  let _ = Alcotest.(check int) "All documents should be created" (List.length ids) results_length in
+  let _ = Alcotest.(check int) "All documents should be created full list" (List.length ids) (List.length result_list) in
+  let _ = Alcotest.(check int) "All documents should be created succesfully" (List.length ids) results_length in
   return_unit
   
 let list_multiple_documents_test _ () =

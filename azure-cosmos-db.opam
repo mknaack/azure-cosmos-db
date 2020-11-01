@@ -19,6 +19,7 @@ depends: [
   "uri"
   "cohttp"
   "cohttp-lwt-unix"
+  "batteries"
   "alcotest-lwt" {with-test}
 ]
 homepage: "https://bitbucket.org/knaack/azure-cosmos-db"
