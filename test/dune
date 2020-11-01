@@ -1,6 +1,6 @@
 (test
   (name test)
-  (libraries azure-cosmos-db alcotest-lwt)
+  (libraries azure-cosmos-db alcotest-lwt batteries)
   (flags (:standard -annot -short-paths))
   (preprocess (pps lwt_ppx))
 )
