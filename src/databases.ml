@@ -284,7 +284,7 @@ module Database (Auth_key : Auth_key) = struct
         in
         if code = 429 then
           let response_header = Response_headers.get_header resp in
-          let milliseconds = Response_headers.x_ms_retry_after_ms response_header |> Option.value ~default:"0" |> BatInt.of_string |> Int.to_float in
+          let milliseconds = Response_headers.x_ms_retry_after_ms response_header |> Option.value ~default:"0" |> int_of_string_opt |> Option.value ~default:0 |> Int.to_float in
           let _ = Lwt_unix.sleep (milliseconds /. 1000.) in
           post ()
         else

@@ -3,7 +3,6 @@ open Cosmos
 open Databases
 open Json_j
 open Test_common
-open Batteries
 
 let create_value counter =
   let string_counter = string_of_int counter in
@@ -137,8 +136,17 @@ let list_document_test _ () =
   in
   return ()
 
+let range i j =
+  let rec loop acc k =
+    if i = k then
+      k :: acc
+    else
+      loop (k :: acc) (pred k)
+  in
+  loop [] j
+  
 let create_a_lot_of_documents_test _ () =
-  let ids = List.range 21 `To 100 in
+  let ids = range 21 100 in
   let results = Lwt_list.map_p (fun id ->
   let res = D.Collection.Document.create dbname collection_name (create_value id) in
   res
