@@ -136,6 +136,30 @@ let list_document_test _ () =
   in
   return ()
 
+let range i j =
+  let rec loop acc k =
+    if i = k then
+      k :: acc
+    else
+      loop (k :: acc) (pred k)
+  in
+  loop [] j
+  
+let create_a_lot_of_documents_test _ () =
+  let ids = range 21 100 in
+  let results = Lwt_list.map_p (fun id ->
+  let res = D.Collection.Document.create dbname collection_name (create_value id) in
+  res
+  ) ids
+  in
+  results >>= fun result_list ->
+  let results_length = List.filter (fun (code, _) -> code = 201) result_list |> List.length in
+  let length_429 = List.filter (fun (code, _) -> code = 429) result_list |> List.length in
+  let _ = Alcotest.(check int) "Documents that was rejected" 0 length_429 in
+  let _ = Alcotest.(check int) "All documents should be created full list" (List.length ids) (List.length result_list) in
+  let _ = Alcotest.(check int) "All documents should be created succesfully" (List.length ids) results_length in
+  return_unit
+  
 let list_multiple_documents_test _ () =
   let list_values =
     let rec make_values i acc = if i <= 1 then acc else make_values (i - 1) (i::acc) in
@@ -251,6 +275,7 @@ let cosmos_test = [
   Alcotest_lwt.test_case "query document" `Slow query_document_test;
   Alcotest_lwt.test_case "get document" `Slow get_document_test;
   Alcotest_lwt.test_case "replace document" `Slow replace_document_test;
+  Alcotest_lwt.test_case "create a lot document test" `Slow create_a_lot_of_documents_test;
 
   Alcotest_lwt.test_case "delete document" `Slow delete_document_test;
   Alcotest_lwt.test_case "delete collection" `Slow delete_collection_test;

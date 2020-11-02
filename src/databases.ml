@@ -261,24 +261,36 @@ module Database (Auth_key : Auth_key) = struct
       let add_header name value header =
         Cohttp.Header.add header name value
 
-      let create ?is_upsert ?indexing_directive ?partition_key dbname coll_name content =
-        let body = Cohttp_lwt.Body.of_string content in
-        let path = ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs") in
-        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        let headers =
-          json_headers Account.Docs Account.Post ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
-          |> apply_to_header_if_some "x-ms-documentdb-is-upsert" Utility.string_of_bool is_upsert
-          |> apply_to_header_if_some "x-ms-indexing-directive" string_of_indexing_directive indexing_directive
-          |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
-        in
-        Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
+
+    let create ?is_upsert ?indexing_directive ?partition_key dbname coll_name content =
+      let body = Cohttp_lwt.Body.of_string content in
+      let path = ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs") in
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let headers =
+        json_headers Account.Docs Account.Post ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+        |> apply_to_header_if_some "x-ms-documentdb-is-upsert" Utility.string_of_bool is_upsert
+        |> apply_to_header_if_some "x-ms-indexing-directive" string_of_indexing_directive indexing_directive
+        |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
+      in
+      let rec post () =
+        let%lwt post_respons = Cohttp_lwt_unix.Client.post ~headers ~body uri in
+        let (resp, body) = post_respons in
         let code = get_code resp in
-        body |> Cohttp_lwt.Body.to_string >|= fun body ->
-        let value = match code with
-          | 200 -> Some (Json_converter_j.collection_of_string body)
-          | _ -> None
+        let%lwt value = match code with
+          | 200 ->
+            let%lwt body = Cohttp_lwt.Body.to_string body in
+            Lwt.return (Some (Json_converter_j.collection_of_string body))
+          | _ -> Lwt.return None
         in
-        code, value
+        if code = 429 then
+          let response_header = Response_headers.get_header resp in
+          let milliseconds = Response_headers.x_ms_retry_after_ms response_header |> Option.value ~default:"0" |> int_of_string_opt |> Option.value ~default:0 |> Int.to_float in
+          let _ = Lwt_unix.sleep (milliseconds /. 1000.) in
+          post ()
+        else
+          Lwt.return (code, value)
+      in
+      post ()
 
       type list_result_meta_data = {
         rid: string;
