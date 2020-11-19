@@ -227,7 +227,29 @@ let query_document_test _ () =
   in
   return ()
 
-let get_document_test _ () =
+  let query_document_count_test _ () =
+    let query =
+      Json_converter_t.{query = "SELECT VALUE COUNT(1) FROM f";
+                        parameters = []
+                       }
+    in
+    let res = D.Collection.Document.query dbname collection_name query in
+    res >>= fun (code, _, values) ->
+    let _ = Alcotest.(check int) "Status same int" 200 code in
+    let _ =
+      match values with
+      | Some {rid = _; documents; count} ->
+        Alcotest.(check int) "Count field" count 1;
+        let docs = List.map (fun (x, _) -> x) documents in
+        let first = List.hd docs in
+        let value_count = int_of_string first in
+        Alcotest.(check int) "Value count field" value_count 11
+      | _ ->
+        Alcotest.(check int) "query_document_count_test fail" 1 0
+    in
+    return ()
+  
+  let get_document_test _ () =
   let res = D.Collection.Document.get dbname collection_name (document_id ^ "1") in
   res >>= fun (code, _) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -273,6 +295,7 @@ let cosmos_test = [
   Alcotest_lwt.test_case "list multiple documents" `Slow list_multiple_documents_test;
   Alcotest_lwt.test_case "change feed" `Slow change_feed_test;
   Alcotest_lwt.test_case "query document" `Slow query_document_test;
+  Alcotest_lwt.test_case "query document count" `Slow query_document_count_test;
   Alcotest_lwt.test_case "get document" `Slow get_document_test;
   Alcotest_lwt.test_case "replace document" `Slow replace_document_test;
   Alcotest_lwt.test_case "create a lot document test" `Slow create_a_lot_of_documents_test;

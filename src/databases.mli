@@ -83,7 +83,7 @@ module Database (Auth_key : Auth_key) : sig
       }
       type list_result = {
           rid: string;
-          documents: (string * list_result_meta_data) list;
+          documents: (string * list_result_meta_data option) list;
           count: int;
         }
       val list :

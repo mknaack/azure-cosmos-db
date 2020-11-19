@@ -302,16 +302,19 @@ module Database (Auth_key : Auth_key) = struct
 
       let convert_to_list_result_meta_data json =
         let open Yojson.Basic.Util in
-        let rid = json |> member "_rid" |> to_string in
-        let self = json |> member "_self" |> to_string in
-        let etag = json |> member "_etag" |> to_string in
-        let ts = json |> member "_ts" |> to_int in
-        let attachments = json |> member "_attachments" |> to_string in
-        { rid; self; etag; ts; attachments; }
+        try
+          let rid = json |> member "_rid" |> to_string in
+          let self = json |> member "_self" |> to_string in
+          let etag = json |> member "_etag" |> to_string in
+          let ts = json |> member "_ts" |> to_int in
+          let attachments = json |> member "_attachments" |> to_string in
+              Some { rid; self; etag; ts; attachments; }
+        with
+        | Type_error _ -> None
 
       type list_result = {
         rid: string;
-        documents: (string * list_result_meta_data) list;
+        documents: (string * list_result_meta_data option) list;
         count: int;
       }
 
