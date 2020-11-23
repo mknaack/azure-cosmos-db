@@ -326,7 +326,7 @@ let create_collection_with_partition_key_test _ () =
   let _ = Alcotest.(check int) "Status same int" 201 code in
   let _ =
     match body with
-    | Some {id; _} -> Alcotest.(check string) "Create name is correct" collection_name id
+    | Some {id; _} -> Alcotest.(check string) "Create name is correct" collection_name_partition id
     | None -> ()
   in
   return ()
@@ -337,6 +337,43 @@ let create_document_with_partition_key_test _ () =
   let _ = Alcotest.(check int) "Status same int" 201 code in
   return ()
 
+  let query_document_with_partition_key_test _ () =
+    let query =
+      Json_converter_t.{query = "SELECT * FROM " ^ collection_name ^ " f WHERE f.firstName = @fname";
+                        parameters = [{name = "@fname"; value = "A First name 1"}]
+                       }
+    in
+    let res = D.Collection.Document.query ~is_partition:true dbname_partition collection_name_partition query in
+    res >>= fun (code, _, values) ->
+    let _ = Alcotest.(check int) "Status same int" 200 code in
+    let _ =
+      match values with
+      | Some {rid = _; documents; count} ->
+        let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
+        let {id; firstName; lastName} = List.hd docs in
+        Alcotest.(check int) "Count field" count 1;
+        Alcotest.(check int) "Count list" count (List.length documents);
+        Alcotest.(check string) "id" id "document_id1";
+        Alcotest.(check string) "firstName" firstName "A First name 1";
+        Alcotest.(check string) "lastName" lastName "a Last name"
+      | _ ->
+        Alcotest.(check int) "query_document_test fail" 1 0
+    in
+    return ()
+  
+    let query_document_count_with_partition_key_test _ () =
+      (* Should fail due to the partition *)
+      let query =
+        Json_converter_t.{query = "SELECT VALUE COUNT(1) FROM f";
+                          parameters = []
+                         }
+      in
+      let res = D.Collection.Document.query ~is_partition:true dbname_partition collection_name_partition query in
+      res >>= fun (code, _, _values) ->
+        let _ = Alcotest.(check int) "Status same int" 400 code
+      in
+      return ()
+  
 let delete_document_with_partition_key_test _ () =
   let res = D.Collection.Document.delete ~partition_key:"a Last name" dbname_partition collection_name_partition (document_id ^ "1") in
   res >>= fun code ->
@@ -359,6 +396,8 @@ let test_partition_key_cosmos = [
   Alcotest_lwt.test_case "create database" `Slow create_database_with_partition_key_test;
   Alcotest_lwt.test_case "create collection with partition key" `Slow create_collection_with_partition_key_test;
   Alcotest_lwt.test_case "create document with partition key" `Slow create_document_with_partition_key_test;
+  Alcotest_lwt.test_case "query document with partition key" `Slow query_document_with_partition_key_test;
+  Alcotest_lwt.test_case "query count document with partition key" `Slow query_document_count_with_partition_key_test;
   Alcotest_lwt.test_case "delete document with partition key" `Slow delete_document_with_partition_key_test;
   Alcotest_lwt.test_case "delete collection with partition key" `Slow delete_collection_with_partition_key_test;
   Alcotest_lwt.test_case "delete database" `Slow delete_database_with_partition_test;
