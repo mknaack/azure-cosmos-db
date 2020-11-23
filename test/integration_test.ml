@@ -361,7 +361,7 @@ let create_document_with_partition_key_test _ () =
     in
     return ()
   
-    let query_document_count_with_partition_key_test _ () =
+    let query_document_count_without_partition_key_test _ () =
       (* Should fail due to the partition *)
       let query =
         Json_converter_t.{query = "SELECT VALUE COUNT(1) FROM f";
@@ -373,6 +373,28 @@ let create_document_with_partition_key_test _ () =
         let _ = Alcotest.(check int) "Status same int" 400 code
       in
       return ()
+
+      let query_document_count_with_partition_key_test _ () =
+        let query =
+          Json_converter_t.{query = "SELECT VALUE COUNT(1) FROM f";
+                            parameters = []
+                           }
+        in
+        let res = D.Collection.Document.query ~partition_key:"a Last name" ~is_partition:true dbname_partition collection_name_partition query in
+        res >>= fun (code, _, values) ->
+          let _ = Alcotest.(check int) "Status same int" 200 code in
+          let _ =
+            match values with
+            | Some {rid = _; documents; count} ->
+              Alcotest.(check int) "Count field" count 1;
+              let docs = List.map (fun (x, _) -> x) documents in
+              let first = List.hd docs in
+              let value_count = int_of_string first in
+              Alcotest.(check int) "Value count field" value_count 1
+            | _ ->
+              Alcotest.(check int) "query_document_count_test fail" 1 0
+        in
+        return ()
   
 let delete_document_with_partition_key_test _ () =
   let res = D.Collection.Document.delete ~partition_key:"a Last name" dbname_partition collection_name_partition (document_id ^ "1") in
@@ -397,6 +419,7 @@ let test_partition_key_cosmos = [
   Alcotest_lwt.test_case "create collection with partition key" `Slow create_collection_with_partition_key_test;
   Alcotest_lwt.test_case "create document with partition key" `Slow create_document_with_partition_key_test;
   Alcotest_lwt.test_case "query document with partition key" `Slow query_document_with_partition_key_test;
+  Alcotest_lwt.test_case "query count document without partition key" `Slow query_document_count_without_partition_key_test;
   Alcotest_lwt.test_case "query count document with partition key" `Slow query_document_count_with_partition_key_test;
   Alcotest_lwt.test_case "delete document with partition key" `Slow delete_document_with_partition_key_test;
   Alcotest_lwt.test_case "delete collection with partition key" `Slow delete_collection_with_partition_key_test;

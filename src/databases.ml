@@ -408,7 +408,7 @@ module Database (Auth_key : Auth_key) = struct
         body |> Cohttp_lwt.Body.to_string >|= fun _ ->
         code
 
-      let query ?max_item_count ?continuation ?consistency_level ?session_token ?is_partition dbname coll_name query =
+      let query ?max_item_count ?continuation ?consistency_level ?session_token ?is_partition ?partition_key dbname coll_name query =
         let headers s =
           let h = headers Account.Docs Account.Post s in
           Cohttp.Header.add h "x-ms-documentdb-isquery" (Utility.string_of_bool true)
@@ -417,6 +417,7 @@ module Database (Auth_key : Auth_key) = struct
           |> apply_to_header_if_some "x-ms-consistency-level" (fun x -> x) consistency_level
           |> apply_to_header_if_some "x-ms-session-token" (fun x -> x) session_token
           |> apply_to_header_if_some "x-ms-documentdb-query-enablecrosspartition" Utility.string_of_bool is_partition
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
           |> add_header "content-type" "application/query+json"
         in
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in

@@ -118,6 +118,7 @@ module Database (Auth_key : Auth_key) : sig
         ?consistency_level:string ->
         ?session_token:string ->
         ?is_partition:bool ->
+        ?partition_key:string ->
         string ->
         string -> Json_converter_t.query -> (int * Response_headers.t * list_result option) Lwt.t
     end
