@@ -47,22 +47,31 @@ module Database (Auth_key : Auth_key) : sig
 
   module Collection :
   sig
-    val list : string -> (int * Json_converter_t.list_collections) Lwt.t
+    val list : ?timeout:float -> string -> (int * Json_converter_t.list_collections, string) result Lwt.t
     val create :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
       ?partition_key:Json_converter_t.create_partition_key option ->
+      ?timeout:float ->
       string ->
       string ->
-      (int * Json_converter_t.collection option) Lwt.t
+      (int * Json_converter_t.collection option, string) result Lwt.t
     val create_if_not_exists :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
       ?partition_key:Json_converter_t.create_partition_key option ->
+      ?timeout:float ->
       string ->
       string ->
-      (int * Json_converter_t.collection option) Lwt.t
+      (int * Json_converter_t.collection option, string) result Lwt.t
     val get :
-      string -> string -> (int * Json_converter_t.collection option) Lwt.t
-    val delete : string -> string -> int Lwt.t
+      ?timeout:float ->
+      string ->
+      string ->
+      (int * Json_converter_t.collection option, string) result Lwt.t
+    val delete :
+      ?timeout:float ->
+      string ->
+      string ->
+      (int, string) result Lwt.t
     module Document :
     sig
       type indexing_directive = Include | Exclude
