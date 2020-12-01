@@ -30,19 +30,19 @@ module Database (Auth_key : Auth_key) : sig
 
   val get_code : Cohttp.Response.t -> int
 
-  val list_databases : unit -> (int * Json_converter_t.list_databases) Lwt.t
+  val list_databases : ?timeout:float -> unit -> (int * Json_converter_t.list_databases, string) result Lwt.t
   (** [list_databases] returns a list of databases *)
 
-  val create : string -> (int * Json_converter_t.database option) Lwt.t
+  val create : ?timeout:float -> string -> (int * Json_converter_t.database option, string) result Lwt.t
   (** [create database_name] creates a database in Cosmos with name database_name. *)
 
-  val create_if_not_exists : string -> (int * Json_converter_t.database option) Lwt.t
+  val create_if_not_exists : ?timeout:float -> string -> (int * Json_converter_t.database option, string) result Lwt.t
   (** [create_if_not_exists database_name] creates a database in Cosmos with name database_name if it not already exists. *)
 
-  val get : string -> (int * Json_converter_t.database option) Lwt.t
+  val get : ?timeout:float -> string -> (int * Json_converter_t.database option, string) result Lwt.t
   (** [get database_name] returns info about the database *)
 
-  val delete : string -> int Lwt.t
+  val delete : ?timeout:float -> string -> (int, string) result Lwt.t
   (** [delete database_name] deletes the database [database_name] from Cosmos *)
 
   module Collection :
@@ -70,10 +70,11 @@ module Database (Auth_key : Auth_key) : sig
         ?is_upsert:bool ->
         ?indexing_directive:indexing_directive ->
         ?partition_key:string ->
+        ?timeout: float ->
         string ->
         string ->
         string ->
-        (int * Json_converter_t.collection option) Lwt.t
+        (int * Json_converter_t.collection option, string) result Lwt.t
       type list_result_meta_data = {
         rid: string;
         self: string;
@@ -94,7 +95,10 @@ module Database (Auth_key : Auth_key) : sig
         ?a_im:bool ->
         ?if_none_match:string ->
         ?partition_key_range_id:string ->
-        string -> string -> (int * Response_headers.t * list_result option) Lwt.t
+        ?timeout:float ->
+        string ->
+        string ->
+        (int * Response_headers.t * list_result option, string) result Lwt.t
       type consistency_level = Strong | Bounded | Session | Eventual
       val string_of_consistency_level : consistency_level -> string
       val get :
