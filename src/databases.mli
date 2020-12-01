@@ -115,16 +115,22 @@ module Database (Auth_key : Auth_key) : sig
         ?partition_key:string ->
         ?consistency_level:consistency_level ->
         ?session_token:string ->
-        string -> string -> string -> (int * string) Lwt.t
+        ?timeout:float ->
+        string -> string -> string -> (int * string, string) result Lwt.t
       val replace :
         ?indexing_directive:indexing_directive ->
         ?partition_key:string ->
         ?if_match:string ->
+        ?timeout:float ->
         string ->
-        string -> string -> string -> (int * Cohttp_lwt.Body.t) Lwt.t
+        string ->
+        string ->
+        string ->
+        (int * Cohttp_lwt.Body.t, string) result Lwt.t
       val delete :
-         ?partition_key:string ->
-         string -> string -> string -> int Lwt.t
+        ?partition_key:string ->
+        ?timeout:float ->
+        string -> string -> string -> (int, string) result Lwt.t
       val query :
         ?max_item_count:int ->
         ?continuation:string ->
@@ -132,8 +138,9 @@ module Database (Auth_key : Auth_key) : sig
         ?session_token:string ->
         ?is_partition:bool ->
         ?partition_key:string ->
+        ?timeout:float ->
         string ->
-        string -> Json_converter_t.query -> (int * Response_headers.t * list_result option) Lwt.t
+        string -> Json_converter_t.query -> (int * Response_headers.t * list_result option, string) result Lwt.t
     end
   end
 

@@ -405,7 +405,7 @@ module Database (Auth_key : Auth_key) = struct
         | Session -> "Session"
         | Eventual -> "Eventual"
 
-      let get ?if_none_match ?partition_key ?consistency_level ?session_token dbname coll_name doc_id =
+      let get ?if_none_match ?partition_key ?consistency_level ?session_token ?timeout dbname coll_name doc_id =
         let headers =
           json_headers Account.Docs Account.Get ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
           |> apply_to_header_if_some "If-None-Match" (fun x -> x) if_none_match
@@ -415,12 +415,15 @@ module Database (Auth_key : Auth_key) = struct
         in
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        Cohttp_lwt_unix.Client.get ~headers uri >>= fun (resp, body) ->
-        let code = get_code resp in
-        body |> Cohttp_lwt.Body.to_string >|= fun body ->
-        code, body
+        let response = Cohttp_lwt_unix.Client.get ~headers uri >>= Lwt.return_some |> wrap_timeout timeout in
+        match%lwt response with
+        | Some (resp, body) ->
+          let code = get_code resp in
+          body |> Cohttp_lwt.Body.to_string >|= fun body ->
+          Result.ok (code, body)
+        | None -> timeout_error
 
-      let replace ?indexing_directive ?partition_key ?if_match dbname coll_name doc_id content =
+      let replace ?indexing_directive ?partition_key ?if_match ?timeout dbname coll_name doc_id content =
         let body = Cohttp_lwt.Body.of_string content in
         let headers =
           json_headers Account.Docs Account.Put ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
@@ -430,23 +433,29 @@ module Database (Auth_key : Auth_key) = struct
         in
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        Cohttp_lwt_unix.Client.put ~headers ~body uri >>= fun (resp, body) ->
-        let code = get_code resp in
-        body |> Cohttp_lwt.Body.to_string >|= fun _ ->
-        code, body
+        let response = Cohttp_lwt_unix.Client.put ~headers ~body uri >>= Lwt.return_some |> wrap_timeout timeout in
+        match%lwt response with
+        | Some (resp, body) ->
+          let code = get_code resp in
+          body |> Cohttp_lwt.Body.to_string >|= fun _ ->
+          Result.ok (code, body)
+        | None -> timeout_error
 
-      let delete ?partition_key dbname coll_name doc_id =
+      let delete ?partition_key ?timeout dbname coll_name doc_id =
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id in
         let headers = headers Account.Docs Account.Delete ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
                       |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
         in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        Cohttp_lwt_unix.Client.delete ~headers uri >>= fun (resp, body) ->
-        let code = get_code resp in
-        body |> Cohttp_lwt.Body.to_string >|= fun _ ->
-        code
+        let response = Cohttp_lwt_unix.Client.delete ~headers uri >>= Lwt.return_some |> wrap_timeout timeout in
+        match%lwt response with
+        | Some (resp, body) ->
+          let code = get_code resp in
+          body |> Cohttp_lwt.Body.to_string >|= fun _ ->
+          Result.ok code
+        | None -> timeout_error
 
-      let query ?max_item_count ?continuation ?consistency_level ?session_token ?is_partition ?partition_key dbname coll_name query =
+      let query ?max_item_count ?continuation ?consistency_level ?session_token ?is_partition ?partition_key ?timeout dbname coll_name query =
         let headers s =
           let h = headers Account.Docs Account.Post s in
           Cohttp.Header.add h "x-ms-documentdb-isquery" (Utility.string_of_bool true)
@@ -465,15 +474,18 @@ module Database (Auth_key : Auth_key) = struct
           |> Cohttp_lwt.Body.of_string
         in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
-        let code = get_code resp in
-        let response_header = Response_headers.get_header resp in
-        body |> Cohttp_lwt.Body.to_string >|= fun body ->
-        let value = match code with
-          | 200 -> convert_to_list_result body
-          | _ -> None
-        in
-        code, response_header, value
+        let response = Cohttp_lwt_unix.Client.post ~headers ~body uri >>= Lwt.return_some |> wrap_timeout timeout in
+        match%lwt response with
+        | Some (resp, body) ->
+          let code = get_code resp in
+          let response_header = Response_headers.get_header resp in
+          body |> Cohttp_lwt.Body.to_string >|= fun body ->
+          let value = match code with
+            | 200 -> convert_to_list_result body
+            | _ -> None
+          in
+          Result.ok (code, response_header, value)
+        | None -> timeout_error
     end
   end
 
