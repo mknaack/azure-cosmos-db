@@ -43,7 +43,11 @@ module Auth (Keys : Auth_key) : Account = struct
   let endpoint = Keys.endpoint
 end
 
-let timeout_error = Lwt.return_error "Timeout"
+type cosmos_error =
+  | Timeout_error
+  | Azure_error of int
+
+let timeout_error = Lwt.return_error Timeout_error
 
 let wrap_timeout timeout command =
   match timeout with
@@ -108,20 +112,20 @@ module Response_headers = struct
     |> Cohttp_lwt_unix.Response.headers
     |> Cohttp.Header.to_list
     |> List.fold_left update empty
-   let content_type t = t.content_type
-   let date t = t.date
-   let etag t = t.etag
-   let x_ms_activity_id t = t.x_ms_activity_id
-   let x_ms_alt_content_path t = t.x_ms_alt_content_path
-   let x_ms_continuation t = t.x_ms_continuation
-   let x_ms_item_count t = t.x_ms_item_count
-   let x_ms_request_charge t = t.x_ms_request_charge
-   let x_ms_resource_quota t = t.x_ms_resource_quota
-   let x_ms_resource_usage t = t.x_ms_resource_usage
-   let x_ms_retry_after_ms t = t.x_ms_retry_after_ms
-   let x_ms_schemaversion t = t.x_ms_schemaversion
-   let x_ms_serviceversion t = t.x_ms_serviceversion
-   let x_ms_session_token t = t.x_ms_session_token
+  let content_type t = t.content_type
+  let date t = t.date
+  let etag t = t.etag
+  let x_ms_activity_id t = t.x_ms_activity_id
+  let x_ms_alt_content_path t = t.x_ms_alt_content_path
+  let x_ms_continuation t = t.x_ms_continuation
+  let x_ms_item_count t = t.x_ms_item_count
+  let x_ms_request_charge t = t.x_ms_request_charge
+  let x_ms_resource_quota t = t.x_ms_resource_quota
+  let x_ms_resource_usage t = t.x_ms_resource_usage
+  let x_ms_retry_after_ms t = t.x_ms_retry_after_ms
+  let x_ms_schemaversion t = t.x_ms_schemaversion
+  let x_ms_serviceversion t = t.x_ms_serviceversion
+  let x_ms_session_token t = t.x_ms_session_token
 end
 
 module Database (Auth_key : Auth_key) = struct
@@ -147,6 +151,10 @@ module Database (Auth_key : Auth_key) = struct
 
   let get_code resp = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status
 
+  let with_200_do f = function
+    | 200 -> Result.ok (200, f ())
+    | code -> Result.error (Azure_error code)
+
   let list_databases ?timeout () =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
     let response = Cohttp_lwt_unix.Client.get ~headers:(headers Account.Dbs Account.Get "") uri  >>= Lwt.return_some |> wrap_timeout timeout in
@@ -168,29 +176,23 @@ module Database (Auth_key : Auth_key) = struct
     let headers = (json_headers Account.Dbs Account.Post "") in
     let response = Cohttp_lwt_unix.Client.post ~headers ~body uri >>= Lwt.return_some |> wrap_timeout timeout in
     match%lwt response with
+    | None -> timeout_error
     | Some (resp, body) ->
       let code = get_code resp in
       body |> Cohttp_lwt.Body.to_string >|= fun body ->
-      let value = match code with
-        | 200 -> Some (Json_converter_j.database_of_string body)
-        | _ -> None
-      in
-      Result.ok (code, value)
-    | None -> timeout_error
+      let result () = Some (Json_converter_j.database_of_string body) in
+      with_200_do result code
 
   let get ?timeout name =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) () in
     let response = Cohttp_lwt_unix.Client.get ~headers:(headers Account.Dbs Account.Get ("dbs/" ^ name)) uri >>= Lwt.return_some |> wrap_timeout timeout in
     match%lwt response with
+    | None -> timeout_error
     | Some (resp, body) ->
       let code = get_code resp in
       body |> Cohttp_lwt.Body.to_string >|= fun body ->
-      let value = match code with
-        | 200 -> Some (Json_converter_j.database_of_string body)
-        | _ -> None
-      in
-      Result.ok (code, value)
-    | None -> timeout_error
+      let result () = Some (Json_converter_j.database_of_string body) in
+      with_200_do result code
 
   let create_if_not_exists ?timeout name =
     let%lwt exists = get ?timeout name in
@@ -293,39 +295,39 @@ module Database (Auth_key : Auth_key) = struct
       let add_header name value header =
         Cohttp.Header.add header name value
 
-    let create ?is_upsert ?indexing_directive ?partition_key ?timeout dbname coll_name content =
-      let body = Cohttp_lwt.Body.of_string content in
-      let path = ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs") in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let headers =
-        json_headers Account.Docs Account.Post ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
-        |> apply_to_header_if_some "x-ms-documentdb-is-upsert" Utility.string_of_bool is_upsert
-        |> apply_to_header_if_some "x-ms-indexing-directive" string_of_indexing_directive indexing_directive
-        |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
-      in
-      let rec post () =
-        let post_respons = Cohttp_lwt_unix.Client.post ~headers ~body uri >>= Lwt.return_some |> wrap_timeout timeout in
-        match%lwt post_respons with
-        | Some (resp, body) ->
-          begin
-            let code = get_code resp in
-            let%lwt value = match code with
-              | 200 ->
-                let%lwt body = Cohttp_lwt.Body.to_string body in
-                Lwt.return (Some (Json_converter_j.collection_of_string body))
-              | _ -> Lwt.return None
-            in
-            if code = 429 then
-              let response_header = Response_headers.get_header resp in
-              let milliseconds = Response_headers.x_ms_retry_after_ms response_header |> Option.value ~default:"0" |> int_of_string_opt |> Option.value ~default:0 |> Int.to_float in
-              let _ = Lwt_unix.sleep (milliseconds /. 1000.) in
-              post ()
-            else
-              Lwt.return (Result.ok (code, value))
-          end
+      let create ?is_upsert ?indexing_directive ?partition_key ?timeout dbname coll_name content =
+        let body = Cohttp_lwt.Body.of_string content in
+        let path = ("/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs") in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let headers =
+          json_headers Account.Docs Account.Post ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+          |> apply_to_header_if_some "x-ms-documentdb-is-upsert" Utility.string_of_bool is_upsert
+          |> apply_to_header_if_some "x-ms-indexing-directive" string_of_indexing_directive indexing_directive
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkey" string_of_partition_key partition_key
+        in
+        let rec post () =
+          let post_respons = Cohttp_lwt_unix.Client.post ~headers ~body uri >>= Lwt.return_some |> wrap_timeout timeout in
+          match%lwt post_respons with
+          | Some (resp, body) ->
+            begin
+              let code = get_code resp in
+              let%lwt value = match code with
+                | 200 ->
+                  let%lwt body = Cohttp_lwt.Body.to_string body in
+                  Lwt.return (Some (Json_converter_j.collection_of_string body))
+                | _ -> Lwt.return None
+              in
+              if code = 429 then
+                let response_header = Response_headers.get_header resp in
+                let milliseconds = Response_headers.x_ms_retry_after_ms response_header |> Option.value ~default:"0" |> int_of_string_opt |> Option.value ~default:0 |> Int.to_float in
+                let _ = Lwt_unix.sleep (milliseconds /. 1000.) in
+                post ()
+              else
+                Lwt.return (Result.ok (code, value))
+            end
           | None -> timeout_error
-      in
-      post ()
+        in
+        post ()
 
       type list_result_meta_data = {
         rid: string;
@@ -343,7 +345,7 @@ module Database (Auth_key : Auth_key) = struct
           let etag = json |> member "_etag" |> to_string in
           let ts = json |> member "_ts" |> to_int in
           let attachments = json |> member "_attachments" |> to_string in
-              Some { rid; self; etag; ts; attachments; }
+          Some { rid; self; etag; ts; attachments; }
         with
         | Type_error _ -> None
 
@@ -363,7 +365,7 @@ module Database (Auth_key : Auth_key) = struct
         Some { rid; documents = string_docs; count }
 
       let list ?max_item_count ?continuation ?consistency_level ?session_token ?a_im ?if_none_match ?partition_key_range_id ?timeout dbname coll_name =
-          let apply_a_im_to_header_if_some name values headers = match values with
+        let apply_a_im_to_header_if_some name values headers = match values with
           | None -> headers
           | Some false -> headers
           | Some true -> Cohttp.Header.add headers name "Incremental feed"
