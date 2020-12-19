@@ -159,6 +159,8 @@ module Database (Auth_key : Auth_key) = struct
 
   let with_200_do = result_or_error_with_result 200
 
+  let with_201_do = result_or_error_with_result 201
+
   let with_204_do = result_or_error 204
 
   let list_databases ?timeout () =
@@ -187,7 +189,7 @@ module Database (Auth_key : Auth_key) = struct
       let code = get_code resp in
       body |> Cohttp_lwt.Body.to_string >|= fun body ->
       let result () = Some (Json_converter_j.database_of_string body) in
-      with_200_do result code
+      with_201_do result code
 
   let get ?timeout name =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) () in
@@ -243,7 +245,7 @@ module Database (Auth_key : Auth_key) = struct
         let code = get_code resp in
         body |> Cohttp_lwt.Body.to_string >|= fun body ->
         let value () = Some (Json_converter_j.collection_of_string body) in
-        result_or_error_with_result 200 value code
+        result_or_error_with_result 201 value code
 
     let get ?timeout name coll_name =
       let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in

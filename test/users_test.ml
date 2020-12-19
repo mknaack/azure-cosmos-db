@@ -8,14 +8,16 @@ let replace_user_name = "replace_user_name"
 
 let create_database_test _ () =
   let res = D.create dbname in
-  res >>= fun (code, body) ->
-  let _ = Alcotest.(check int) "Status same int" 201 code in
-  let _ =
-    match body with
-    | Some {id; _} -> Alcotest.(check string) "Create name is correct" dbname id
-    | None -> ()
-  in
-  return ()
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, body) ->
+    let _ = Alcotest.(check int) "Status same int" 201 code in
+    let _ =
+      match body with
+      | Some {id; _} -> Alcotest.(check string) "Create name is correct" dbname id
+      | None -> ()
+    in
+    return ()
 
 let create_user_test _ () =
   let res = D.User.create dbname user_name in
@@ -67,9 +69,11 @@ let delete_user_test _ () =
 
 let delete_database_test _ () =
   let res = D.delete dbname in
-  res >>= fun code ->
-  let _ = Alcotest.(check int) "Status same int" 204 code in
-  return ()
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok code ->
+    let _ = Alcotest.(check int) "Status same int" 204 code in
+    return ()
 
 let user_tests = [
   Alcotest_lwt.test_case "create database" `Slow create_database_test;
