@@ -149,11 +149,11 @@ module Database (Auth_key : Auth_key) : sig
   end
 
   module User : sig
-    val create : string -> string -> (int * Json_converter_t.user option) Lwt.t
-    val list : string -> (int * Json_converter_t.list_users) Lwt.t
-    val get : string -> string -> (int * Json_converter_t.user option) Lwt.t
-    val replace : string -> string -> string -> (int * Json_converter_t.user option) Lwt.t
+    val create : ?timeout:float -> string -> string -> (int * Json_converter_t.user, cosmos_error) result Lwt.t
+    val list : ?timeout:float -> string -> (int * Json_converter_t.list_users, cosmos_error) result Lwt.t
+    val get : ?timeout:float -> string -> string -> (int * Json_converter_t.user, cosmos_error) result Lwt.t
+    val replace : ?timeout:float -> string -> string -> string -> (int * Json_converter_t.user, cosmos_error) result Lwt.t
     (* [replace dbname oldname newname] will replace the user name from oldname to newname *)
-    val delete : string -> string -> int Lwt.t
+    val delete : ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
   end
 end

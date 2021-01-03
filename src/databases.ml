@@ -496,7 +496,7 @@ module Database (Auth_key : Auth_key) = struct
     let resource = Account.Users
     let headers = headers resource
 
-    let create dbname user_name =
+    let create ?timeout dbname user_name =
       let body =
         ({id = user_name}: Json_converter_j.create_user)
         |> Json_converter_j.string_of_create_user
@@ -504,39 +504,42 @@ module Database (Auth_key : Auth_key) = struct
       in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:("/dbs/" ^ dbname ^ "/users") () in
       let headers = (json_headers resource Account.Post ("dbs/" ^ dbname)) in
-      Cohttp_lwt_unix.Client.post ~headers ~body uri >>= fun (resp, body) ->
-      let code = get_code resp in
-      body |> Cohttp_lwt.Body.to_string >|= fun body ->
-      let value = match code with
-        | 201 -> Some (Json_converter_j.user_of_string body)
-        | _ -> None
-      in
-      (code, value)
+      let response = Cohttp_lwt_unix.Client.post ~headers ~body uri >>= Lwt.return_some |> wrap_timeout timeout in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+        let code = get_code resp in
+        body |> Cohttp_lwt.Body.to_string >|= fun body ->
+        let value () = Json_converter_j.user_of_string body in
+        result_or_error_with_result 201 value code
 
-    let list dbname =
+    let list ?timeout dbname =
       let path = "/dbs/" ^ dbname ^ "/users" in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
       let header_path = "dbs/" ^ dbname in
-      Cohttp_lwt_unix.Client.get ~headers:(headers Account.Get header_path) uri >>= fun (resp, body) ->
-      let code = get_code resp in
-      body |> Cohttp_lwt.Body.to_string >|= fun body ->
-      let value = Json_converter_j.list_users_of_string body in
-      (code, value)
+      let response = Cohttp_lwt_unix.Client.get ~headers:(headers Account.Get header_path) uri >>= Lwt.return_some |> wrap_timeout timeout in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+        let code = get_code resp in
+        body |> Cohttp_lwt.Body.to_string >|= fun body ->
+        let value () = Json_converter_j.list_users_of_string body in
+        result_or_error_with_result 200 value code
 
-    let get dbname user_name =
+    let get ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      Cohttp_lwt_unix.Client.get ~headers:(headers Account.Get header_path) uri >>= fun (resp, body) ->
-      let code = get_code resp in
-      body |> Cohttp_lwt.Body.to_string >|= fun body ->
-      let value = match code with
-        | 200 -> Some (Json_converter_j.user_of_string body)
-        | _ -> None
-      in
-      (code, value)
+      let response = Cohttp_lwt_unix.Client.get ~headers:(headers Account.Get header_path) uri >>= Lwt.return_some |> wrap_timeout timeout in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+        let code = get_code resp in
+        body |> Cohttp_lwt.Body.to_string >|= fun body ->
+        let value () = Json_converter_j.user_of_string body in
+        result_or_error_with_result 200 value code
 
-    let replace dbname user_name new_user_name =
+    let replace ?timeout dbname user_name new_user_name =
       let body =
         ({id = new_user_name}: Json_converter_j.create_user)
         |> Json_converter_j.string_of_create_user
@@ -545,22 +548,25 @@ module Database (Auth_key : Auth_key) = struct
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      Cohttp_lwt_unix.Client.put ~headers:(headers Account.Put header_path) ~body uri >>= fun (resp, body) ->
-      let code = get_code resp in
-      body |> Cohttp_lwt.Body.to_string >|= fun body ->
-      let value = match code with
-        | 200 -> Some (Json_converter_j.user_of_string body)
-        | _ -> None
-      in
-      (code, value)
+      let response = Cohttp_lwt_unix.Client.put ~headers:(headers Account.Put header_path) ~body uri >>= Lwt.return_some |> wrap_timeout timeout in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+        let code = get_code resp in
+        body |> Cohttp_lwt.Body.to_string >|= fun body ->
+        let value () = Json_converter_j.user_of_string body in
+        result_or_error_with_result 200 value code
 
-    let delete dbname user_name =
+
+    let delete ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      Cohttp_lwt_unix.Client.delete ~headers:(headers Account.Delete header_path) uri >>= fun (resp, body) ->
-      let code = get_code resp in
-      body |> Cohttp_lwt.Body.to_string >|= fun _ ->
-      code
+      let response = Cohttp_lwt_unix.Client.delete ~headers:(headers Account.Delete header_path) uri >>= Lwt.return_some |> wrap_timeout timeout in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, _body) ->
+        let code = get_code resp in
+        Lwt.return (result_or_error 204 code)
   end
 end

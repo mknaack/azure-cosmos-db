@@ -21,18 +21,18 @@ let create_database_test _ () =
 
 let create_user_test _ () =
   let res = D.User.create dbname user_name in
-  res >>= fun (code, body) ->
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, {id; _}) ->
   let _ = Alcotest.(check int) "Status same int" 201 code in
-  let _ =
-    match body with
-    | Some {id; _} -> Alcotest.(check string) "Create name is correct" user_name id
-    | None -> ()
-  in
+  let _ = Alcotest.(check string) "Create name is correct" user_name id in
   return ()
 
 let list_user_test _ () =
   let res = D.User.list dbname in
-  res >>= fun (code, {rid = _; users; count}) ->
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, {rid = _; users; count}) ->
   let db = List.filter (fun (x : Json_converter_t.user)-> x.id = user_name) users in
   let _ = Alcotest.(check int) "Status same int" 200 code in
   let _ = Alcotest.(check bool) "Count" true (count > 0) in
@@ -41,29 +41,27 @@ let list_user_test _ () =
 
 let get_user_test _ () =
   let res = D.User.get dbname user_name in
-  res >>= fun (code, body) ->
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, {id; _}) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
-  let _ =
-    match body with
-    | Some {id; _} -> Alcotest.(check string) "Create name is correct" user_name id
-    | None -> ()
-  in
+  let _ = Alcotest.(check string) "Create name is correct" user_name id in
   return ()
 
 let replace_user_test _ () =
   let res = D.User.replace dbname user_name replace_user_name in
-  res >>= fun (code, body) ->
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, {id; _}) ->
   let _ = Alcotest.(check int) "Status same int" 200 code in
-  let _ =
-    match body with
-    | Some {id; _} -> Alcotest.(check string) "Replace name is correct" replace_user_name id
-    | None -> ()
-  in
+  let _ = Alcotest.(check string) "Replace name is correct" replace_user_name id in
   return ()
 
 let delete_user_test _ () =
   let res = D.User.delete dbname replace_user_name in
-  res >>= fun code ->
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok code ->
   let _ = Alcotest.(check int) "Status same int" 204 code in
   return ()
 
