@@ -111,7 +111,7 @@ module Database (Auth_key : Auth_key) : sig
         ?timeout:float ->
         string ->
         string ->
-        (int * Response_headers.t * list_result option, cosmos_error) result Lwt.t
+        (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
       type consistency_level = Strong | Bounded | Session | Eventual
       val string_of_consistency_level : consistency_level -> string
       val get :
@@ -144,7 +144,7 @@ module Database (Auth_key : Auth_key) : sig
         ?partition_key:string ->
         ?timeout:float ->
         string ->
-        string -> Json_converter_t.query -> (int * Response_headers.t * list_result option, cosmos_error) result Lwt.t
+        string -> Json_converter_t.query -> (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
     end
   end
 

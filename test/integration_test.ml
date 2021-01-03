@@ -151,21 +151,17 @@ let list_document_test _ () =
   let res = D.Collection.Document.list dbname collection_name in
   res >>= function
   | Result.Error _ -> Alcotest.fail "Should not return error"
-  | Result.Ok (code, headers, values) ->
+  | Result.Ok (code, headers, {rid = _; documents; count}) ->
     let _ = Alcotest.(check int) "Status same int" 200 code in
     let _ = Alcotest.(check (option string)) "Continuation" None (Response_headers.x_ms_continuation headers) in
     let _ =
-      match values with
-      | Some {rid = _; documents; count} ->
-        let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
-        let {id; firstName; lastName} = List.hd docs in
-        Alcotest.(check int) "Count field" count 1;
-        Alcotest.(check int) "Count list" count (List.length documents);
-        Alcotest.(check string) "id" id "document_id1";
-        Alcotest.(check string) "firstName" firstName "A First name 1";
-        Alcotest.(check string) "lastName" lastName "a Last name"
-      | _ ->
-        Alcotest.(check int) "list_document_test fail" 1 0
+      let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
+      let {id; firstName; lastName} = List.hd docs in
+      Alcotest.(check int) "Count field" count 1;
+      Alcotest.(check int) "Count list" count (List.length documents);
+      Alcotest.(check string) "id" id "document_id1";
+      Alcotest.(check string) "firstName" firstName "A First name 1";
+      Alcotest.(check string) "lastName" lastName "a Last name"
     in
     return ()
 
@@ -215,22 +211,16 @@ let list_multiple_documents_test _ () =
   let%lwt res = D.Collection.Document.list ~max_item_count:5 dbname collection_name in
   match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
-  | Result.Ok (code, headers, result) ->
+  | Result.Ok (code, headers, {rid = _; documents = _; count}) ->
     let _ = Alcotest.(check int) "Status same int" 200 code in
     let continuation = Option.get (Response_headers.x_ms_continuation headers) in
     let%lwt res2 = D.Collection.Document.list ~max_item_count:5 ~continuation dbname collection_name in
     match res2 with
     | Result.Error _ -> Alcotest.fail "Should not return error"
-    | Result.Ok (code2, headers2, result2) ->
+    | Result.Ok (code2, headers2, {rid = _; documents = _; count = count2}) ->
       let _ = Alcotest.(check int) "Status same int" 200 code2 in
       let _ = Alcotest.(check (option string)) "Continuation" None (Response_headers.x_ms_continuation headers2) in
-      let _ =
-        match result, result2 with
-        | Some {rid = _; documents = _; count}, Some {rid = _; documents = _; count = count2} ->
-          Alcotest.(check int) "Count field" (count + count2) 10;
-        | _ ->
-          Alcotest.(check int) "list_multiple_documents_test fail" 1 0
-      in
+      let _ = Alcotest.(check int) "Count field" (count + count2) 10 in
       return ()
 
 let change_feed_test _ () =
@@ -246,21 +236,24 @@ let change_feed_test _ () =
     let if_none_match = Option.get @@ Response_headers.etag headers in
     let%lwt res = D.Collection.Document.list ~a_im:true ~if_none_match dbname collection_name in
     match res with
-    | Result.Error _ -> Alcotest.fail "Should not return error"
-    | Result.Ok (code, _headers, _result) ->
+    | Result.Error Timeout_error -> Alcotest.fail "1 Should not return Timeout_error"
+    | Result.Ok (code, _headers, _result) -> Alcotest.fail ("1 Should not return error code : " ^ string_of_int code)
+    | Result.Error Azure_error code -> 
       let _ = Alcotest.(check int) "Status same int" 304 code in
 
       (* insert record *)
       let%lwt res = D.Collection.Document.create dbname collection_name (create_value 20) in
       match res with
-      | Result.Error _ -> Alcotest.fail "Should not return error"
+      | Result.Error Timeout_error -> Alcotest.fail "2 Should not return Timeout_error"
+      | Result.Error Azure_error error_code -> Alcotest.fail ("2 Should not return error code : " ^ string_of_int error_code)
       | Result.Ok (code, _) ->
         let _ = Alcotest.(check int) "Status same int" 201 code in
 
         (* list all documents, one returned *)
         let%lwt res = D.Collection.Document.list ~a_im:true ~if_none_match dbname collection_name in
         match res with
-        | Result.Error _ -> Alcotest.fail "Should not return error"
+        | Result.Error Timeout_error -> Alcotest.fail "3 Should not return Timeout_error"
+        | Result.Error Azure_error error_code -> Alcotest.fail ("3 Should not return error code : " ^ string_of_int error_code)
         | Result.Ok (code, _headers, _result) ->
 
           let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -275,20 +268,16 @@ let query_document_test _ () =
   let res = D.Collection.Document.query dbname collection_name query in
   res >>= function
   | Result.Error _ -> Alcotest.fail "Should not return error"
-  | Result.Ok (code, _, values) ->
+  | Result.Ok (code, _, {rid = _; documents; count}) ->
     let _ = Alcotest.(check int) "Status same int" 200 code in
     let _ =
-      match values with
-      | Some {rid = _; documents; count} ->
-        let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
-        let {id; firstName; lastName} = List.hd docs in
-        Alcotest.(check int) "Count field" count 1;
-        Alcotest.(check int) "Count list" count (List.length documents);
-        Alcotest.(check string) "id" id "document_id1";
-        Alcotest.(check string) "firstName" firstName "A First name 1";
-        Alcotest.(check string) "lastName" lastName "a Last name"
-      | _ ->
-        Alcotest.(check int) "query_document_test fail" 1 0
+      let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
+      let {id; firstName; lastName} = List.hd docs in
+      Alcotest.(check int) "Count field" count 1;
+      Alcotest.(check int) "Count list" count (List.length documents);
+      Alcotest.(check string) "id" id "document_id1";
+      Alcotest.(check string) "firstName" firstName "A First name 1";
+      Alcotest.(check string) "lastName" lastName "a Last name"
     in
     return ()
 
@@ -301,18 +290,14 @@ let query_document_count_test _ () =
   let res = D.Collection.Document.query dbname collection_name query in
   res >>= function
   | Result.Error _ -> Alcotest.fail "Should not return error"
-  | Result.Ok (code, _, values) ->
+  | Result.Ok (code, _, {rid = _; documents; count}) ->
     let _ = Alcotest.(check int) "Status same int" 200 code in
     let _ =
-      match values with
-      | Some {rid = _; documents; count} ->
-        Alcotest.(check int) "Count field" count 1;
-        let docs = List.map (fun (x, _) -> x) documents in
-        let first = List.hd docs in
-        let value_count = int_of_string first in
-        Alcotest.(check int) "Value count field" value_count 11
-      | _ ->
-        Alcotest.(check int) "query_document_count_test fail" 1 0
+      Alcotest.(check int) "Count field" count 1;
+      let docs = List.map (fun (x, _) -> x) documents in
+      let first = List.hd docs in
+      let value_count = int_of_string first in
+      Alcotest.(check int) "Value count field" value_count 11
     in
     return ()
 
@@ -429,20 +414,16 @@ let query_document_with_partition_key_test _ () =
   let res = D.Collection.Document.query ~is_partition:true dbname_partition collection_name_partition query in
   res >>= function
   | Result.Error _ -> Alcotest.fail "Should not return error"
-  | Result.Ok (code, _, values) ->
+  | Result.Ok (code, _, {rid = _; documents; count}) ->
     let _ = Alcotest.(check int) "Status same int" 200 code in
     let _ =
-      match values with
-      | Some {rid = _; documents; count} ->
-        let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
-        let {id; firstName; lastName} = List.hd docs in
-        Alcotest.(check int) "Count field" count 1;
-        Alcotest.(check int) "Count list" count (List.length documents);
-        Alcotest.(check string) "id" id "document_id1";
-        Alcotest.(check string) "firstName" firstName "A First name 1";
-        Alcotest.(check string) "lastName" lastName "a Last name"
-      | _ ->
-        Alcotest.(check int) "query_document_test fail" 1 0
+      let docs = List.map (fun (x, _) -> create_document_of_string x) documents in
+      let {id; firstName; lastName} = List.hd docs in
+      Alcotest.(check int) "Count field" count 1;
+      Alcotest.(check int) "Count list" count (List.length documents);
+      Alcotest.(check string) "id" id "document_id1";
+      Alcotest.(check string) "firstName" firstName "A First name 1";
+      Alcotest.(check string) "lastName" lastName "a Last name"
     in
     return ()
 
@@ -455,8 +436,9 @@ let query_document_count_without_partition_key_test _ () =
   in
   let res = D.Collection.Document.query ~is_partition:true dbname_partition collection_name_partition query in
   res >>= function
-  | Result.Error _ -> Alcotest.fail "Should not return error"
-  | Result.Ok (code, _, _values) ->
+  | Result.Ok _
+  | Result.Error Timeout_error -> Alcotest.fail "Should not return error"
+  | Result.Error Azure_error code ->
     let _ = Alcotest.(check int) "Status same int" 400 code
     in
     return ()
@@ -470,18 +452,14 @@ let query_document_count_with_partition_key_test _ () =
   let res = D.Collection.Document.query ~partition_key:"a Last name" ~is_partition:true dbname_partition collection_name_partition query in
   res >>= function
   | Result.Error _ -> Alcotest.fail "Should not return error"
-  | Result.Ok (code, _, values) ->
+  | Result.Ok (code, _, {rid = _; documents; count}) ->
     let _ = Alcotest.(check int) "Status same int" 200 code in
     let _ =
-      match values with
-      | Some {rid = _; documents; count} ->
-        Alcotest.(check int) "Count field" count 1;
-        let docs = List.map (fun (x, _) -> x) documents in
-        let first = List.hd docs in
-        let value_count = int_of_string first in
-        Alcotest.(check int) "Value count field" value_count 1
-      | _ ->
-        Alcotest.(check int) "query_document_count_test fail" 1 0
+      Alcotest.(check int) "Count field" count 1;
+      let docs = List.map (fun (x, _) -> x) documents in
+      let first = List.hd docs in
+      let value_count = int_of_string first in
+      Alcotest.(check int) "Value count field" value_count 1
     in
     return ()
 

@@ -363,7 +363,7 @@ module Database (Auth_key : Auth_key) = struct
         let count = json |> member "_count" |> to_int in
         let docs = json |> member "Documents" |> to_list in
         let string_docs = List.map (fun x -> Yojson.Basic.to_string x, convert_to_list_result_meta_data x) docs in
-        Some { rid; documents = string_docs; count }
+        { rid; documents = string_docs; count }
 
       let list ?max_item_count ?continuation ?consistency_level ?session_token ?a_im ?if_none_match ?partition_key_range_id ?timeout dbname coll_name =
         let apply_a_im_to_header_if_some name values headers = match values with
@@ -390,11 +390,9 @@ module Database (Auth_key : Auth_key) = struct
           let code = get_code resp in
           let response_header = Response_headers.get_header resp in
           body |> Cohttp_lwt.Body.to_string >|= fun body ->
-          let value = match code with
-            | 200 -> convert_to_list_result body
-            | _ -> None
-          in
-          Result.ok (code, response_header, value)
+          let value () = convert_to_list_result body in
+          let expected_code = 200 in
+          if code = expected_code then Result.ok (expected_code, response_header, value ()) else Result.error (Azure_error code)
 
       type consistency_level =
         | Strong
@@ -479,16 +477,14 @@ module Database (Auth_key : Auth_key) = struct
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
         let response = Cohttp_lwt_unix.Client.post ~headers ~body uri >>= Lwt.return_some |> wrap_timeout timeout in
         match%lwt response with
+        | None -> timeout_error
         | Some (resp, body) ->
           let code = get_code resp in
           let response_header = Response_headers.get_header resp in
           body |> Cohttp_lwt.Body.to_string >|= fun body ->
-          let value = match code with
-            | 200 -> convert_to_list_result body
-            | _ -> None
-          in
-          Result.ok (code, response_header, value)
-        | None -> timeout_error
+          let value () = convert_to_list_result body in
+          let expected_code = 200 in
+          if code = expected_code then Result.ok (expected_code, response_header, value ()) else Result.error (Azure_error code)
     end
   end
 
