@@ -1,7 +1,9 @@
 module type Auth_key = sig
   val master_key : string
+  (** Key value of cosmos container *)
 
   val endpoint : string
+  (** Name of the endpoint of cosmos container *)
 end
 
 module Auth (Keys : Auth_key) : sig

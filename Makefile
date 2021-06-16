@@ -20,6 +20,9 @@ format:
 promote:
 	dune promote
 
+doc:
+	dune build @doc
+
 docker_base:
 	docker build -t azure-cosmos-db-base -f dockerfile.base .
 
