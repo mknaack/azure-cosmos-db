@@ -156,7 +156,7 @@ end
 module Database (Auth_key : Auth_key) = struct
   module Account = Auth (Auth_key)
 
-  let host = Account.endpoint ^ ".documents.azure.com"
+  let host = Utility.adjust_host Account.endpoint
 
   let headers resource verb db_name =
     let ms_date =

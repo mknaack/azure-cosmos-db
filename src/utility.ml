@@ -24,6 +24,17 @@ let x_ms_date time =
 
 let string_of_bool = function true -> "true" | false -> "false"
 
+let adjust_host endpoint =
+  let azure_end = ".documents.azure.com" in
+  if String.length endpoint > String.length azure_end then
+    let start =
+      String.sub endpoint
+        (String.length endpoint - String.length azure_end)
+        (String.length azure_end)
+    in
+    if String.equal start azure_end then endpoint else endpoint ^ azure_end
+  else endpoint ^ azure_end
+
 let authorization_token_using_master_key verb resource_type resource_id date
     master_key =
   let key = Base64.decode_exn master_key in
