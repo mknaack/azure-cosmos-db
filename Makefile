@@ -1,4 +1,4 @@
-.PHONY: all build unit_test integration_test clean
+.PHONY: all build unit_test integration_test clean format promote
 
 build:
 	dune build
@@ -13,6 +13,12 @@ integration_test:
 
 clean:
 	rm -rf _build *.install
+
+format:
+	dune build @fmt
+
+promote:
+	dune promote
 
 docker_base:
 	docker build -t azure-cosmos-db-base -f dockerfile.base .
