@@ -2,7 +2,7 @@ type create_database = {
   id: string;
 }
 
-type databases = {
+type database = {
   id: string;
   _rid: string;
   _self: string;
@@ -14,7 +14,7 @@ type databases = {
 
 type list_databases = {
   _rid: string;
-  databases <json name="Databases">: databases list;
+  databases <json name="Databases">: database list;
   _count: int;
 }
 
@@ -24,26 +24,53 @@ type indexes = {
   kind: string;
 }
 
-type includedPaths = {
+type included_paths = {
   path: string;
-  indexes: indexes list;
+  ~indexes <ocaml default="[]">: indexes list;
 }
 
-type indexingPolicy = {
+type indexing_policy = {
   automatic: bool;
-  indexingMode: string;
-  includedPaths: includedPaths list;
+  indexing_mode <json name="indexingMode">: string;
+  included_paths <json name="includedPaths">: included_paths list;
 }
 
-type partitionKey = {
+type partitionKey_result = {
     paths: string list;
     kind: string;
 }
 
+type create_partition_key = {
+    paths: string list;
+    kind: string;
+    ?version: int option;
+}
+
 type create_collection = {
   id: string;
-  ?indexingPolicy: indexingPolicy option;
-  ?partitionKey: partitionKey option;
+  ?indexing_policy <json name="indexingPolicy">: indexing_policy option;
+  ?partition_key <json name="partitionKey">: create_partition_key option;
+}
+
+type collection = {
+  id: string;
+  indexing_policy <json name="indexingPolicy">: indexing_policy;
+  ?partition_key <json name="partitionKey">: partitionKey_result option;
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+  docs <json name="_docs">: string;
+  sprocs <json name="_sprocs">: string;
+  triggers <json name="_triggers">: string;
+  udfs <json name="_udfs">: string;
+  conflicts <json name="_conflicts">: string;
+}
+
+type list_collections = {
+  rid <json name="_rid">: string;
+  document_collections <json name="DocumentCollections">: collection list;
+  count <json name="_count">: int;
 }
 
 type parameter = {
@@ -55,3 +82,23 @@ type query = {
   query: string;
   parameters: parameter list;
 }
+
+type create_user = {
+  id: string;
+}
+
+type user = {
+  id: string;
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+  permissions <json name="_permissions">: string;
+}
+
+type list_users = {
+  rid <json name="_rid">: string;
+  users <json name="Users">: user list;
+  count <json name="_count">: int;
+}
+

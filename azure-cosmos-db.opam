@@ -1,6 +1,7 @@
 opam-version: "2.0"
 name: "azure-cosmos-db"
-version: "0.1.0"
+version: "0.1.6"
+license: "MIT"
 synopsis: "Azure cosmos db interface"
 description: """
 Provides an interface to the Azure Cosmos db.
@@ -8,14 +9,24 @@ Provides an interface to the Azure Cosmos db.
 maintainer: "Morten Knaack <knaack@gmail>"
 authors: "Morten Knaack <knaack@gmail>"
 depends: [
-  "ocaml" {>= "4.06.0"}
-  "dune" {build}
+  "ocaml" {>= "4.08.0"}
+  "dune"
   "lwt"
+  "lwt_ppx"
   "atdgen"
-  "ocsigenserver"
+  "tls" | "ssl"
   "base64"
   "uri"
+  "cohttp"
+  "cohttp-lwt-unix"
+  "cryptokit"
+  "ocamlnet"
   "alcotest-lwt" {with-test}
 ]
 homepage: "https://bitbucket.org/knaack/azure-cosmos-db"
-build: ["dune" "build" "-p" name]
+bug-reports: "https://bitbucket.org/knaack/azure-cosmos-db/issues"
+dev-repo: "git+https://bitbucket.org/knaack/azure-cosmos-db.git"
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+ ]
