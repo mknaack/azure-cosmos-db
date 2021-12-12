@@ -8,19 +8,46 @@
 (*   let _ = print_n 4 in *)
 (*   () *)
 
-(*let date _ =
-  let expected_result = "Wed, 16 May 2018 20:08:23 +0000" in
-
-*)
-
 let string_replace old_value new_value string =
   let regexp = Str.regexp_string old_value in
   let result = Str.global_replace regexp new_value string in
   result
 
+  (*
+  "Mon"  / "Tue" /  "Wed"  / "Thu"
+                 /  "Fri"  / "Sat" /  "Sun"*)
+let weekday_of_tm_wday = function
+  | 0 -> "Sun"
+  | 1 -> "Mon"
+  | 2 -> "Tue"
+  | 3 -> "Wed"
+  | 4 -> "Thu"
+  | 5 -> "Fri"
+  | 6 -> "Sat"
+  | d -> failwith "Day number unknown: " ^ string_of_int d
+
+  (* "Jan"  /  "Feb" /  "Mar"  /  "Apr"
+                 /  "May"  /  "Jun" /  "Jul"  /  "Aug"
+                 /  "Sep"  /  "Oct" /  "Nov"  /  "Dec"*)
+let month_of_tm_mon = function
+  | 0 -> "Jan"
+  | 1 -> "Feb"
+  | 2 -> "Mar"
+  | 3 -> "Apr"
+  | 4 -> "May"
+  | 5 -> "Jun"
+  | 6 -> "Jul"
+  | 7 -> "Aug"
+  | 8 -> "Sep"
+  | 9 -> "Oct"
+  | 10 -> "Nov"
+  | 11 -> "Dec"
+  | d -> failwith "Month number unknown: " ^ string_of_int d
+
 let x_ms_date time =
-  let s = Netdate.mk_mail_date time in
-  string_replace "+0000" "GMT" s
+  let t = Unix.gmtime time in
+  let weekday = weekday_of_tm_wday t.tm_wday in
+  Printf.sprintf "%s, %02i %s %i %02i:%02i:%02i GMT" weekday t.tm_mday (month_of_tm_mon t.tm_mon) (t.tm_year + 1900) t.tm_hour t.tm_min t.tm_sec
 
 let string_of_bool = function true -> "true" | false -> "false"
 

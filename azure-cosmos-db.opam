@@ -20,7 +20,6 @@ depends: [
   "cohttp"
   "cohttp-lwt-unix"
   "cryptokit"
-  "ocamlnet"
   "alcotest-lwt" {with-test}
 ]
 homepage: "https://bitbucket.org/knaack/azure-cosmos-db"
