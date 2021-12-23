@@ -4,4 +4,4 @@ RUN sudo apk add --update gmp-dev openssl-dev zlib-dev
 
 ADD azure-cosmos-db.opam azure-cosmos-db.opam
 
-RUN opam install . --deps-only
+RUN opam install . --deps-only --with-test
