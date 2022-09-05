@@ -10,6 +10,7 @@ end
 
 module Response_headers : sig
   type t
+
   val content_type : t -> string option
   val date : t -> string option
   val etag : t -> string option
@@ -27,7 +28,6 @@ module Response_headers : sig
 end
 
 module Database (Auth_key : Auth_key) : sig
-
   val get_code : Cohttp.Response.t -> int
 
   val list_databases : unit -> (int * Json_converter_t.list_databases) Lwt.t
@@ -36,7 +36,8 @@ module Database (Auth_key : Auth_key) : sig
   val create : string -> (int * Json_converter_t.database option) Lwt.t
   (** [create database_name] creates a database in Cosmos with name database_name. *)
 
-  val create_if_not_exists : string -> (int * Json_converter_t.database option) Lwt.t
+  val create_if_not_exists :
+    string -> (int * Json_converter_t.database option) Lwt.t
   (** [create_if_not_exists database_name] creates a database in Cosmos with name database_name if it not already exists. *)
 
   val get : string -> (int * Json_converter_t.database option) Lwt.t
@@ -45,27 +46,31 @@ module Database (Auth_key : Auth_key) : sig
   val delete : string -> int Lwt.t
   (** [delete database_name] deletes the database [database_name] from Cosmos *)
 
-  module Collection :
-  sig
+  module Collection : sig
     val list : string -> (int * Json_converter_t.list_collections) Lwt.t
+
     val create :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
       ?partition_key:Json_converter_t.create_partition_key option ->
       string ->
       string ->
       (int * Json_converter_t.collection option) Lwt.t
+
     val create_if_not_exists :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
       ?partition_key:Json_converter_t.create_partition_key option ->
       string ->
       string ->
       (int * Json_converter_t.collection option) Lwt.t
+
     val get :
       string -> string -> (int * Json_converter_t.collection option) Lwt.t
+
     val delete : string -> string -> int Lwt.t
-    module Document :
-    sig
+
+    module Document : sig
       type indexing_directive = Include | Exclude
+
       val create :
         ?is_upsert:bool ->
         ?indexing_directive:indexing_directive ->
@@ -74,18 +79,21 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         (int * Json_converter_t.collection option) Lwt.t
+
       type list_result_meta_data = {
-        rid: string;
-        self: string;
-        etag: string;
-        ts: int;
-        attachments: string;
+        rid : string;
+        self : string;
+        etag : string;
+        ts : int;
+        attachments : string;
       }
+
       type list_result = {
-          rid: string;
-          documents: (string * list_result_meta_data option) list;
-          count: int;
-        }
+        rid : string;
+        documents : (string * list_result_meta_data option) list;
+        count : int;
+      }
+
       val list :
         ?max_item_count:int ->
         ?continuation:string ->
@@ -94,24 +102,37 @@ module Database (Auth_key : Auth_key) : sig
         ?a_im:bool ->
         ?if_none_match:string ->
         ?partition_key_range_id:string ->
-        string -> string -> (int * Response_headers.t * list_result option) Lwt.t
+        string ->
+        string ->
+        (int * Response_headers.t * list_result option) Lwt.t
+
       type consistency_level = Strong | Bounded | Session | Eventual
+
       val string_of_consistency_level : consistency_level -> string
+
       val get :
         ?if_none_match:string ->
         ?partition_key:string ->
         ?consistency_level:consistency_level ->
         ?session_token:string ->
-        string -> string -> string -> (int * string) Lwt.t
+        string ->
+        string ->
+        string ->
+        (int * string) Lwt.t
+
       val replace :
         ?indexing_directive:indexing_directive ->
         ?partition_key:string ->
         ?if_match:string ->
         string ->
-        string -> string -> string -> (int * Cohttp_lwt.Body.t) Lwt.t
+        string ->
+        string ->
+        string ->
+        (int * Cohttp_lwt.Body.t) Lwt.t
+
       val delete :
-         ?partition_key:string ->
-         string -> string -> string -> int Lwt.t
+        ?partition_key:string -> string -> string -> string -> int Lwt.t
+
       val query :
         ?max_item_count:int ->
         ?continuation:string ->
@@ -120,7 +141,9 @@ module Database (Auth_key : Auth_key) : sig
         ?is_partition:bool ->
         ?partition_key:string ->
         string ->
-        string -> Json_converter_t.query -> (int * Response_headers.t * list_result option) Lwt.t
+        string ->
+        Json_converter_t.query ->
+        (int * Response_headers.t * list_result option) Lwt.t
     end
   end
 
@@ -128,7 +151,10 @@ module Database (Auth_key : Auth_key) : sig
     val create : string -> string -> (int * Json_converter_t.user option) Lwt.t
     val list : string -> (int * Json_converter_t.list_users) Lwt.t
     val get : string -> string -> (int * Json_converter_t.user option) Lwt.t
-    val replace : string -> string -> string -> (int * Json_converter_t.user option) Lwt.t
+
+    val replace :
+      string -> string -> string -> (int * Json_converter_t.user option) Lwt.t
+
     (* [replace dbname oldname newname] will replace the user name from oldname to newname *)
     val delete : string -> string -> int Lwt.t
   end

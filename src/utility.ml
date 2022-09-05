@@ -13,7 +13,7 @@ let string_replace old_value new_value string =
   let result = Str.global_replace regexp new_value string in
   result
 
-  (*
+(*
   "Mon"  / "Tue" /  "Wed"  / "Thu"
                  /  "Fri"  / "Sat" /  "Sun"*)
 let weekday_of_tm_wday = function
@@ -26,9 +26,9 @@ let weekday_of_tm_wday = function
   | 6 -> "Sat"
   | d -> failwith "Day number unknown: " ^ string_of_int d
 
-  (* "Jan"  /  "Feb" /  "Mar"  /  "Apr"
-                 /  "May"  /  "Jun" /  "Jul"  /  "Aug"
-                 /  "Sep"  /  "Oct" /  "Nov"  /  "Dec"*)
+(* "Jan"  /  "Feb" /  "Mar"  /  "Apr"
+               /  "May"  /  "Jun" /  "Jul"  /  "Aug"
+               /  "Sep"  /  "Oct" /  "Nov"  /  "Dec"*)
 let month_of_tm_mon = function
   | 0 -> "Jan"
   | 1 -> "Feb"
@@ -47,18 +47,21 @@ let month_of_tm_mon = function
 let x_ms_date time =
   let t = Unix.gmtime time in
   let weekday = weekday_of_tm_wday t.tm_wday in
-  Printf.sprintf "%s, %02i %s %i %02i:%02i:%02i GMT" weekday t.tm_mday (month_of_tm_mon t.tm_mon) (t.tm_year + 1900) t.tm_hour t.tm_min t.tm_sec
+  Printf.sprintf "%s, %02i %s %i %02i:%02i:%02i GMT" weekday t.tm_mday
+    (month_of_tm_mon t.tm_mon) (t.tm_year + 1900) t.tm_hour t.tm_min t.tm_sec
 
 let string_of_bool = function true -> "true" | false -> "false"
 
-let authorization_token_using_master_key verb resource_type resource_id date master_key =
-  let key =  Base64.decode_exn master_key in
+let authorization_token_using_master_key verb resource_type resource_id date
+    master_key =
+  let key = Base64.decode_exn master_key in
   let text =
-    (String.lowercase_ascii verb) ^ "\n" ^
-    (String.lowercase_ascii resource_type) ^ "\n" ^
-    resource_id ^ "\n" ^
-    (String.lowercase_ascii date) ^ "\n" ^
-     "" ^ "\n"
+    String.lowercase_ascii verb
+    ^ "\n"
+    ^ String.lowercase_ascii resource_type
+    ^ "\n" ^ resource_id ^ "\n"
+    ^ String.lowercase_ascii date
+    ^ "\n" ^ "" ^ "\n"
   in
   let body = Bytes.of_string text in
   let signature =
@@ -68,7 +71,10 @@ let authorization_token_using_master_key verb resource_type resource_id date mas
   in
   let master_token = "master" in
   let token_version = "1.0" in
-  let result = Uri.pct_encode ~component:`Userinfo ("type=" ^ master_token ^ "&ver=" ^ token_version ^ "&sig=" ^ signature) in
+  let result =
+    Uri.pct_encode ~component:`Userinfo
+      ("type=" ^ master_token ^ "&ver=" ^ token_version ^ "&sig=" ^ signature)
+  in
   let result2 = string_replace "%3D" "%3d" result in
   let result3 = string_replace "%2B" "%2b" result2 in
   let result4 = string_replace "%2F" "%2f" result3 in
