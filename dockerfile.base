@@ -2,6 +2,10 @@ FROM ocaml/opam:alpine-ocaml-4.08
 
 RUN sudo apk add --update gmp-dev openssl-dev zlib-dev
 
+# Install dev tools
+RUN opam install ocaml-lsp-server ocamlformat
+
 ADD azure-cosmos-db.opam azure-cosmos-db.opam
 
+# Install dependencies
 RUN opam install . --deps-only --with-test
