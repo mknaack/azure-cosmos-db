@@ -1,8 +1,16 @@
 (library
  (name cosmos)
  (public_name azure-cosmos-db)
- (libraries lwt yojson base64 uri atdgen cohttp cohttp-lwt-unix cryptokit
-   netstring)
+ (libraries
+  lwt
+  yojson
+  base64
+  uri
+  atdgen
+  cohttp
+  cohttp-lwt-unix
+  cryptokit
+  str)
  (preprocess
   (pps lwt_ppx)))
 

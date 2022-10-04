@@ -7,23 +7,19 @@ dune build @check
 
 module type Auth_key = sig
   val master_key : string
-
   val endpoint : string
 end
 
 module type Account = sig
   type verb = Get | Post | Put | Delete
-
   type resource = Dbs | Colls | Docs | Users
 
   val authorization : verb -> resource -> string -> string -> string
-
   val endpoint : string
 end
 
 module Auth (Keys : Auth_key) : Account = struct
   type verb = Get | Post | Put | Delete
-
   type resource = Dbs | Colls | Docs | Users
 
   let string_of_verb = function
@@ -125,31 +121,18 @@ module Response_headers = struct
     |> List.fold_left update empty
 
   let content_type t = t.content_type
-
   let date t = t.date
-
   let etag t = t.etag
-
   let x_ms_activity_id t = t.x_ms_activity_id
-
   let x_ms_alt_content_path t = t.x_ms_alt_content_path
-
   let x_ms_continuation t = t.x_ms_continuation
-
   let x_ms_item_count t = t.x_ms_item_count
-
   let x_ms_request_charge t = t.x_ms_request_charge
-
   let x_ms_resource_quota t = t.x_ms_resource_quota
-
   let x_ms_resource_usage t = t.x_ms_resource_usage
-
   let x_ms_retry_after_ms t = t.x_ms_retry_after_ms
-
   let x_ms_schemaversion t = t.x_ms_schemaversion
-
   let x_ms_serviceversion t = t.x_ms_serviceversion
-
   let x_ms_session_token t = t.x_ms_session_token
 end
 
@@ -189,9 +172,7 @@ module Database (Auth_key : Auth_key) = struct
     else Result.error (Azure_error code)
 
   let with_200_do = result_or_error_with_result 200
-
   let with_201_do = result_or_error_with_result 201
-
   let with_204_do = result_or_error 204
 
   let list_databases ?timeout () =
@@ -646,7 +627,6 @@ module Database (Auth_key : Auth_key) = struct
 
   module User = struct
     let resource = Account.Users
-
     let headers = headers resource
 
     let create ?timeout dbname user_name =

@@ -1,0 +1,14 @@
+{
+    // "image": "azure-cosmos-db-base:latest",
+    "image": "mknaack/azure-cosmos-db-base:0.7",
+    "name": "azure-cosmos-db",
+    // "build":{"dockerfile": "Dockerfile", "context": ".."},
+    // "postStartCommand": "eval $(opam env)",
+    "extensions": [
+        "ocamllabs.ocaml-platform",
+        "mutantdino.resourcemonitor"
+    ]
+    // "postCreateCommand": "opam install . --deps-only --with-test",
+    //"postStartCommand": "eval $(opam env)"
+    // "runArgs": ["--env-file",".devcontainer/devcontainer.env"]
+}

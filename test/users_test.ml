@@ -3,9 +3,7 @@ open Test_common
 open Cosmos
 
 let dbname = "user_database"
-
 let user_name = "a_user_name"
-
 let replace_user_name = "replace_user_name"
 
 let create_database_test _ () =
