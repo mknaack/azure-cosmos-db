@@ -1,6 +1,9 @@
 module type Auth_key = sig
   val master_key : string
+  (** Key value of cosmos container *)
+
   val endpoint : string
+  (** Name of the endpoint of cosmos container *)
 end
 
 module Auth (Keys : Auth_key) : sig
@@ -27,46 +30,68 @@ module Response_headers : sig
   val x_ms_session_token : t -> string option
 end
 
+type cosmos_error = Timeout_error | Azure_error of int
+
 module Database (Auth_key : Auth_key) : sig
   val get_code : Cohttp.Response.t -> int
 
-  val list_databases : unit -> (int * Json_converter_t.list_databases) Lwt.t
+  val list_databases :
+    ?timeout:float ->
+    unit ->
+    (int * Json_converter_t.list_databases, cosmos_error) result Lwt.t
   (** [list_databases] returns a list of databases *)
 
-  val create : string -> (int * Json_converter_t.database option) Lwt.t
+  val create :
+    ?timeout:float ->
+    string ->
+    (int * Json_converter_t.database option, cosmos_error) result Lwt.t
   (** [create database_name] creates a database in Cosmos with name database_name. *)
 
   val create_if_not_exists :
-    string -> (int * Json_converter_t.database option) Lwt.t
+    ?timeout:float ->
+    string ->
+    (int * Json_converter_t.database option, cosmos_error) result Lwt.t
   (** [create_if_not_exists database_name] creates a database in Cosmos with name database_name if it not already exists. *)
 
-  val get : string -> (int * Json_converter_t.database option) Lwt.t
+  val get :
+    ?timeout:float ->
+    string ->
+    (int * Json_converter_t.database option, cosmos_error) result Lwt.t
   (** [get database_name] returns info about the database *)
 
-  val delete : string -> int Lwt.t
+  val delete : ?timeout:float -> string -> (int, cosmos_error) result Lwt.t
   (** [delete database_name] deletes the database [database_name] from Cosmos *)
 
   module Collection : sig
-    val list : string -> (int * Json_converter_t.list_collections) Lwt.t
+    val list :
+      ?timeout:float ->
+      string ->
+      (int * Json_converter_t.list_collections, cosmos_error) result Lwt.t
 
     val create :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
       ?partition_key:Json_converter_t.create_partition_key option ->
+      ?timeout:float ->
       string ->
       string ->
-      (int * Json_converter_t.collection option) Lwt.t
+      (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
 
     val create_if_not_exists :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
       ?partition_key:Json_converter_t.create_partition_key option ->
+      ?timeout:float ->
       string ->
       string ->
-      (int * Json_converter_t.collection option) Lwt.t
+      (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
 
     val get :
-      string -> string -> (int * Json_converter_t.collection option) Lwt.t
+      ?timeout:float ->
+      string ->
+      string ->
+      (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
 
-    val delete : string -> string -> int Lwt.t
+    val delete :
+      ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
 
     module Document : sig
       type indexing_directive = Include | Exclude
@@ -75,10 +100,11 @@ module Database (Auth_key : Auth_key) : sig
         ?is_upsert:bool ->
         ?indexing_directive:indexing_directive ->
         ?partition_key:string ->
+        ?timeout:float ->
         string ->
         string ->
         string ->
-        (int * Json_converter_t.collection option) Lwt.t
+        (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
 
       type list_result_meta_data = {
         rid : string;
@@ -102,9 +128,10 @@ module Database (Auth_key : Auth_key) : sig
         ?a_im:bool ->
         ?if_none_match:string ->
         ?partition_key_range_id:string ->
+        ?timeout:float ->
         string ->
         string ->
-        (int * Response_headers.t * list_result option) Lwt.t
+        (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
 
       type consistency_level = Strong | Bounded | Session | Eventual
 
@@ -115,23 +142,30 @@ module Database (Auth_key : Auth_key) : sig
         ?partition_key:string ->
         ?consistency_level:consistency_level ->
         ?session_token:string ->
+        ?timeout:float ->
         string ->
         string ->
         string ->
-        (int * string) Lwt.t
+        (int * string, cosmos_error) result Lwt.t
 
       val replace :
         ?indexing_directive:indexing_directive ->
         ?partition_key:string ->
         ?if_match:string ->
+        ?timeout:float ->
         string ->
         string ->
         string ->
         string ->
-        (int * Cohttp_lwt.Body.t) Lwt.t
+        (int * Cohttp_lwt.Body.t, cosmos_error) result Lwt.t
 
       val delete :
-        ?partition_key:string -> string -> string -> string -> int Lwt.t
+        ?partition_key:string ->
+        ?timeout:float ->
+        string ->
+        string ->
+        string ->
+        (int, cosmos_error) result Lwt.t
 
       val query :
         ?max_item_count:int ->
@@ -140,22 +174,41 @@ module Database (Auth_key : Auth_key) : sig
         ?session_token:string ->
         ?is_partition:bool ->
         ?partition_key:string ->
+        ?timeout:float ->
         string ->
         string ->
         Json_converter_t.query ->
-        (int * Response_headers.t * list_result option) Lwt.t
+        (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
     end
   end
 
   module User : sig
-    val create : string -> string -> (int * Json_converter_t.user option) Lwt.t
-    val list : string -> (int * Json_converter_t.list_users) Lwt.t
-    val get : string -> string -> (int * Json_converter_t.user option) Lwt.t
+    val create :
+      ?timeout:float ->
+      string ->
+      string ->
+      (int * Json_converter_t.user, cosmos_error) result Lwt.t
+
+    val list :
+      ?timeout:float ->
+      string ->
+      (int * Json_converter_t.list_users, cosmos_error) result Lwt.t
+
+    val get :
+      ?timeout:float ->
+      string ->
+      string ->
+      (int * Json_converter_t.user, cosmos_error) result Lwt.t
 
     val replace :
-      string -> string -> string -> (int * Json_converter_t.user option) Lwt.t
+      ?timeout:float ->
+      string ->
+      string ->
+      string ->
+      (int * Json_converter_t.user, cosmos_error) result Lwt.t
 
     (* [replace dbname oldname newname] will replace the user name from oldname to newname *)
-    val delete : string -> string -> int Lwt.t
+    val delete :
+      ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
   end
 end

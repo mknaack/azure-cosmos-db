@@ -1,4 +1,4 @@
-.PHONY: all build unit_test integration_test clean
+.PHONY: all build unit_test integration_test clean format promote doc_to_web
 
 build:
 	dune build
@@ -13,6 +13,18 @@ integration_test:
 
 clean:
 	rm -rf _build *.install
+
+format:
+	dune build @fmt
+
+promote:
+	dune promote
+
+doc:
+	dune build @doc
+
+doc_to_web: doc
+	cp -r _build/default/_doc/_html/* ../knaack.bitbucket.io/
 
 docker_base:
 	docker build -t azure-cosmos-db-base -f dockerfile.base .
