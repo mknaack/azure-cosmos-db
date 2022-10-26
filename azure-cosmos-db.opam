@@ -15,7 +15,7 @@ depends: [
   "lwt_ppx"
   "lwt_ssl"
   "ssl"
-  "atdgen"
+  "atdgen" {>= "2.0.0"}
   "base64" {>= "3.5.0"}
   "uri"
   "cohttp"
@@ -23,6 +23,7 @@ depends: [
   "cryptokit"
   "alcotest-lwt" {with-test}
 ]
+conflicts: [ "result" {< "1.5"} ]
 homepage: "https://bitbucket.org/knaack/azure-cosmos-db"
 bug-reports: "https://bitbucket.org/knaack/azure-cosmos-db/issues"
 dev-repo: "git+https://bitbucket.org/knaack/azure-cosmos-db.git"
