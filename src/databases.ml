@@ -230,17 +230,19 @@ module Database (Auth_key : Auth_key) = struct
     | None -> timeout_error
     | Some (resp, body) ->
         let code = get_code resp in
-        let result body =
-          let%lwt body_string = Cohttp_lwt.Body.to_string body in
-          Lwt.return_some (Json_converter_j.database_of_string body_string)
-        in
-        result_or_error_with_result 200 result code body
+        if code = 200 then
+          let result body =
+            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            Lwt.return_some (Json_converter_j.database_of_string body_string)
+          in
+          result_or_error_with_result 200 result code body
+        else Lwt.return_error (Azure_error code)
 
   let create_if_not_exists ?timeout name =
     let%lwt exists = get ?timeout name in
     match exists with
-    | Ok (404, _) -> create ?timeout name
     | Ok (code, result) -> Lwt.return_ok (code, result)
+    | Error (Azure_error 404) -> create ?timeout name
     | Error x -> Lwt.return_error x
 
   let delete ?timeout name =
@@ -327,19 +329,22 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let code = get_code resp in
-          let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
-            Lwt.return_some (Json_converter_j.collection_of_string body_string)
-          in
-          result_or_error_with_result 200 value code body
+          if code = 200 then
+            let value body =
+              let%lwt body_string = Cohttp_lwt.Body.to_string body in
+              Lwt.return_some
+                (Json_converter_j.collection_of_string body_string)
+            in
+            result_or_error_with_result 200 value code body
+          else Lwt.return_error (Azure_error code)
 
     let create_if_not_exists ?(indexing_policy = None) ?(partition_key = None)
         ?timeout dbname coll_name =
       let%lwt exists = get ?timeout dbname coll_name in
       match exists with
-      | Ok (404, _) ->
-          create ?timeout ~indexing_policy ~partition_key dbname coll_name
       | Ok result -> Lwt.return (Result.ok result)
+      | Error (Azure_error 404) ->
+          create ?timeout ~indexing_policy ~partition_key dbname coll_name
       | Error x -> Lwt.return_error x
 
     let delete ?timeout name coll_name =

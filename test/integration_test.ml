@@ -124,6 +124,31 @@ let create_collection_if_not_exists_test _ () =
       return ()
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
+let create_collection_if_not_exists_test_new_collection _ () =
+  let collection_name_test = collection_name ^ "test_collection" in
+  let%lwt () =
+    match%lwt D.Collection.create_if_not_exists dbname collection_name_test with
+    | Result.Ok (code, body) ->
+        let _ =
+          let expected = code = 200 || code = 201 in
+          Alcotest.(check' bool) ~msg:"Status same int" ~expected ~actual:true
+        in
+        let _ =
+          match body with
+          | Some { id; _ } ->
+              Alcotest.(check string)
+                "Create name is correct" collection_name_test id
+          | None -> ()
+        in
+        return ()
+    | Result.Error _ -> Alcotest.fail "Should not return error"
+  in
+  match%lwt D.Collection.delete dbname collection_name_test with
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok code ->
+      let _ = Alcotest.(check int) "Status same int" 204 code in
+      return ()
+
 let list_collection_test _ () =
   let res = D.Collection.list dbname in
   res >>= function
@@ -421,6 +446,30 @@ let delete_database_test _ () =
       let _ = Alcotest.(check int) "Status same int" 204 code in
       return ()
 
+let create_database_if_not_exists_test_new_database _ () =
+  let test_name = dbname ^ "create_new" in
+  let%lwt () =
+    match%lwt D.create_if_not_exists test_name with
+    | Result.Ok (code, body) ->
+        let _ =
+          let expected = code = 200 || code = 201 in
+          Alcotest.(check' bool) ~msg:"Status same int" ~expected ~actual:true
+        in
+        let _ =
+          match body with
+          | Some { id; _ } ->
+              Alcotest.(check string) "Create name is correct" test_name id
+          | None -> ()
+        in
+        return ()
+    | Result.Error _ -> Alcotest.fail "Should not return error"
+  in
+  match%lwt D.delete test_name with
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok code ->
+      let _ = Alcotest.(check int) "Status same int" 204 code in
+      return ()
+
 let cosmos_test =
   [
     Alcotest_lwt.test_case "create database" `Slow create_database_test;
@@ -431,6 +480,8 @@ let cosmos_test =
     Alcotest_lwt.test_case "create collection" `Slow create_collection_test;
     Alcotest_lwt.test_case "create collection if not exists" `Slow
       create_collection_if_not_exists_test;
+    Alcotest_lwt.test_case "create collection if not exists with new collection"
+      `Slow create_collection_if_not_exists_test_new_collection;
     Alcotest_lwt.test_case "list collection" `Slow list_collection_test;
     Alcotest_lwt.test_case "get collection" `Slow get_collection_test;
     Alcotest_lwt.test_case "create document" `Slow create_document_test;
@@ -448,6 +499,8 @@ let cosmos_test =
     Alcotest_lwt.test_case "delete document" `Slow delete_document_test;
     Alcotest_lwt.test_case "delete collection" `Slow delete_collection_test;
     Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
+    Alcotest_lwt.test_case "create and delete database" `Slow
+      create_database_if_not_exists_test_new_database;
   ]
 
 let test = if should_run () then cosmos_test else []
