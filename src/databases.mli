@@ -30,7 +30,7 @@ module Response_headers : sig
   val x_ms_session_token : t -> string option
 end
 
-type cosmos_error = Timeout_error | Azure_error of int
+type cosmos_error = Timeout_error | Azure_error of int * Response_headers.t
 
 module Database (Auth_key : Auth_key) : sig
   val get_code : Cohttp.Response.t -> int

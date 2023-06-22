@@ -50,9 +50,6 @@ module Auth (Keys : Auth_key) : Account = struct
   let endpoint = Keys.endpoint
 end
 
-type cosmos_error = Timeout_error | Azure_error of int
-
-let timeout_error = Lwt.return_error Timeout_error
 
 let wrap_timeout timeout command =
   match timeout with
@@ -78,7 +75,7 @@ module Response_headers = struct
     x_ms_serviceversion : string option;
     x_ms_session_token : string option;
   }
-
+  
   let empty =
     {
       content_type = None;
@@ -136,6 +133,10 @@ module Response_headers = struct
   let x_ms_session_token t = t.x_ms_session_token
 end
 
+type cosmos_error = Timeout_error | Azure_error of int * Response_headers.t
+
+let timeout_error = Lwt.return_error Timeout_error
+
 module Database (Auth_key : Auth_key) = struct
   module Account = Auth (Auth_key)
 
@@ -163,18 +164,23 @@ module Database (Auth_key : Auth_key) = struct
   let get_code resp =
     resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status
 
-  let result_or_error_with_result expected_code f code body =
+  let result_or_error_with_result expected_code f (resp: Cohttp.Response.t) body =
+    let code = get_code resp in
+    let headers = Response_headers.get_header resp in
     let r =
       let%lwt result = f body in
       if code = expected_code then Lwt.return_ok (expected_code, result)
-      else Lwt.return_error (Azure_error code)
+      else Lwt.return_error (Azure_error (code, headers))
     in
     let%lwt () = Cohttp_lwt.Body.drain_body body in
     r
 
-  let result_or_error expected_code code =
+  let result_or_error expected_code resp =
+    let code = get_code resp in
     if code = expected_code then Result.ok expected_code
-    else Result.error (Azure_error code)
+    else 
+      let response_header = Response_headers.get_header resp in
+      Result.error (Azure_error (code, response_header))
 
   let with_204_do = result_or_error 204
 
@@ -209,12 +215,11 @@ module Database (Auth_key : Auth_key) = struct
     match%lwt response with
     | None -> timeout_error
     | Some (resp, body) ->
-        let code = get_code resp in
         let result body =
           let%lwt body_string = Cohttp_lwt.Body.to_string body in
           Lwt.return_some (Json_converter_j.database_of_string body_string)
         in
-        result_or_error_with_result 201 result code body
+        result_or_error_with_result 201 result resp body
 
   let get ?timeout name =
     let uri =
@@ -230,19 +235,20 @@ module Database (Auth_key : Auth_key) = struct
     | None -> timeout_error
     | Some (resp, body) ->
         let code = get_code resp in
+        let response_header = Response_headers.get_header resp in
         if code = 200 then
           let result body =
             let%lwt body_string = Cohttp_lwt.Body.to_string body in
             Lwt.return_some (Json_converter_j.database_of_string body_string)
           in
-          result_or_error_with_result 200 result code body
-        else Lwt.return_error (Azure_error code)
+          result_or_error_with_result 200 result resp body
+        else Lwt.return_error (Azure_error (code, response_header))
 
   let create_if_not_exists ?timeout name =
     let%lwt exists = get ?timeout name in
     match exists with
     | Ok (code, result) -> Lwt.return_ok (code, result)
-    | Error (Azure_error 404) -> create ?timeout name
+    | Error (Azure_error (404, _)) -> create ?timeout name
     | Error x -> Lwt.return_error x
 
   let delete ?timeout name =
@@ -259,8 +265,7 @@ module Database (Auth_key : Auth_key) = struct
     | None -> timeout_error
     | Some (resp, body) ->
         let%lwt () = Cohttp_lwt.Body.drain_body body in
-        let code = get_code resp in
-        Lwt.return (with_204_do code)
+        Lwt.return (with_204_do resp)
 
   module Collection = struct
     let list ?timeout dbname =
@@ -278,13 +283,12 @@ module Database (Auth_key : Auth_key) = struct
       match%lwt response with
       | None -> timeout_error
       | Some (resp, body) ->
-          let code = get_code resp in
           let value body =
             let%lwt body_string = Cohttp_lwt.Body.to_string body in
             Lwt.return
             @@ Json_converter_j.list_collections_of_string body_string
           in
-          result_or_error_with_result 200 value code body
+          result_or_error_with_result 200 value resp body
 
     let create ?(indexing_policy = None) ?(partition_key = None) ?timeout dbname
         coll_name =
@@ -307,12 +311,11 @@ module Database (Auth_key : Auth_key) = struct
       match%lwt response with
       | None -> timeout_error
       | Some (resp, body) ->
-          let code = get_code resp in
           let value body =
             let%lwt body_string = Cohttp_lwt.Body.to_string body in
             Lwt.return_some (Json_converter_j.collection_of_string body_string)
           in
-          result_or_error_with_result 201 value code body
+          result_or_error_with_result 201 value resp body
 
     let get ?timeout name coll_name =
       let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
@@ -329,21 +332,22 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let code = get_code resp in
+          let headers = Response_headers.get_header resp in
           if code = 200 then
             let value body =
               let%lwt body_string = Cohttp_lwt.Body.to_string body in
               Lwt.return_some
                 (Json_converter_j.collection_of_string body_string)
             in
-            result_or_error_with_result 200 value code body
-          else Lwt.return_error (Azure_error code)
+            result_or_error_with_result 200 value resp body
+          else Lwt.return_error (Azure_error (code, headers))
 
     let create_if_not_exists ?(indexing_policy = None) ?(partition_key = None)
         ?timeout dbname coll_name =
       let%lwt exists = get ?timeout dbname coll_name in
       match exists with
       | Ok result -> Lwt.return (Result.ok result)
-      | Error (Azure_error 404) ->
+      | Error (Azure_error (404, _)) ->
           create ?timeout ~indexing_policy ~partition_key dbname coll_name
       | Error x -> Lwt.return_error x
 
@@ -360,9 +364,8 @@ module Database (Auth_key : Auth_key) = struct
       match%lwt response with
       | None -> timeout_error
       | Some (resp, body) ->
-          let code = get_code resp in
           let%lwt () = Cohttp_lwt.Body.drain_body body in
-          Lwt.return (with_204_do code)
+          Lwt.return (with_204_do resp)
 
     module Document = struct
       type indexing_directive = Include | Exclude
@@ -514,7 +517,7 @@ module Database (Auth_key : Auth_key) = struct
               if code = expected_code then
                 let%lwt result = value body in
                 Lwt.return_ok (expected_code, response_header, result)
-              else Lwt.return_error (Azure_error code)
+              else Lwt.return_error (Azure_error (code, response_header))
             in
             let%lwt () = Cohttp_lwt.Body.drain_body body in
             result
@@ -654,7 +657,7 @@ module Database (Auth_key : Auth_key) = struct
               if code = expected_code then
                 let%lwt result = value () in
                 Lwt.return_ok (expected_code, response_header, result)
-              else Lwt.return_error (Azure_error code)
+              else Lwt.return_error (Azure_error (code, response_header))
             in
             let%lwt () = Cohttp_lwt.Body.drain_body body in
             result
@@ -683,12 +686,11 @@ module Database (Auth_key : Auth_key) = struct
       match%lwt response with
       | None -> timeout_error
       | Some (resp, body) ->
-          let code = get_code resp in
           let value body =
             let%lwt body_string = Cohttp_lwt.Body.to_string body in
             Lwt.return @@ Json_converter_j.user_of_string body_string
           in
-          result_or_error_with_result 201 value code body
+          result_or_error_with_result 201 value resp body
 
     let list ?timeout dbname =
       let path = "/dbs/" ^ dbname ^ "/users" in
@@ -703,12 +705,11 @@ module Database (Auth_key : Auth_key) = struct
       match%lwt response with
       | None -> timeout_error
       | Some (resp, body) ->
-          let code = get_code resp in
           let value body =
             let%lwt body_string = Cohttp_lwt.Body.to_string body in
             Lwt.return @@ Json_converter_j.list_users_of_string body_string
           in
-          result_or_error_with_result 200 value code body
+          result_or_error_with_result 200 value resp body
 
     let get ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
@@ -723,12 +724,11 @@ module Database (Auth_key : Auth_key) = struct
       match%lwt response with
       | None -> timeout_error
       | Some (resp, body) ->
-          let code = get_code resp in
           let value body =
             let%lwt body_string = Cohttp_lwt.Body.to_string body in
             Lwt.return @@ Json_converter_j.user_of_string body_string
           in
-          result_or_error_with_result 200 value code body
+          result_or_error_with_result 200 value resp body
 
     let replace ?timeout dbname user_name new_user_name =
       let body =
@@ -747,12 +747,11 @@ module Database (Auth_key : Auth_key) = struct
       match%lwt response with
       | None -> timeout_error
       | Some (resp, body) ->
-          let code = get_code resp in
           let value body =
             let%lwt body_string = Cohttp_lwt.Body.to_string body in
             Lwt.return @@ Json_converter_j.user_of_string body_string
           in
-          result_or_error_with_result 200 value code body
+          result_or_error_with_result 200 value resp body
 
     let delete ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
@@ -767,8 +766,7 @@ module Database (Auth_key : Auth_key) = struct
       match%lwt response with
       | None -> timeout_error
       | Some (resp, body) ->
-          let code = get_code resp in
           let%lwt () = Cohttp_lwt.Body.drain_body body in
-          Lwt.return (result_or_error 204 code)
+          Lwt.return (result_or_error 204 resp)
   end
 end
