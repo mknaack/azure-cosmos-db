@@ -1,8 +1,18 @@
+definitions:
+  caches:
+    opam-downloads: ~/.opam/download-cache
+    opam-repo: ~/.opam/repo
+    opam-switch408: ~/.opam/4.08
+
 pipelines:
   default:
     - step:
         name: Build image and test
         image: ocaml/opam:alpine-ocaml-4.08
+        caches:
+          - opam-downloads
+          - opam-repo
+          - opam-switch408
         script:
           - sudo apk add --update gmp-dev libev-dev openssl-dev zlib-dev gnupg coreutils
           - curl -Os https://uploader.codecov.io/latest/alpine/codecov
