@@ -8,3 +8,17 @@ pipelines:
           - dune runtest --instrument-with bisect_ppx --force
           - bisect-ppx-report coveralls coverage.json
           - codecov -f coverage.json -t ${CODECOV_TOKEN}
+  brances:
+    - codecov:
+      - step:
+        name: Build image and test
+        image: ocaml/opam:alpine-ocaml-4.08
+        script:
+          - sudo apk add --update gmp-dev libev-dev openssl-dev zlib-dev gnupg coreutils
+          - curl -Os https://uploader.codecov.io/latest/alpine/codecov
+          - chmod +x codecov
+          - opam install . --deps-only --with-test
+          - eval $(opam config env)
+          - dune runtest --instrument-with bisect_ppx --force
+          - bisect-ppx-report coveralls coverage.json
+          - codecov -f coverage.json -t ${CODECOV_TOKEN}
