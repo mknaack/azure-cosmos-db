@@ -34,5 +34,8 @@ docker_build:
 	docker run azure-cosmos-db-build
 
 docker_base_tag:
-	docker tag azure-cosmos-db-base:latest mknaack/azure-cosmos-db-base:0.7
-	docker push mknaack/azure-cosmos-db-base:0.7
+	docker tag azure-cosmos-db-base:latest mknaack/azure-cosmos-db-base:0.8
+	docker push mknaack/azure-cosmos-db-base:0.8
+
+docker_base_bash:
+	docker run -it azure-cosmos-db-base:latest bash 

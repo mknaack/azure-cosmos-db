@@ -1,6 +1,17 @@
 FROM ocaml/opam:alpine-ocaml-4.08
 
-RUN sudo apk add --update gmp-dev openssl-dev zlib-dev
+RUN sudo apk add --update gmp-dev libev-dev openssl-dev zlib-dev gnupg coreutils
+
+# Install codecov
+RUN curl https://keybase.io/codecovsecurity/pgp_keys.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import # One-time step
+RUN curl -Os https://uploader.codecov.io/latest/alpine/codecov
+RUN curl -Os https://uploader.codecov.io/latest/alpine/codecov.SHA256SUM
+RUN curl -Os https://uploader.codecov.io/latest/alpine/codecov.SHA256SUM.sig
+#RUN gpgv codecov.SHA256SUM.sig codecov.SHA256SUM
+RUN sha256sum -c codecov.SHA256SUM
+RUN chmod +x codecov
+RUN sudo mv codecov /usr/bin/
+
 
 # Install dev tools
 RUN opam install ocaml-lsp-server ocamlformat

@@ -11,6 +11,8 @@
   cohttp-lwt-unix
   cryptokit
   str)
+ (instrumentation
+  (backend bisect_ppx))
  (preprocess
   (pps lwt_ppx)))
 

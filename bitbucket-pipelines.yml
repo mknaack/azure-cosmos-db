@@ -1,8 +1,10 @@
-image: mknaack/azure-cosmos-db-base:0.7
+image: mknaack/azure-cosmos-db-base:0.8
 
 pipelines:
   default:
     - step:
         script:
           - eval $(opam config env)
-          - dune runtest
+          - dune runtest --instrument-with bisect_ppx --force
+          - bisect-ppx-report coveralls coverage.json
+          - codecov -f coverage.json -t ${CODECOV_TOKEN}
