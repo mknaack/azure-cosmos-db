@@ -50,7 +50,6 @@ module Auth (Keys : Auth_key) : Account = struct
   let endpoint = Keys.endpoint
 end
 
-
 let wrap_timeout timeout command =
   match timeout with
   | None -> command
@@ -75,7 +74,7 @@ module Response_headers = struct
     x_ms_serviceversion : string option;
     x_ms_session_token : string option;
   }
-  
+
   let empty =
     {
       content_type = None;
@@ -164,12 +163,14 @@ module Database (Auth_key : Auth_key) = struct
   let get_code resp =
     resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status
 
-  let result_or_error_with_result expected_code f (resp: Cohttp.Response.t) body =
+  let result_or_error_with_result expected_code f (resp : Cohttp.Response.t)
+      body =
     let code = get_code resp in
     let headers = Response_headers.get_header resp in
     let r =
-      let%lwt result = f body in
-      if code = expected_code then Lwt.return_ok (expected_code, result)
+      if code = expected_code then
+        let%lwt result = f body in
+        Lwt.return_ok (expected_code, result)
       else Lwt.return_error (Azure_error (code, headers))
     in
     let%lwt () = Cohttp_lwt.Body.drain_body body in
@@ -178,7 +179,7 @@ module Database (Auth_key : Auth_key) = struct
   let result_or_error expected_code resp =
     let code = get_code resp in
     if code = expected_code then Result.ok expected_code
-    else 
+    else
       let response_header = Response_headers.get_header resp in
       Result.error (Azure_error (code, response_header))
 

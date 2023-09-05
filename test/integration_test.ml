@@ -647,6 +647,23 @@ let delete_database_with_partition_test _ () =
       let _ = Alcotest.(check int) "Status same int" 204 code in
       return ()
 
+let create_collection_with_partition_key_fail_test _ () =
+  let partition_key =
+    Some
+      Json_converter_t.
+        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+  in
+  let res =
+    D.Collection.create ~partition_key dbname_partition
+      collection_name_partition
+  in
+  res >>= function
+  | Result.Error (Azure_error (code, _)) ->
+      return @@ Alcotest.(check int) "Status same int" 404 code
+  | Result.Error Timeout_error ->
+      Alcotest.fail "Should not fail with Timeout_error"
+  | Result.Ok (_code, _body) -> Alcotest.fail "Should fail"
+
 let test_partition_key_cosmos =
   [
     Alcotest_lwt.test_case "create database" `Slow
@@ -667,6 +684,8 @@ let test_partition_key_cosmos =
       delete_collection_with_partition_key_test;
     Alcotest_lwt.test_case "delete database" `Slow
       delete_database_with_partition_test;
+    Alcotest_lwt.test_case "create collection with partition key" `Slow
+      create_collection_with_partition_key_fail_test;
   ]
 
 let test_partition_key = if should_run () then test_partition_key_cosmos else []
