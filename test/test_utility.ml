@@ -86,6 +86,19 @@ let string_of_bool_false () =
   let expected_result = "false" in
   Alcotest.(check string) "Same string" expected_result result
 
+let weekday_of_tm_wday () =
+  Alcotest.(check string) "Weekday Sun" "Sun" (Utility.weekday_of_tm_wday 0);
+  Alcotest.(check string) "Weekday Mon" "Mon" (Utility.weekday_of_tm_wday 1);
+  Alcotest.(check string) "Weekday Tue" "Tue" (Utility.weekday_of_tm_wday 2);
+  Alcotest.(check string) "Weekday Wed" "Wed" (Utility.weekday_of_tm_wday 3);
+  Alcotest.(check string) "Weekday Thu" "Thu" (Utility.weekday_of_tm_wday 4);
+  Alcotest.(check string) "Weekday Fri" "Fri" (Utility.weekday_of_tm_wday 5);
+  Alcotest.(check string) "Weekday Sat" "Sat" (Utility.weekday_of_tm_wday 6);
+  Alcotest.(check_raises)
+    "Weekday out of bound" (Failure "Day number unknown: 7") (fun () ->
+      let _ = Utility.weekday_of_tm_wday 7 in
+      ())
+
 let utility_test =
   let open Alcotest_lwt in
   [
@@ -98,4 +111,5 @@ let utility_test =
       convert_list_databases_test;
     test_case_sync "string_of_bool_true" `Quick string_of_bool_true;
     test_case_sync "string_of_bool_false" `Quick string_of_bool_false;
+    test_case_sync "weekday_of_tm_wday" `Quick weekday_of_tm_wday;
   ]

@@ -24,7 +24,7 @@ let weekday_of_tm_wday = function
   | 4 -> "Thu"
   | 5 -> "Fri"
   | 6 -> "Sat"
-  | d -> failwith "Day number unknown: " ^ string_of_int d
+  | d -> failwith @@ Printf.sprintf "Day number unknown: %i" d
 
 (* "Jan"  /  "Feb" /  "Mar"  /  "Apr"
                /  "May"  /  "Jun" /  "Jul"  /  "Aug"
