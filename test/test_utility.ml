@@ -99,6 +99,24 @@ let weekday_of_tm_wday () =
       let _ = Utility.weekday_of_tm_wday 7 in
       ())
 
+let month_of_tm_mon () =
+  Alcotest.(check string) "Month" "Jan" (Utility.month_of_tm_mon 0);
+  Alcotest.(check string) "Month" "Feb" (Utility.month_of_tm_mon 1);
+  Alcotest.(check string) "Month" "Mar" (Utility.month_of_tm_mon 2);
+  Alcotest.(check string) "Month" "Apr" (Utility.month_of_tm_mon 3);
+  Alcotest.(check string) "Month" "May" (Utility.month_of_tm_mon 4);
+  Alcotest.(check string) "Month" "Jun" (Utility.month_of_tm_mon 5);
+  Alcotest.(check string) "Month" "Jul" (Utility.month_of_tm_mon 6);
+  Alcotest.(check string) "Month" "Aug" (Utility.month_of_tm_mon 7);
+  Alcotest.(check string) "Month" "Sep" (Utility.month_of_tm_mon 8);
+  Alcotest.(check string) "Month" "Oct" (Utility.month_of_tm_mon 9);
+  Alcotest.(check string) "Month" "Nov" (Utility.month_of_tm_mon 10);
+  Alcotest.(check string) "Month" "Dec" (Utility.month_of_tm_mon 11);
+  Alcotest.(check_raises)
+    "Month out of bound" (Failure "Month number unknown: 12") (fun () ->
+      let _ = Utility.month_of_tm_mon 12 in
+      ())
+
 let utility_test =
   let open Alcotest_lwt in
   [
@@ -112,4 +130,5 @@ let utility_test =
     test_case_sync "string_of_bool_true" `Quick string_of_bool_true;
     test_case_sync "string_of_bool_false" `Quick string_of_bool_false;
     test_case_sync "weekday_of_tm_wday" `Quick weekday_of_tm_wday;
+    test_case_sync "month_of_tm_mon" `Quick month_of_tm_mon;
   ]

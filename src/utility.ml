@@ -42,7 +42,7 @@ let month_of_tm_mon = function
   | 9 -> "Oct"
   | 10 -> "Nov"
   | 11 -> "Dec"
-  | d -> failwith "Month number unknown: " ^ string_of_int d
+  | d -> failwith @@ Printf.sprintf "Month number unknown: %i" d
 
 let x_ms_date time =
   let t = Unix.gmtime time in
