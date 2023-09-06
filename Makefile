@@ -27,7 +27,7 @@ doc_to_web: doc
 	cp -r _build/default/_doc/_html/* ../knaack.bitbucket.io/
 
 docker_base:
-	docker build -t azure-cosmos-db-base -f dockerfile.base .
+	docker build --platform linux/amd64 -t azure-cosmos-db-base -f dockerfile.base .
 
 docker_build:
 	docker build -t azure-cosmos-db-build -f dockerfile.build .
