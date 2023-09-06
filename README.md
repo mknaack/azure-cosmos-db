@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/bb/knaack/azure-cosmos-db/graph/badge.svg?token=G01ACFZDI9)](https://codecov.io/bb/knaack/azure-cosmos-db)
+
 Azure cosmos db
 ===============
 
