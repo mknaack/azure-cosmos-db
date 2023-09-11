@@ -203,11 +203,37 @@ let list_document_test _ () =
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, headers, { rid = _; documents; count }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
+      (* let header_none = Alcotest.(check (option string)) in *)
       let _ =
-        Alcotest.(check (option string))
+        let open Alcotest in
+        (check (option string))
           "Continuation" None
-          (Response_headers.x_ms_continuation headers)
+          (Response_headers.x_ms_continuation headers);
+        (check (option string))
+          "content_type" (Some "application/json")
+          (Response_headers.content_type headers);
+        (check bool) "date" true
+          (Option.is_some @@ Response_headers.date headers);
+        (check bool) "x_ms_activity_id" true
+          (Option.is_some @@ Response_headers.x_ms_activity_id headers);
+        (check bool) "x_ms_alt_content_path" true
+          (Option.is_some @@ Response_headers.x_ms_alt_content_path headers);
+        (check bool) "x_ms_item_count" true
+          (Option.is_some @@ Response_headers.x_ms_item_count headers);
+        (check bool) "x_ms_request_charge" true
+          (Option.is_some @@ Response_headers.x_ms_request_charge headers);
+        (check bool) "x_ms_resource_quota" true
+          (Option.is_some @@ Response_headers.x_ms_resource_quota headers);
+        (check bool) "x_ms_resource_usage" true
+          (Option.is_some @@ Response_headers.x_ms_resource_usage headers);
+        (check bool) "x_ms_schemaversion" true
+          (Option.is_some @@ Response_headers.x_ms_schemaversion headers);
+        (check bool) "x_ms_serviceversion" true
+          (Option.is_some @@ Response_headers.x_ms_serviceversion headers);
+        (check bool) "x_ms_session_token" true
+          (Option.is_some @@ Response_headers.x_ms_session_token headers)
       in
+
       let _ =
         let docs =
           List.map (fun (x, _) -> create_document_of_string x) documents
