@@ -673,6 +673,15 @@ let delete_database_with_partition_fail_test _ () =
       Alcotest.fail "Should not fail with Timeout_error"
   | Result.Ok _code -> Alcotest.fail "Should fail"
 
+let delete_database_with_partition_timeout_test _ () =
+  let res = D.delete ~timeout:0. dbname_partition in
+  res >>= function
+  | Result.Error (Azure_error _) ->
+      Alcotest.fail "Should not fail with Azure_error"
+  | Result.Error Timeout_error ->
+      return @@ Alcotest.(check unit) "Timeout" () ()
+  | Result.Ok _code -> Alcotest.fail "Should fail"
+
 let test_partition_key_cosmos =
   [
     Alcotest_lwt.test_case "create database" `Slow
@@ -697,6 +706,8 @@ let test_partition_key_cosmos =
       create_collection_with_partition_key_fail_test;
     Alcotest_lwt.test_case "delete database with partition fail test" `Slow
       delete_database_with_partition_fail_test;
+    Alcotest_lwt.test_case "delete database with partition timeout test" `Slow
+      delete_database_with_partition_timeout_test;
   ]
 
 let test_partition_key = if should_run () then test_partition_key_cosmos else []
