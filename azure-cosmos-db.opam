@@ -23,6 +23,8 @@ depends: [
   "cryptokit"
   "alcotest-lwt" {with-test}
   "bisect_ppx" {with-test}
+  "mdx" {with-test}
+  "odoc" {with-doc}
 ]
 conflicts: [ "result" {< "1.5"} ]
 homepage: "https://bitbucket.org/knaack/azure-cosmos-db"

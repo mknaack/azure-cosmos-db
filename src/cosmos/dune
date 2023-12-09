@@ -17,6 +17,11 @@
  (preprocess
   (pps lwt_ppx)))
 
+(env
+ (dev
+  (flags
+   (:standard -w -67))))
+
 (rule
  (targets json_converter_j.ml json_converter_j.mli)
  (deps json_converter.atd)
