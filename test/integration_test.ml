@@ -446,6 +446,17 @@ let replace_document_test _ () =
       let _ = Alcotest.(check int) "Status same int" 200 code in
       return ()
 
+let upsert_document_test _ () =
+  let res =
+    D.Collection.Document.create ~is_upsert:true dbname collection_name
+      (create_value 1)
+  in
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, _) ->
+      let _ = Alcotest.(check int) "Status same int" 200 code in
+      return ()
+
 let delete_document_test _ () =
   let res =
     D.Collection.Document.delete dbname collection_name (document_id ^ "1")
@@ -520,6 +531,7 @@ let cosmos_test =
       query_document_count_test;
     Alcotest_lwt.test_case "get document" `Slow get_document_test;
     Alcotest_lwt.test_case "replace document" `Slow replace_document_test;
+    Alcotest_lwt.test_case "upsert document" `Slow upsert_document_test;
     Alcotest_lwt.test_case "create a lot document test" `Slow
       create_a_lot_of_documents_test;
     Alcotest_lwt.test_case "delete document" `Slow delete_document_test;
@@ -577,6 +589,28 @@ let create_document_with_partition_key_test _ () =
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
+      return ()
+
+let replace_document_with_partition_key_test _ () =
+  let res =
+    D.Collection.Document.replace ~partition_key:"a Last name" dbname_partition
+      collection_name_partition (document_id ^ "1") (replace_value 1)
+  in
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, _) ->
+      let _ = Alcotest.(check int) "Status same int" 200 code in
+      return ()
+
+let upsert_document_with_partition_key_test _ () =
+  let res =
+    D.Collection.Document.create ~is_upsert:true ~partition_key:"a Last name"
+      dbname_partition collection_name_partition (create_value 1)
+  in
+  res >>= function
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, _) ->
+      let _ = Alcotest.(check int) "Status same int" 200 code in
       return ()
 
 let query_document_with_partition_key_test _ () =
@@ -716,6 +750,10 @@ let test_partition_key_cosmos =
       create_collection_with_partition_key_test;
     Alcotest_lwt.test_case "create document with partition key" `Slow
       create_document_with_partition_key_test;
+    Alcotest_lwt.test_case "replace document with partition key" `Slow
+      replace_document_with_partition_key_test;
+    Alcotest_lwt.test_case "upsert document with partition key" `Slow
+      upsert_document_with_partition_key_test;
     Alcotest_lwt.test_case "query document with partition key" `Slow
       query_document_with_partition_key_test;
     Alcotest_lwt.test_case "query count document without partition key" `Slow

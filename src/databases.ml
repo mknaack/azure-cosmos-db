@@ -570,8 +570,7 @@ module Database (Auth_key : Auth_key) = struct
           |> apply_to_header_if_some "x-ms-indexing-directive"
                string_of_indexing_directive indexing_directive
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
-               (fun x -> x)
-               partition_key
+               string_of_partition_key partition_key
           |> apply_to_header_if_some "If-Match" (fun x -> x) if_match
         in
         let path =

@@ -54,17 +54,17 @@ type create_collection = {
 
 type collection = {
   id: string;
-  indexing_policy <json name="indexingPolicy">: indexing_policy;
+  ?indexing_policy <json name="indexingPolicy">: indexing_policy option;
   ?partition_key <json name="partitionKey">: partitionKey_result option;
   rid <json name="_rid">: string;
   ts <json name="_ts">: int;
   self <json name="_self">: string;
   etag <json name="_etag">: string;
-  docs <json name="_docs">: string;
-  sprocs <json name="_sprocs">: string;
-  triggers <json name="_triggers">: string;
-  udfs <json name="_udfs">: string;
-  conflicts <json name="_conflicts">: string;
+  ?docs <json name="_docs">: string option;
+  ?sprocs <json name="_sprocs">: string option;
+  ?triggers <json name="_triggers">: string option;
+  ?udfs <json name="_udfs">: string option;
+  ?conflicts <json name="_conflicts">: string option;
 }
 
 type list_collections = {
