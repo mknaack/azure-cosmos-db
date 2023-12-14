@@ -144,7 +144,7 @@ module Database (Auth_key : Auth_key) = struct
   let headers resource verb db_name =
     let ms_date =
       let now = Unix.time () in
-      Utility.x_ms_date now
+      Utilities.x_ms_date now
     in
     let header = Cohttp.Header.init () in
     let header =

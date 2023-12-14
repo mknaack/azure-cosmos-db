@@ -239,43 +239,43 @@ Array (3) = $1
 Array Prototype
 
 *)
-let weekday_of_tm_wday = function
-  | 0 -> "Sun"
-  | 1 -> "Mon"
-  | 2 -> "Tue"
-  | 3 -> "Wed"
-  | 4 -> "Thu"
-  | 5 -> "Fri"
-  | 6 -> "Sat"
-  | d -> failwith @@ Printf.sprintf "Day number unknown: %i" d
+(* let weekday_of_tm_wday = function
+     | 0 -> "Sun"
+     | 1 -> "Mon"
+     | 2 -> "Tue"
+     | 3 -> "Wed"
+     | 4 -> "Thu"
+     | 5 -> "Fri"
+     | 6 -> "Sat"
+     | d -> failwith @@ Printf.sprintf "Day number unknown: %i" d
 
-(* "Jan"  /  "Feb" /  "Mar"  /  "Apr"
-               /  "May"  /  "Jun" /  "Jul"  /  "Aug"
-               /  "Sep"  /  "Oct" /  "Nov"  /  "Dec"*)
-let month_of_tm_mon = function
-  | 0 -> "Jan"
-  | 1 -> "Feb"
-  | 2 -> "Mar"
-  | 3 -> "Apr"
-  | 4 -> "May"
-  | 5 -> "Jun"
-  | 6 -> "Jul"
-  | 7 -> "Aug"
-  | 8 -> "Sep"
-  | 9 -> "Oct"
-  | 10 -> "Nov"
-  | 11 -> "Dec"
-  | d -> failwith @@ Printf.sprintf "Month number unknown: %i" d
+   (* "Jan"  /  "Feb" /  "Mar"  /  "Apr"
+                  /  "May"  /  "Jun" /  "Jul"  /  "Aug"
+                  /  "Sep"  /  "Oct" /  "Nov"  /  "Dec"*)
+   let month_of_tm_mon = function
+     | 0 -> "Jan"
+     | 1 -> "Feb"
+     | 2 -> "Mar"
+     | 3 -> "Apr"
+     | 4 -> "May"
+     | 5 -> "Jun"
+     | 6 -> "Jul"
+     | 7 -> "Aug"
+     | 8 -> "Sep"
+     | 9 -> "Oct"
+     | 10 -> "Nov"
+     | 11 -> "Dec"
+     | d -> failwith @@ Printf.sprintf "Month number unknown: %i" d
 
-let x_ms_date time =
-  let t = Unix.gmtime time in
-  let weekday = weekday_of_tm_wday t.tm_wday in
-  Printf.sprintf "%s, %02i %s %i %02i:%02i:%02i GMT" weekday t.tm_mday
-    (month_of_tm_mon t.tm_mon) (t.tm_year + 1900) t.tm_hour t.tm_min t.tm_sec
+   let x_ms_date time =
+     let t = Unix.gmtime time in
+     let weekday = weekday_of_tm_wday t.tm_wday in
+     Printf.sprintf "%s, %02i %s %i %02i:%02i:%02i GMT" weekday t.tm_mday
+       (month_of_tm_mon t.tm_mon) (t.tm_year + 1900) t.tm_hour t.tm_min t.tm_sec *)
 
 let ms_date () =
   let now = Unix.time () in
-  x_ms_date now
+  Utilities.x_ms_date now
 
 let content_hash body =
   let hash = Cryptokit.Hash.sha256 () in
@@ -357,13 +357,13 @@ let headers date body credential signed_headers signature =
   |> content_hash_header body
   |> authorization_header credential signed_headers signature
 
-type verb = Get | Post | Put | Delete
+(* type verb = Get | Post | Put | Delete
 
-let string_of_verb = function
-  | Get -> "GET"
-  | Post -> "POST"
-  | Put -> "PUT"
-  | Delete -> "DELETE"
+   let string_of_verb = function
+     | Get -> "GET"
+     | Post -> "POST"
+     | Put -> "PUT"
+     | Delete -> "DELETE" *)
 
 (* let string_to_sign verb date =
    string_of_verb verb ^ "\n" ^ "/v&api-version=1.0" ^ "\n" ^ date
@@ -382,7 +382,7 @@ let string_to_sign date content_hash =
 
 let headers () =
   let now = Unix.time () in
-  let now = x_ms_date now in
+  let now = Utilities.x_ms_date now in
   (* let now = "Sat, 09 Dec 2023 21:25:08 GMT" in *)
   let body = "" in
   let content_hash = content_hash body in

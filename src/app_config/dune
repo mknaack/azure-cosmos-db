@@ -1,6 +1,14 @@
-(executable
+(library
  (name app_config)
  (flags (-g))
- (libraries batteries base64 uri str cryptokit cohttp-lwt-unix cohttp)
+ (libraries
+  batteries
+  base64
+  uri
+  str
+  cryptokit
+  cohttp-lwt-unix
+  cohttp
+  utilities)
  (preprocess
   (pps lwt_ppx)))

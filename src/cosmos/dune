@@ -10,7 +10,8 @@
   cohttp
   cohttp-lwt-unix
   cryptokit
-  str)
+  str
+  utilities)
  (instrumentation
   (backend bisect_ppx))
  (preprocess
