@@ -402,22 +402,22 @@ let request headers =
      let headers = headers now "" in *)
   Cohttp_lwt_unix.Client.get ~headers uri
 
-let make_call =
-  let headers = headers () in
-  let () =
-    Printf.printf "Uri: %s\nHeaders:\n%s\n" (Uri.to_string uri)
-      (Cohttp.Header.to_string headers)
-  in
-  let%lwt reponse, body = request headers in
-  let code = reponse |> Cohttp.Response.status |> Cohttp.Code.code_of_status in
-  let%lwt body = Cohttp_lwt.Body.to_string body in
-  Printf.printf "Response code: %d\n" code;
-  Printf.printf "Headers: %s\n"
-    (reponse |> Cohttp.Response.headers |> Cohttp.Header.to_string);
-  Printf.printf "Body of length: %d\n" (String.length body);
-  Printf.printf "Body %s\n" body;
-  Lwt.return_unit
+(* let make_call =
+     let headers = headers () in
+     let () =
+       Printf.printf "Uri: %s\nHeaders:\n%s\n" (Uri.to_string uri)
+         (Cohttp.Header.to_string headers)
+     in
+     let%lwt reponse, body = request headers in
+     let code = reponse |> Cohttp.Response.status |> Cohttp.Code.code_of_status in
+     let%lwt body = Cohttp_lwt.Body.to_string body in
+     Printf.printf "Response code: %d\n" code;
+     Printf.printf "Headers: %s\n"
+       (reponse |> Cohttp.Response.headers |> Cohttp.Header.to_string);
+     Printf.printf "Body of length: %d\n" (String.length body);
+     Printf.printf "Body %s\n" body;
+     Lwt.return_unit
 
-let () =
-  let () = Lwt_main.run make_call in
-  print_endline "make_call done"
+   let () =
+     let () = Lwt_main.run make_call in
+     print_endline "make_call done" *)
