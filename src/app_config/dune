@@ -1,5 +1,6 @@
 (library
  (name app_config)
+ (public_name azure-cosmos-db.app-config)
  (flags (-g))
  (libraries
   batteries
