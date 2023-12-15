@@ -1,10 +1,12 @@
 (test
  (name test)
- (libraries azure-cosmos-db alcotest-lwt)
+ (libraries azure-cosmos-db alcotest-lwt utilities)
  (flags
   (:standard -annot -short-paths))
  (preprocess
   (pps lwt_ppx)))
+
+(include_subdirs unqualified)
 
 (rule
  (targets json_j.ml json_j.mli)
