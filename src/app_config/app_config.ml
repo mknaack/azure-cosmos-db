@@ -40,15 +40,16 @@ let headers date body credential signed_headers signature =
 
 let signed_headers = "x-ms-date;host;x-ms-content-sha256"
 
-let string_to_sign date host content_hash =
-  Printf.sprintf "GET\n/kv?api-version=1.0\n%s;%s;%s" date host content_hash
+let string_to_sign uri date host content_hash =
+  let path_and_query = Uri.path_and_query uri in
+  Printf.sprintf "GET\n%s\n%s;%s;%s" path_and_query date host content_hash
 
-let headers host credential secret () =
+let headers host uri credential secret () =
   let now = Unix.time () in
   let now = Utilities.x_ms_date now in
   let body = "" in
   let content_hash = content_hash body in
-  let string_to_sign = string_to_sign now host content_hash in
+  let string_to_sign = string_to_sign uri now host content_hash in
   let signature = signature secret string_to_sign in
   let headers = headers now "" credential signed_headers signature in
   headers
@@ -62,7 +63,7 @@ let request headers uri = Cohttp_lwt_unix.Client.get ~headers uri
 
 let call host credential secret () =
   let uri = uri host in
-  let headers = headers host credential secret () in
+  let headers = headers host uri credential secret () in
   let%lwt reponse, body = request headers uri in
   let code = reponse |> Cohttp.Response.status |> Cohttp.Code.code_of_status in
   let%lwt body = Cohttp_lwt.Body.to_string body in
