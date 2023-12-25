@@ -2,6 +2,27 @@
  (name app_config)
  (public_name azure-cosmos-db.app-config)
  (flags (-g))
- (libraries base64 uri str cryptokit cohttp-lwt-unix cohttp utilities)
+ (libraries
+  base64
+  yojson
+  atdgen
+  uri
+  str
+  cryptokit
+  cohttp-lwt-unix
+  cohttp
+  utilities)
  (preprocess
   (pps lwt_ppx)))
+
+(rule
+ (targets json_j.ml json_j.mli)
+ (deps json.atd)
+ (action
+  (run atdgen -j -j-std %{deps})))
+
+(rule
+ (targets json_t.ml json_t.mli)
+ (deps json.atd)
+ (action
+  (run atdgen -t %{deps})))

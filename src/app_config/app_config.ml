@@ -357,22 +357,6 @@ let headers date body credential signed_headers signature =
   |> content_hash_header body
   |> authorization_header credential signed_headers signature
 
-(* type verb = Get | Post | Put | Delete
-
-   let string_of_verb = function
-     | Get -> "GET"
-     | Post -> "POST"
-     | Put -> "PUT"
-     | Delete -> "DELETE" *)
-
-(* let string_to_sign verb date =
-   string_of_verb verb ^ "\n" ^ "/v&api-version=1.0" ^ "\n" ^ date
-   ^ ";tp-app-conf.azconfig.io;" *)
-(*
-  let string_to_sign =
-    Printf.sprintf "%s\n%s\n%s;%s;%s" verb url utc_now host content_hash
-  in
-*)
 let signed_headers = "x-ms-date;host;x-ms-content-sha256"
 
 let string_to_sign date content_hash =
@@ -397,12 +381,9 @@ let uri =
     ~query:[ ("api-version", [ "1.0" ]) ]
     ()
 
-let request headers =
-  (* let now = Unix.time () in
-     let headers = headers now "" in *)
-  Cohttp_lwt_unix.Client.get ~headers uri
+let request headers = Cohttp_lwt_unix.Client.get ~headers uri
 
-let make_call () =
+let call () =
   let headers = headers () in
   let () =
     Printf.printf "Uri: %s\nHeaders:\n%s\n" (Uri.to_string uri)
@@ -412,13 +393,10 @@ let make_call () =
   let code = reponse |> Cohttp.Response.status |> Cohttp.Code.code_of_status in
   let%lwt body = Cohttp_lwt.Body.to_string body in
   Lwt.return (code, body)
-(* Printf.printf "Response code: %d\n" code;
-   Printf.printf "Headers: %s\n"
-     (reponse |> Cohttp.Response.headers |> Cohttp.Header.to_string);
-   Printf.printf "Body of length: %d\n" (String.length body);
-   Printf.printf "Body %s\n" body;
-   Lwt.return_unit *)
 
-(* let () =
-   let () = Lwt_main.run make_call in
-   print_endline "make_call done" *)
+let call_json () =
+  let%lwt code, body = call () in
+  let result = Json_j.kv_result_of_string body in
+  Lwt.return (code, result)
+
+module Json = Json_j

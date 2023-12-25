@@ -1,0 +1,20 @@
+(* type kv_item_value = {
+    id : string;
+    desciption : string;
+    enabled : bool;
+} *)
+
+type kv_item = {
+    etag : string;
+    key : string;
+    ?label : string option;
+    ?content_type : string option;
+    (* value : kv_item_value list;
+    tags: *)
+    locked : bool;
+    last_modified : string;
+}
+
+type kv_result = {
+    items: kv_item list
+}
