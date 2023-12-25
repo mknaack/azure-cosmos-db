@@ -6,10 +6,6 @@ https://learn.microsoft.com/en-us/azure/azure-app-configuration/rest-api-key-val
 
 *)
 
-let ms_date () =
-  let now = Unix.time () in
-  Utilities.x_ms_date now
-
 let content_hash body =
   let hash = Cryptokit.Hash.sha256 () in
   hash#add_string body;
@@ -21,7 +17,8 @@ let signature secret string_to_sign =
   hash#add_string string_to_sign;
   Base64.encode_exn hash#result
 
-let date_header date header = Cohttp.Header.add header "x-ms-date" date
+let date_header date header =
+  Cohttp.Header.add header "x-ms-date" (Utilities.Ms_time.x_ms_date date)
 
 let content_hash_header content header =
   let content_hash = content_hash content in
@@ -43,12 +40,12 @@ let signed_headers = "x-ms-date;host;x-ms-content-sha256"
 let string_to_sign verb uri date host content_hash =
   let verb_of_string = Utilities.Verb.string_of_verb verb in
   let path_and_query = Uri.path_and_query uri in
-  Printf.sprintf "%s\n%s\n%s;%s;%s" verb_of_string path_and_query date host
-    content_hash
+  let date_string = Utilities.Ms_time.x_ms_date date in
+  Printf.sprintf "%s\n%s\n%s;%s;%s" verb_of_string path_and_query date_string
+    host content_hash
 
 let headers verb host uri credential secret () =
-  let now = Unix.time () in
-  let now = Utilities.x_ms_date now in
+  let now = Utilities.Ms_time.create_now () in
   let body = "" in
   let content_hash = content_hash body in
   let string_to_sign = string_to_sign verb uri now host content_hash in

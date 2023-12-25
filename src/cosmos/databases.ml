@@ -14,7 +14,9 @@ module type Account = sig
   (* type verb = Get | Post | Put | Delete *)
   type resource = Dbs | Colls | Docs | Users
 
-  val authorization : Utilities.Verb.t -> resource -> string -> string -> string
+  val authorization :
+    Utilities.Verb.t -> resource -> Utilities.Ms_time.t -> string -> string
+
   val endpoint : string
 end
 
@@ -34,6 +36,7 @@ module Auth (Keys : Auth_key) : Account = struct
     let resource_type = string_of_resource resource in
     (* "dbs", "colls", "docs". *)
     let resource_id = db_name in
+    let date = Utilities.Ms_time.x_ms_date date in
     let result =
       Utility.authorization_token_using_master_key verb resource_type
         resource_id date Keys.master_key
@@ -135,17 +138,16 @@ module Database (Auth_key : Auth_key) = struct
   let host = Utility.adjust_host Account.endpoint
 
   let headers resource verb db_name =
-    let ms_date =
-      let now = Unix.time () in
-      Utilities.x_ms_date now
-    in
+    let ms_date = Utilities.Ms_time.create_now () in
     let header = Cohttp.Header.init () in
     let header =
       Cohttp.Header.add header "authorization"
         (Account.authorization verb resource ms_date db_name)
     in
     let header = Cohttp.Header.add header "x-ms-version" "2017-02-22" in
-    let header = Cohttp.Header.add header "x-ms-date" ms_date in
+    let header =
+      Cohttp.Header.add header "x-ms-date" (Utilities.Ms_time.x_ms_date ms_date)
+    in
     header
 
   let json_headers resource verb db_name =
