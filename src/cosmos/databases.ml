@@ -11,22 +11,15 @@ module type Auth_key = sig
 end
 
 module type Account = sig
-  type verb = Get | Post | Put | Delete
+  (* type verb = Get | Post | Put | Delete *)
   type resource = Dbs | Colls | Docs | Users
 
-  val authorization : verb -> resource -> string -> string -> string
+  val authorization : Utilities.Verb.t -> resource -> string -> string -> string
   val endpoint : string
 end
 
 module Auth (Keys : Auth_key) : Account = struct
-  type verb = Get | Post | Put | Delete
   type resource = Dbs | Colls | Docs | Users
-
-  let string_of_verb = function
-    | Get -> "GET"
-    | Post -> "POST"
-    | Put -> "PUT"
-    | Delete -> "DELETE"
 
   let string_of_resource = function
     | Dbs -> "dbs"
@@ -36,7 +29,7 @@ module Auth (Keys : Auth_key) : Account = struct
 
   let authorization verb resource date db_name =
     (* "type=master&ver=1.0&sig=" ^ key *)
-    let verb = string_of_verb verb in
+    let verb = Utilities.Verb.string_of_verb verb in
     (* get, post, put *)
     let resource_type = string_of_resource resource in
     (* "dbs", "colls", "docs". *)
@@ -189,7 +182,7 @@ module Database (Auth_key : Auth_key) = struct
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
     let response =
       Cohttp_lwt_unix.Client.get
-        ~headers:(headers Account.Dbs Account.Get "")
+        ~headers:(headers Account.Dbs Utilities.Verb.Get "")
         uri
       >>= Lwt.return_some |> wrap_timeout timeout
     in
@@ -208,7 +201,7 @@ module Database (Auth_key : Auth_key) = struct
       |> Json_converter_j.string_of_create_database |> Cohttp_lwt.Body.of_string
     in
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
-    let headers = json_headers Account.Dbs Account.Post "" in
+    let headers = json_headers Account.Dbs Utilities.Verb.Post "" in
     let response =
       Cohttp_lwt_unix.Client.post ~headers ~body uri
       >>= Lwt.return_some |> wrap_timeout timeout
@@ -228,7 +221,7 @@ module Database (Auth_key : Auth_key) = struct
     in
     let response =
       Cohttp_lwt_unix.Client.get
-        ~headers:(headers Account.Dbs Account.Get ("dbs/" ^ name))
+        ~headers:(headers Account.Dbs Utilities.Verb.Get ("dbs/" ^ name))
         uri
       >>= Lwt.return_some |> wrap_timeout timeout
     in
@@ -258,7 +251,7 @@ module Database (Auth_key : Auth_key) = struct
     in
     let response =
       Cohttp_lwt_unix.Client.delete
-        ~headers:(headers Account.Dbs Account.Delete ("dbs/" ^ name))
+        ~headers:(headers Account.Dbs Utilities.Verb.Delete ("dbs/" ^ name))
         uri
       >>= Lwt.return_some |> wrap_timeout timeout
     in
@@ -277,7 +270,7 @@ module Database (Auth_key : Auth_key) = struct
       in
       let response =
         Cohttp_lwt_unix.Client.get
-          ~headers:(headers Account.Colls Account.Get ("dbs/" ^ dbname))
+          ~headers:(headers Account.Colls Utilities.Verb.Get ("dbs/" ^ dbname))
           uri
         >>= Lwt.return_some |> wrap_timeout timeout
       in
@@ -304,7 +297,9 @@ module Database (Auth_key : Auth_key) = struct
           ~path:("/dbs/" ^ dbname ^ "/colls")
           ()
       in
-      let headers = json_headers Account.Colls Account.Post ("dbs/" ^ dbname) in
+      let headers =
+        json_headers Account.Colls Utilities.Verb.Post ("dbs/" ^ dbname)
+      in
       let response =
         Cohttp_lwt_unix.Client.post ~headers ~body uri
         >>= Lwt.return_some |> wrap_timeout timeout
@@ -324,7 +319,7 @@ module Database (Auth_key : Auth_key) = struct
       let response =
         Cohttp_lwt_unix.Client.get
           ~headers:
-            (headers Account.Colls Account.Get
+            (headers Account.Colls Utilities.Verb.Get
                ("dbs/" ^ name ^ "/colls/" ^ coll_name))
           uri
         >>= Lwt.return_some |> wrap_timeout timeout
@@ -358,7 +353,7 @@ module Database (Auth_key : Auth_key) = struct
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
       let response =
         Cohttp_lwt_unix.Client.delete
-          ~headers:(headers Account.Colls Account.Delete header_path)
+          ~headers:(headers Account.Colls Utilities.Verb.Delete header_path)
           uri
         >>= Lwt.return_some |> wrap_timeout timeout
       in
@@ -390,7 +385,7 @@ module Database (Auth_key : Auth_key) = struct
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
         let headers =
-          json_headers Account.Docs Account.Post
+          json_headers Account.Docs Utilities.Verb.Post
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
           |> apply_to_header_if_some "x-ms-documentdb-is-upsert"
                Utility.string_of_bool is_upsert
@@ -481,7 +476,7 @@ module Database (Auth_key : Auth_key) = struct
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
         let headers =
-          json_headers Account.Docs Account.Get
+          json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
           |> apply_to_header_if_some "x-ms-max-item-count" string_of_int
                max_item_count
@@ -534,7 +529,7 @@ module Database (Auth_key : Auth_key) = struct
       let get ?if_none_match ?partition_key ?consistency_level ?session_token
           ?timeout dbname coll_name doc_id =
         let headers =
-          json_headers Account.Docs Account.Get
+          json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
           |> apply_to_header_if_some "If-None-Match" (fun x -> x) if_none_match
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
@@ -565,7 +560,7 @@ module Database (Auth_key : Auth_key) = struct
           coll_name doc_id content =
         let body = Cohttp_lwt.Body.of_string content in
         let headers =
-          json_headers Account.Docs Account.Put
+          json_headers Account.Docs Utilities.Verb.Put
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
           |> apply_to_header_if_some "x-ms-indexing-directive"
                string_of_indexing_directive indexing_directive
@@ -592,7 +587,7 @@ module Database (Auth_key : Auth_key) = struct
           "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
         in
         let headers =
-          headers Account.Docs Account.Delete
+          headers Account.Docs Utilities.Verb.Delete
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
@@ -612,7 +607,7 @@ module Database (Auth_key : Auth_key) = struct
       let query ?max_item_count ?continuation ?consistency_level ?session_token
           ?is_partition ?partition_key ?timeout dbname coll_name query =
         let headers s =
-          let h = headers Account.Docs Account.Post s in
+          let h = headers Account.Docs Utilities.Verb.Post s in
           Cohttp.Header.add h "x-ms-documentdb-isquery"
             (Utility.string_of_bool true)
           |> apply_to_header_if_some "x-ms-max-item-count" string_of_int
@@ -678,7 +673,9 @@ module Database (Auth_key : Auth_key) = struct
           ~path:("/dbs/" ^ dbname ^ "/users")
           ()
       in
-      let headers = json_headers resource Account.Post ("dbs/" ^ dbname) in
+      let headers =
+        json_headers resource Utilities.Verb.Post ("dbs/" ^ dbname)
+      in
       let response =
         Cohttp_lwt_unix.Client.post ~headers ~body uri
         >>= Lwt.return_some |> wrap_timeout timeout
@@ -698,7 +695,7 @@ module Database (Auth_key : Auth_key) = struct
       let header_path = "dbs/" ^ dbname in
       let response =
         Cohttp_lwt_unix.Client.get
-          ~headers:(headers Account.Get header_path)
+          ~headers:(headers Utilities.Verb.Get header_path)
           uri
         >>= Lwt.return_some |> wrap_timeout timeout
       in
@@ -717,7 +714,7 @@ module Database (Auth_key : Auth_key) = struct
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
       let response =
         Cohttp_lwt_unix.Client.get
-          ~headers:(headers Account.Get header_path)
+          ~headers:(headers Utilities.Verb.Get header_path)
           uri
         >>= Lwt.return_some |> wrap_timeout timeout
       in
@@ -740,7 +737,7 @@ module Database (Auth_key : Auth_key) = struct
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
       let response =
         Cohttp_lwt_unix.Client.put
-          ~headers:(headers Account.Put header_path)
+          ~headers:(headers Utilities.Verb.Put header_path)
           ~body uri
         >>= Lwt.return_some |> wrap_timeout timeout
       in
@@ -759,7 +756,7 @@ module Database (Auth_key : Auth_key) = struct
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
       let response =
         Cohttp_lwt_unix.Client.delete
-          ~headers:(headers Account.Delete header_path)
+          ~headers:(headers Utilities.Verb.Delete header_path)
           uri
         >>= Lwt.return_some |> wrap_timeout timeout
       in

@@ -1,4 +1,4 @@
-type verb = Get | Post | Put | Delete
+type t = Get | Post | Put | Delete
 
 let string_of_verb = function
   | Get -> "GET"

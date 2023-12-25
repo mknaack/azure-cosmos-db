@@ -34,3 +34,5 @@ let x_ms_date time =
   let weekday = weekday_of_tm_wday t.tm_wday in
   Printf.sprintf "%s, %02i %s %i %02i:%02i:%02i GMT" weekday t.tm_mday
     (month_of_tm_mon t.tm_mon) (t.tm_year + 1900) t.tm_hour t.tm_min t.tm_sec
+
+module Verb = Verb

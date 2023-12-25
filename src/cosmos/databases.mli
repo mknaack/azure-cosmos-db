@@ -6,11 +6,6 @@ module type Auth_key = sig
   (** Name of the endpoint of cosmos container *)
 end
 
-module Auth (Keys : Auth_key) : sig
-  type verb = Get | Post | Put | Delete
-  type resource = Dbs | Colls | Docs | Users
-end
-
 module Response_headers : sig
   type t
 
