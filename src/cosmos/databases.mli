@@ -25,7 +25,10 @@ module Response_headers : sig
   val x_ms_session_token : t -> string option
 end
 
-type cosmos_error = Timeout_error | Azure_error of int * Response_headers.t
+type cosmos_error =
+  | Timeout_error
+  | Connection_error
+  | Azure_error of int * Response_headers.t
 
 module Database (Auth_key : Auth_key) : sig
   val get_code : Cohttp.Response.t -> int
@@ -100,6 +103,17 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+
+      val create_multiple :
+        ?is_upsert:bool ->
+        ?indexing_directive:indexing_directive ->
+        ?partition_key:string ->
+        ?timeout:float ->
+        string ->
+        string ->
+        string list ->
+        (int * Json_converter_t.collection option, cosmos_error) result list
+        Lwt.t
 
       type list_result_meta_data = {
         rid : string;

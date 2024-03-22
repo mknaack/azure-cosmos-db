@@ -9,3 +9,5 @@ module Ms_time : sig
 end
 
 module Verb = Utilities__.Verb
+
+val take_first : int -> 'a list -> 'a list * 'a list

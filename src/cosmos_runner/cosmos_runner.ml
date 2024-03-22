@@ -66,23 +66,37 @@ let range i j =
 
 let create_a_lot_of_documents () =
   let ids = range 0 1000 in
+
+  (* let%lwt result_list =
+       Lwt_list.map_p
+         (fun id ->
+           let%lwt res =
+             D.Collection.Document.create dbname collection_name (create_value id)
+           in
+           let code =
+             match res with Result.Ok (code, _body) -> code | Result.Error _ -> 0
+           in
+           let%lwt () = Lwt_io.printf "%i: create %i\n" code id in
+           Lwt.return res)
+         ids
+     in *)
+  let values = List.map create_value ids in
   let%lwt result_list =
-    Lwt_list.map_s
-      (fun id ->
-        let%lwt res =
-          D.Collection.Document.create dbname collection_name (create_value id)
-        in
-        let%lwt () = Lwt_io.printf "create %i\n" id in
-        Lwt.return res)
-      ids
+    D.Collection.Document.create_multiple dbname collection_name values
   in
   let check expected_code = function
     | Result.Ok (code, _) -> code = expected_code
     | _ -> false
   in
+  let check_fail = function
+    | Result.Error Connection_error -> true
+    | _ -> false
+  in
   let results_length = List.filter (check 201) result_list |> List.length in
   let length_429 = List.filter (check 429) result_list |> List.length in
-  Lwt_io.printf "results_length: %i length_429: %i\n" results_length length_429
+  let failers = List.filter check_fail result_list |> List.length in
+  Lwt_io.printf "results_length: %i length_429: %i failers: %i\n" results_length
+    length_429 failers
 
 let delete_database () =
   let%lwt res = D.delete dbname in

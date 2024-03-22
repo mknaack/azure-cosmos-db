@@ -50,7 +50,7 @@ let wrap_timeout timeout command =
   match timeout with
   | None -> command
   | Some t ->
-      let timeout = Lwt_unix.sleep t >>= fun () -> Lwt.return_none in
+      let timeout = Lwt_unix.sleep t >|= fun () -> Option.none in
       Lwt.pick [ timeout; command ]
 
 module Response_headers = struct
@@ -128,9 +128,14 @@ module Response_headers = struct
   let x_ms_session_token t = t.x_ms_session_token
 end
 
-type cosmos_error = Timeout_error | Azure_error of int * Response_headers.t
+type cosmos_error =
+  | Timeout_error
+  | Connection_error
+  | Azure_error of int * Response_headers.t
 
+let ( >>= ) = Lwt.bind
 let timeout_error = Lwt.return_error Timeout_error
+let connection_error = Lwt.return_error Connection_error
 
 module Database (Auth_key : Auth_key) = struct
   module Account = Auth (Auth_key)
@@ -396,36 +401,62 @@ module Database (Auth_key : Auth_key) = struct
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
         in
-        let rec post () =
-          let post_respons =
-            Cohttp_lwt_unix.Client.post ~headers ~body uri
-            >>= Lwt.return_some |> wrap_timeout timeout
-          in
-          match%lwt post_respons with
-          | Some (resp, body) ->
-              let code = get_code resp in
-              let%lwt value =
-                match code with
-                | 200 ->
-                    let%lwt body_string = Cohttp_lwt.Body.to_string body in
-                    Lwt.return
-                      (Some (Json_converter_j.collection_of_string body_string))
-                | _ -> Lwt.return None
-              in
-              let%lwt () = Cohttp_lwt.Body.drain_body body in
-              if code = 429 then
-                let response_header = Response_headers.get_header resp in
-                let milliseconds =
-                  Response_headers.x_ms_retry_after_ms response_header
-                  |> Option.value ~default:"0" |> int_of_string_opt
-                  |> Option.value ~default:0 |> Int.to_float
+        let rec post retry () =
+          try%lwt
+            let post_respons =
+              Cohttp_lwt_unix.Client.post ~headers ~body uri
+              >>= Lwt.return_some |> wrap_timeout timeout
+            in
+            match%lwt post_respons with
+            | Some (resp, body) ->
+                let code = get_code resp in
+                let%lwt value =
+                  match code with
+                  | 200 ->
+                      let%lwt body_string = Cohttp_lwt.Body.to_string body in
+                      Lwt.return
+                        (Some
+                           (Json_converter_j.collection_of_string body_string))
+                  | _ -> Lwt.return None
                 in
-                let _ = Lwt_unix.sleep (milliseconds /. 1000.) in
-                post ()
-              else Lwt.return (Result.ok (code, value))
-          | None -> timeout_error
+                let%lwt () = Cohttp_lwt.Body.drain_body body in
+                if code = 429 then
+                  let response_header = Response_headers.get_header resp in
+                  let milliseconds =
+                    Response_headers.x_ms_retry_after_ms response_header
+                    |> Option.value ~default:"0" |> int_of_string_opt
+                    |> Option.value ~default:0 |> Int.to_float
+                  in
+                  let%lwt () = Lwt_unix.sleep (milliseconds /. 1000.) in
+                  if retry > 0 then post (retry - 1) () else timeout_error
+                else Lwt.return (Result.ok (code, value))
+            | None -> timeout_error
+          with Unix.Unix_error (ECONNREFUSED, _, _) ->
+            if retry > 0 then
+              let () = Random.self_init () in
+              let sleep = Random.int 5 |> float_of_int in
+              let%lwt () = Lwt_unix.sleep sleep in
+              post (retry - 1) ()
+            else connection_error
         in
-        post ()
+        post 10 ()
+
+      let create_multiple ?is_upsert ?indexing_directive ?partition_key ?timeout
+          dbname coll_name content_list =
+        let rec take_first n acc = function
+          | [] -> Lwt.return @@ acc
+          | x ->
+              let first, rest = Utilities.take_first n x in
+              let%lwt r =
+                Lwt_list.map_p
+                  (create ?is_upsert ?indexing_directive ?partition_key ?timeout
+                     dbname coll_name)
+                  first
+              in
+              take_first n (r @ acc) rest
+        in
+        let r = take_first 100 [] content_list in
+        r
 
       type list_result_meta_data = {
         rid : string;

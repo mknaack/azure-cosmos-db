@@ -43,3 +43,10 @@ module Ms_time = struct
 end
 
 module Verb = Verb
+
+let take_first n l =
+  let rec part i yes no = function
+    | [] -> (List.rev yes, List.rev no)
+    | x :: l -> if i <= n then part (i + 1) (x :: yes) no l else (yes, x :: l)
+  in
+  part 0 [] [] l

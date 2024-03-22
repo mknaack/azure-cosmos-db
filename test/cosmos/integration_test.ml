@@ -344,6 +344,8 @@ let change_feed_test _ () =
       match res with
       | Result.Error Timeout_error ->
           Alcotest.fail "1 Should not return Timeout_error"
+      | Result.Error Connection_error ->
+          Alcotest.fail "Should not fail with Connection_error"
       | Result.Ok (code, _headers, _result) ->
           Alcotest.fail
             ("1 Should not return error code : " ^ string_of_int code)
@@ -358,6 +360,8 @@ let change_feed_test _ () =
           match res with
           | Result.Error Timeout_error ->
               Alcotest.fail "2 Should not return Timeout_error"
+          | Result.Error Connection_error ->
+              Alcotest.fail "Should not fail with Connection_error"
           | Result.Error (Azure_error (error_code, _)) ->
               Alcotest.fail
                 ("2 Should not return error code : " ^ string_of_int error_code)
@@ -372,6 +376,8 @@ let change_feed_test _ () =
               match res with
               | Result.Error Timeout_error ->
                   Alcotest.fail "3 Should not return Timeout_error"
+              | Result.Error Connection_error ->
+                  Alcotest.fail "Should not fail with Connection_error"
               | Result.Error (Azure_error (error_code, _)) ->
                   Alcotest.fail
                     ("3 Should not return error code : "
@@ -653,7 +659,7 @@ let query_document_count_without_partition_key_test _ () =
       collection_name_partition query
   in
   res >>= function
-  | Result.Ok _ | Result.Error Timeout_error ->
+  | Result.Ok _ | Result.Error Timeout_error | Result.Error Connection_error ->
       Alcotest.fail "Should not return error"
   | Result.Error (Azure_error (code, _)) ->
       let _ = Alcotest.(check int) "Status same int" 400 code in
@@ -722,6 +728,8 @@ let create_collection_with_partition_key_fail_test _ () =
       return @@ Alcotest.(check int) "Status same int" 404 code
   | Result.Error Timeout_error ->
       Alcotest.fail "Should not fail with Timeout_error"
+  | Result.Error Connection_error ->
+      Alcotest.fail "Should not fail with Connection_error"
   | Result.Ok (_code, _body) -> Alcotest.fail "Should fail"
 
 let delete_database_with_partition_fail_test _ () =
@@ -731,6 +739,8 @@ let delete_database_with_partition_fail_test _ () =
       return @@ Alcotest.(check int) "Status same int" 404 code
   | Result.Error Timeout_error ->
       Alcotest.fail "Should not fail with Timeout_error"
+  | Result.Error Connection_error ->
+      Alcotest.fail "Should not fail with Connection_error"
   | Result.Ok _code -> Alcotest.fail "Should fail"
 
 let delete_database_with_partition_timeout_test _ () =
@@ -740,6 +750,8 @@ let delete_database_with_partition_timeout_test _ () =
       Alcotest.fail "Should not fail with Azure_error"
   | Result.Error Timeout_error ->
       return @@ Alcotest.(check unit) "Timeout" () ()
+  | Result.Error Connection_error ->
+      Alcotest.fail "Should not fail with Connection_error"
   | Result.Ok _code -> Alcotest.fail "Should fail"
 
 let test_partition_key_cosmos =
