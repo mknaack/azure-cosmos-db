@@ -455,8 +455,7 @@ module Database (Auth_key : Auth_key) = struct
               in
               take_first n (r @ acc) rest
         in
-        let r = take_first 100 [] content_list in
-        r
+        take_first 100 [] content_list
 
       type list_result_meta_data = {
         rid : string;
@@ -616,26 +615,55 @@ module Database (Auth_key : Auth_key) = struct
         | None -> timeout_error
 
       let delete ?partition_key ?timeout dbname coll_name doc_id =
+        (* let path =
+             "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
+           in *)
         let path =
-          "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
+          Printf.sprintf "/dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
         in
         let headers =
-          headers Account.Docs Utilities.Verb.Delete
-            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+          Printf.sprintf "dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
+          |> headers Account.Docs Utilities.Verb.Delete
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
         in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        let response =
-          Cohttp_lwt_unix.Client.delete ~headers uri
-          >>= Lwt.return_some |> wrap_timeout timeout
+        let rec delete retry () =
+          let response =
+            Cohttp_lwt_unix.Client.delete ~headers uri
+            >>= Lwt.return_some |> wrap_timeout timeout
+          in
+          match%lwt response with
+          | Some (resp, body) ->
+              let code = get_code resp in
+              let%lwt () = Cohttp_lwt.Body.drain_body body in
+              if code = 429 then
+                let response_header = Response_headers.get_header resp in
+                let milliseconds =
+                  Response_headers.x_ms_retry_after_ms response_header
+                  |> Option.value ~default:"0" |> int_of_string_opt
+                  |> Option.value ~default:0 |> Int.to_float
+                in
+                let%lwt () = Lwt_unix.sleep (milliseconds /. 1000.) in
+                if retry > 0 then delete (retry - 1) () else timeout_error
+              else Lwt.return_ok code
+          | None -> timeout_error
         in
-        match%lwt response with
-        | Some (resp, body) ->
-            let code = get_code resp in
-            let%lwt () = Cohttp_lwt.Body.drain_body body in
-            Lwt.return_ok code
-        | None -> timeout_error
+        delete 3 ()
+
+      let delete_multiple ?partition_key ?timeout dbname coll_name doc_ids =
+        let rec take_first n acc = function
+          | [] -> Lwt.return @@ acc
+          | x ->
+              let first, rest = Utilities.take_first n x in
+              let%lwt r =
+                Lwt_list.map_p
+                  (delete ?partition_key ?timeout dbname coll_name)
+                  first
+              in
+              take_first n (r @ acc) rest
+        in
+        take_first 100 [] doc_ids
 
       let query ?max_item_count ?continuation ?consistency_level ?session_token
           ?is_partition ?partition_key ?timeout dbname coll_name query =

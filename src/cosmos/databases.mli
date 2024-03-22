@@ -176,6 +176,14 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         (int, cosmos_error) result Lwt.t
 
+      val delete_multiple :
+        ?partition_key:string ->
+        ?timeout:float ->
+        string ->
+        string ->
+        string list ->
+        (int, cosmos_error) result list Lwt.t
+
       val query :
         ?max_item_count:int ->
         ?continuation:string ->
