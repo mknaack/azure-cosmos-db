@@ -159,6 +159,32 @@ let delete_a_lot_of_documents partition_key () =
     "results_length: %i length_429: %i failures: %i, time: %.2f sec\n"
     results_length length_429 failures time
 
+let get_a_lot_of_documents partition_key_range_id () =
+  let start_time = Unix.time () in
+  let%lwt () = Lwt_io.print "get_a_lot_of_documents " in
+  let%lwt result_list =
+    D.Collection.Document.list ?partition_key_range_id dbname collection_name
+  in
+  let get = function
+    | Result.Ok (_, _, { D.Collection.Document.rid = _; documents; count = _ })
+      ->
+        documents
+    | _ -> []
+  in
+  let get_code = function Result.Ok (code, _, _) -> code | _ -> 0 in
+  (* let check expected_code = function
+       | Result.Ok (code, _, _) -> code = expected_code
+       | _ -> false
+     in *)
+  let documents = get result_list |> List.length in
+  let code = get_code result_list in
+  (* let results_length = check 200 result_list in *)
+  (* let length_429 = check 429 result_list in *)
+  let end_time = Unix.time () in
+  let time = end_time -. start_time in
+  Lwt_io.printf "results_length: %i code: %i, time: %.2f sec\n" documents code
+    time
+
 let delete_database () =
   let%lwt res = D.delete dbname in
   match res with
@@ -170,8 +196,7 @@ let do_with_partition partition_key partition () =
   let%lwt () = create_collection partition_key () in
   let%lwt () = create_a_lot_of_documents partition () in
   let%lwt () = update_a_lot_of_documents_with_upsert partition () in
-  (* Replace *)
-  (* Get??? *)
+  let%lwt () = get_a_lot_of_documents partition () in
   let%lwt () = delete_a_lot_of_documents partition () in
   let%lwt () = delete_database () in
   Lwt.return_unit
@@ -184,7 +209,7 @@ let main () =
         { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let partition = Some "a Last name" in
-  (* let%lwt () = do_with_partition None None () in *)
+  let%lwt () = do_with_partition None None () in
   let%lwt () = do_with_partition partition_key partition () in
   Lwt.return_unit
 
