@@ -13,8 +13,7 @@ Provides an interface to Microsoft Azure Cosmos db.
 
 # Quick start
 
-```
-#!ocaml
+```ocaml
 module MyAuthKeys : Auth_key = struct
   let master_key = "key guid found in azure portal"
   let endpoint = "endpoint found in azure portal (e.g. endpoint.documents.azure.com)"
