@@ -442,7 +442,7 @@ module Database (Auth_key : Auth_key) = struct
         post 10 ()
 
       let create_multiple ?is_upsert ?indexing_directive ?partition_key ?timeout
-          dbname coll_name content_list =
+          ?(chunk_size = 100) dbname coll_name content_list =
         let rec take_first n acc = function
           | [] -> Lwt.return @@ acc
           | x ->
@@ -455,7 +455,7 @@ module Database (Auth_key : Auth_key) = struct
               in
               take_first n (r @ acc) rest
         in
-        take_first 100 [] content_list
+        take_first chunk_size [] content_list
 
       type list_result_meta_data = {
         rid : string;
@@ -615,9 +615,6 @@ module Database (Auth_key : Auth_key) = struct
         | None -> timeout_error
 
       let delete ?partition_key ?timeout dbname coll_name doc_id =
-        (* let path =
-             "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
-           in *)
         let path =
           Printf.sprintf "/dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
         in
@@ -651,7 +648,8 @@ module Database (Auth_key : Auth_key) = struct
         in
         delete 3 ()
 
-      let delete_multiple ?partition_key ?timeout dbname coll_name doc_ids =
+      let delete_multiple ?partition_key ?timeout ?(chunk_size = 100) dbname
+          coll_name doc_ids =
         let rec take_first n acc = function
           | [] -> Lwt.return @@ acc
           | x ->
@@ -663,7 +661,7 @@ module Database (Auth_key : Auth_key) = struct
               in
               take_first n (r @ acc) rest
         in
-        take_first 100 [] doc_ids
+        take_first chunk_size [] doc_ids
 
       let query ?max_item_count ?continuation ?consistency_level ?session_token
           ?is_partition ?partition_key ?timeout dbname coll_name query =

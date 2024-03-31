@@ -109,6 +109,7 @@ module Database (Auth_key : Auth_key) : sig
         ?indexing_directive:indexing_directive ->
         ?partition_key:string ->
         ?timeout:float ->
+        ?chunk_size:int ->
         string ->
         string ->
         string list ->
@@ -179,6 +180,7 @@ module Database (Auth_key : Auth_key) : sig
       val delete_multiple :
         ?partition_key:string ->
         ?timeout:float ->
+        ?chunk_size:int ->
         string ->
         string ->
         string list ->
