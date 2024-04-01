@@ -25,9 +25,11 @@ let json_test _ () =
   Alcotest.(check' int) ~msg:"Items is correct" ~expected:3 ~actual:items_length;
   Lwt.return_unit
 
-let test =
+let test_cases =
   let open Alcotest_lwt in
   [
     test_case "make call" `Quick call_test;
     test_case "make json" `Quick json_test;
   ]
+
+let test = if Test_common.should_run () then test_cases else []
