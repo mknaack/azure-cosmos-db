@@ -19,8 +19,9 @@ module D = Database (MyAuthKeys)
 
 let dbname = "test"
 let collection_name = "testCollection"
-let dbname_partition = "testPartition"
-let collection_name_partition = "testPartition"
+(* let dbname_partition = "testPartition" *)
+
+(* let collection_name_partition = "testPartition" *)
 let document_id = "document_id"
 
 let create_database () =
