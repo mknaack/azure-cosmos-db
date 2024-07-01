@@ -8,3 +8,12 @@ pipelines:
           - dune runtest --instrument-with bisect_ppx --force
           - bisect-ppx-report coveralls coverage.json
           - codecov -f coverage.json -t ${CODECOV_TOKEN}
+          - curl --request POST --url https://morten-knaack.atlassian.net/gateway/api/compass/v1/metrics \
+            --user "$USER_EMAIL:$USER_API_KEY" \
+            --header "Accept: application/json" \
+            --header "Content-Type: application/json" \
+            --data "{
+              \"metricSourceId\": \"ari:cloud:compass:3a88860c-aaf6-4a62-9d8f-aaac6486e250:metric-source/15446478-d4cd-47a1-8882-fd8e438d4723/060c3dea-044e-4fd2-8511-b4e2f2be2f18\",
+              \"value\": $(bisect-ppx-report summary | awk -F'[()]' '{print $2}' | sed 's/%$//'),
+              \"timestamp\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"
+            }"
