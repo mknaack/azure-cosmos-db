@@ -12,10 +12,11 @@
   cohttp-lwt-unix
   cohttp
   utilities)
- (instrumentation
-  (backend bisect_ppx))
  (preprocess
-  (pps lwt_ppx)))
+  (pps lwt_ppx))
+ (instrumentation
+  (backend bisect_ppx --exclusions ../../bisect.exclude)
+  (deps ../../bisect.exclude)))
 
 (rule
  (targets json_j.ml json_j.mli)
