@@ -10,6 +10,7 @@
 *.opt
 *.merlin
 _build
+_coverage
 *.install
 *~
 .vscode
