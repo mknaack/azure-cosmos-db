@@ -1,0 +1,55 @@
+{0 Cosmos DB Tutorial}
+
+This tutorial shows how to use azure_cosmos_db.
+
+First we open the needed libaries:
+
+{[
+open Cosmos
+open Databases
+open Lwt
+]}
+
+Then we create a module with the need keys and endpoints:
+
+{[
+module MyAuthKeys : Auth_key = struct
+  let master_key = "AZURE_COSMOS_KEY"
+  let endpoint = "AZURE_COSMOS_ENDPOINT"
+end
+]}
+
+The keys and endpoints comes from Azure.
+
+Then we create a module from the Databas module with the keys defined in the module above:
+
+{[
+module D = Database (MyAuthKeys)
+]}
+
+With the module D we can for instance see all databases in the Cosmos instance:
+
+{[
+let res = D.list_databases ()
+]}
+
+Lastly, we have an example where we use the result we get from list_databases:
+
+{[
+let s =
+  let res = D.list_databases () in
+ res >>= function
+  | Result.Ok (code, { _rid; databases; _count = count }) ->
+      let db =
+        List.filter
+          (fun (x : Json_converter_t.database) -> x.id = dbname)
+          databases
+      in
+      let _ = Alcotest.(check int) "Status same int" 200 code in
+      let _ = Alcotest.(check bool) "Count" true (count > 0) in
+      let _ =
+        Alcotest.(check string) "Name of databases" dbname (List.hd db).id
+      in
+      return ()
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+]}
