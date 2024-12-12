@@ -1,0 +1,17 @@
+{0 Azure Cosmos DB}
+
+azure_cosmos_db is an API for using Azure Cosmos DB. It also contains APIs to other Azure services like App config.
+
+{1:manuals Manuals}
+
+These manuals are available:
+
+{ul
+{- A {{!page-cosmos_tutorial}Cosmos Tutorial} that explains how to use Cosmos}}
+
+{1:libaries Libaries}
+
+{!modules:
+app_config
+cosmos
+}
