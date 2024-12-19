@@ -13,8 +13,8 @@
   str
   utilities)
  (instrumentation
-  (backend bisect_ppx --exclusions ../../bisect.exclude)
-  (deps ../../bisect.exclude))
+  (backend bisect_ppx --exclusions bisect.exclude)
+  (deps bisect.exclude))
  (preprocess
   (pps lwt_ppx)))
 
