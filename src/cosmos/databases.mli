@@ -30,7 +30,7 @@ type cosmos_error =
   | Connection_error
   | Azure_error of int * Response_headers.t
 
-module Database (Auth_key : Auth_key) : sig
+module Database (_ : Auth_key) : sig
   val get_code : Cohttp.Response.t -> int
 
   val list_databases :

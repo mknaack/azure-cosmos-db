@@ -8,6 +8,6 @@ module Ms_time : sig
   val x_ms_date : t -> string
 end
 
-module Verb = Utilities__.Verb
+module Verb = Verb
 
 val take_first : int -> 'a list -> 'a list * 'a list
