@@ -14,7 +14,7 @@
   utilities)
  (instrumentation
   (backend bisect_ppx --exclusions bisect.exclude)
-  (deps bisect.exclude))
+  (deps ../../bisect.exclude))
  (preprocess
   (pps lwt_ppx)))
 
