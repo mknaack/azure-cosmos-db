@@ -11,6 +11,7 @@
 *.merlin
 _build
 _coverage
+_opam
 *.install
 *~
 .vscode
