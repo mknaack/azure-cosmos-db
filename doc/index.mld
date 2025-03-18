@@ -7,7 +7,9 @@ azure_cosmos_db is an API for using Azure Cosmos DB. It also contains APIs to ot
 These manuals are available:
 
 {ul
-{- A {{!page-cosmos_tutorial}Cosmos Tutorial} that explains how to use Cosmos}}
+{- A {{!page-app_config_tutorial}App config Tutorial} that explains how to use App configuration}
+{- A {{!page-cosmos_tutorial}Cosmos Tutorial} that explains how to use Cosmos}
+}
 
 {1:libaries Libaries}
 
