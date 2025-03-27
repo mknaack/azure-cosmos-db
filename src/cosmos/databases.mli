@@ -315,26 +315,30 @@ module Database (Auth_key : Auth_key) : sig
   module User : sig
     val create :
       ?timeout:float ->
-      string ->
-      string ->
+      dbname:string ->
+      user_name:string ->
+      unit ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
 
     val list :
       ?timeout:float ->
-      string ->
+      dbname:string ->
+      unit ->
       (int * Json_converter_t.list_users, cosmos_error) result Lwt.t
 
     val get :
       ?timeout:float ->
-      string ->
-      string ->
+      dbname:string ->
+      user_name:string ->
+      unit ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
 
     val replace :
       ?timeout:float ->
-      string ->
-      string ->
-      string ->
+      dbname:string ->
+      user_name:string ->
+      new_user_name:string ->
+      unit ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
 
     (* [replace dbname oldname newname] will replace the user name from oldname to newname *)

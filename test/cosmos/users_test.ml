@@ -7,8 +7,7 @@ let user_name = "a_user_name"
 let replace_user_name = "replace_user_name"
 
 let create_database_test _ () =
-  let res = D.create dbname in
-  res >>= function
+  match%lwt D.create dbname with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, body) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
@@ -21,8 +20,7 @@ let create_database_test _ () =
       return ()
 
 let create_user_test _ () =
-  let res = D.User.create dbname user_name in
-  res >>= function
+  match%lwt D.User.create ~dbname ~user_name () with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, { id; _ }) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
@@ -30,8 +28,7 @@ let create_user_test _ () =
       return ()
 
 let list_user_test _ () =
-  let res = D.User.list dbname in
-  res >>= function
+  match%lwt D.User.list ~dbname () with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, { rid = _; users; count }) ->
       let db =
@@ -45,8 +42,7 @@ let list_user_test _ () =
       return ()
 
 let get_user_test _ () =
-  let res = D.User.get dbname user_name in
-  res >>= function
+  match%lwt D.User.get ~dbname ~user_name () with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, { id; _ }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -54,8 +50,9 @@ let get_user_test _ () =
       return ()
 
 let replace_user_test _ () =
-  let res = D.User.replace dbname user_name replace_user_name in
-  res >>= function
+  match%lwt
+    D.User.replace ~dbname ~user_name ~new_user_name:replace_user_name ()
+  with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, { id; _ }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in

@@ -1071,7 +1071,7 @@ module Database (Auth_key : Auth_key) = struct
     let resource = Account.Users
     let headers = headers resource
 
-    let create ?timeout dbname user_name =
+    let create ?timeout ~dbname ~user_name () =
       let body =
         ({ id = user_name } : Json_converter_j.create_user)
         |> Json_converter_j.string_of_create_user |> Cohttp_lwt.Body.of_string
@@ -1097,7 +1097,7 @@ module Database (Auth_key : Auth_key) = struct
           in
           result_or_error_with_result 201 value resp body
 
-    let list ?timeout dbname =
+    let list ?timeout ~dbname () =
       let path = "/dbs/" ^ dbname ^ "/users" in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
       let header_path = "dbs/" ^ dbname in
@@ -1116,7 +1116,7 @@ module Database (Auth_key : Auth_key) = struct
           in
           result_or_error_with_result 200 value resp body
 
-    let get ?timeout dbname user_name =
+    let get ?timeout ~dbname ~user_name () =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
@@ -1135,7 +1135,7 @@ module Database (Auth_key : Auth_key) = struct
           in
           result_or_error_with_result 200 value resp body
 
-    let replace ?timeout dbname user_name new_user_name =
+    let replace ?timeout ~dbname ~user_name ~new_user_name () =
       let body =
         ({ id = new_user_name } : Json_converter_j.create_user)
         |> Json_converter_j.string_of_create_user |> Cohttp_lwt.Body.of_string
