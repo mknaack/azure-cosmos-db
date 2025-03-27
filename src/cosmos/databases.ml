@@ -717,6 +717,109 @@ module Database (Auth_key : Auth_key) = struct
             let%lwt () = Cohttp_lwt.Body.drain_body body in
             result
     end
+  end
+
+  module CollectionLabels = struct
+    let list ?timeout ~dbname () =
+      let uri =
+        Uri.make ~scheme:"https" ~host ~port:443
+          ~path:("dbs/" ^ dbname ^ "/colls")
+          ()
+      in
+      let response =
+        Cohttp_lwt_unix.Client.get
+          ~headers:(headers Account.Colls Utilities.Verb.Get ("dbs/" ^ dbname))
+          uri
+        >>= Lwt.return_some |> wrap_timeout timeout
+      in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+          let value body =
+            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            Lwt.return
+            @@ Json_converter_j.list_collections_of_string body_string
+          in
+          result_or_error_with_result 200 value resp body
+
+    let create ?(indexing_policy = None) ?(partition_key = None) ?timeout
+        ~dbname ~coll_name () =
+      let body =
+        ({ id = coll_name; indexing_policy; partition_key }
+          : Json_converter_j.create_collection)
+        |> Json_converter_j.string_of_create_collection
+        |> Cohttp_lwt.Body.of_string
+      in
+      let uri =
+        Uri.make ~scheme:"https" ~host ~port:443
+          ~path:("/dbs/" ^ dbname ^ "/colls")
+          ()
+      in
+      let headers =
+        json_headers Account.Colls Utilities.Verb.Post ("dbs/" ^ dbname)
+      in
+      let response =
+        Cohttp_lwt_unix.Client.post ~headers ~body uri
+        >>= Lwt.return_some |> wrap_timeout timeout
+      in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+          let value body =
+            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            Lwt.return_some (Json_converter_j.collection_of_string body_string)
+          in
+          result_or_error_with_result 201 value resp body
+
+    let get ?timeout ~dbname ~coll_name () =
+      let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name in
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let response =
+        Cohttp_lwt_unix.Client.get
+          ~headers:
+            (headers Account.Colls Utilities.Verb.Get
+               ("dbs/" ^ dbname ^ "/colls/" ^ coll_name))
+          uri
+        >>= Lwt.return_some |> wrap_timeout timeout
+      in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+          let code = get_code resp in
+          let headers = Response_headers.get_header resp in
+          if code = 200 then
+            let value body =
+              let%lwt body_string = Cohttp_lwt.Body.to_string body in
+              Lwt.return_some
+                (Json_converter_j.collection_of_string body_string)
+            in
+            result_or_error_with_result 200 value resp body
+          else Lwt.return_error (Azure_error (code, headers))
+
+    let create_if_not_exists ?(indexing_policy = None) ?(partition_key = None)
+        ?timeout ~dbname ~coll_name () =
+      let%lwt exists = get ?timeout ~dbname ~coll_name () in
+      match exists with
+      | Ok result -> Lwt.return (Result.ok result)
+      | Error (Azure_error (404, _)) ->
+          create ?timeout ~indexing_policy ~partition_key ~dbname ~coll_name ()
+      | Error x -> Lwt.return_error x
+
+    let delete ?timeout ~dbname ~coll_name () =
+      let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name in
+      let header_path = "dbs/" ^ dbname ^ "/colls/" ^ coll_name in
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let response =
+        Cohttp_lwt_unix.Client.delete
+          ~headers:(headers Account.Colls Utilities.Verb.Delete header_path)
+          uri
+        >>= Lwt.return_some |> wrap_timeout timeout
+      in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+          let%lwt () = Cohttp_lwt.Body.drain_body body in
+          Lwt.return (with_204_do resp)
 
     (* DocumentLabels module with labeled arguments for dbname and coll_name *)
     module DocumentLabels = struct

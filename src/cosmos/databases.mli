@@ -200,6 +200,46 @@ module Database (Auth_key : Auth_key) : sig
         Json_converter_t.query ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
     end
+  end
+
+  module CollectionLabels : sig
+    val list :
+      ?timeout:float ->
+      dbname:string ->
+      unit ->
+      (int * Json_converter_t.list_collections, cosmos_error) result Lwt.t
+
+    val create :
+      ?indexing_policy:Json_converter_t.indexing_policy option ->
+      ?partition_key:Json_converter_t.create_partition_key option ->
+      ?timeout:float ->
+      dbname:string ->
+      coll_name:string ->
+      unit ->
+      (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+
+    val create_if_not_exists :
+      ?indexing_policy:Json_converter_t.indexing_policy option ->
+      ?partition_key:Json_converter_t.create_partition_key option ->
+      ?timeout:float ->
+      dbname:string ->
+      coll_name:string ->
+      unit ->
+      (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+
+    val get :
+      ?timeout:float ->
+      dbname:string ->
+      coll_name:string ->
+      unit ->
+      (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+
+    val delete :
+      ?timeout:float ->
+      dbname:string ->
+      coll_name:string ->
+      unit ->
+      (int, cosmos_error) result Lwt.t
 
     module DocumentLabels : sig
       type indexing_directive = Include | Exclude
