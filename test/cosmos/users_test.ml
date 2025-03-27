@@ -65,8 +65,7 @@ let replace_user_test _ () =
       return ()
 
 let delete_user_test _ () =
-  let res = D.User.delete dbname replace_user_name in
-  res >>= function
+  match%lwt D.User.delete ~dbname ~user_name:replace_user_name () with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in

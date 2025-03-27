@@ -717,6 +717,354 @@ module Database (Auth_key : Auth_key) = struct
             let%lwt () = Cohttp_lwt.Body.drain_body body in
             result
     end
+
+    (* DocumentLabels module with labeled arguments for dbname and coll_name *)
+    module DocumentLabels = struct
+      type indexing_directive = Include | Exclude
+
+      let string_of_indexing_directive = function
+        | Include -> "Include"
+        | Exclude -> "Exclude"
+
+      let string_of_partition_key s = "[\"" ^ s ^ "\"]"
+
+      let apply_to_header_if_some name string_of values headers =
+        match values with
+        | None -> headers
+        | Some value -> Cohttp.Header.add headers name (string_of value)
+
+      let add_header name value header = Cohttp.Header.add header name value
+
+      let create ?is_upsert ?indexing_directive ?partition_key ?timeout ~dbname
+          ~coll_name content =
+        let body = Cohttp_lwt.Body.of_string content in
+        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let headers =
+          json_headers Account.Docs Utilities.Verb.Post
+            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+          |> apply_to_header_if_some "x-ms-documentdb-is-upsert"
+               Utility.string_of_bool is_upsert
+          |> apply_to_header_if_some "x-ms-indexing-directive"
+               string_of_indexing_directive indexing_directive
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
+               string_of_partition_key partition_key
+        in
+        let rec post retry () =
+          try%lwt
+            let post_respons =
+              Cohttp_lwt_unix.Client.post ~headers ~body uri
+              >>= Lwt.return_some |> wrap_timeout timeout
+            in
+            match%lwt post_respons with
+            | Some (resp, body) ->
+                let code = get_code resp in
+                let%lwt value =
+                  match code with
+                  | 200 ->
+                      let%lwt body_string = Cohttp_lwt.Body.to_string body in
+                      Lwt.return
+                        (Some
+                           (Json_converter_j.collection_of_string body_string))
+                  | _ -> Lwt.return None
+                in
+                let%lwt () = Cohttp_lwt.Body.drain_body body in
+                if code = 429 then
+                  let response_header = Response_headers.get_header resp in
+                  let milliseconds =
+                    Response_headers.x_ms_retry_after_ms response_header
+                    |> Option.value ~default:"0" |> int_of_string_opt
+                    |> Option.value ~default:0 |> Int.to_float
+                  in
+                  let%lwt () = Lwt_unix.sleep (milliseconds /. 1000.) in
+                  if retry > 0 then post (retry - 1) () else timeout_error
+                else Lwt.return (Result.ok (code, value))
+            | None -> timeout_error
+          with Unix.Unix_error (ECONNREFUSED, _, _) ->
+            if retry > 0 then
+              let () = Random.self_init () in
+              let sleep = Random.int 5 |> float_of_int in
+              let%lwt () = Lwt_unix.sleep sleep in
+              post (retry - 1) ()
+            else connection_error
+        in
+        post 10 ()
+
+      let create_multiple ?is_upsert ?indexing_directive ?partition_key ?timeout
+          ?(chunk_size = 100) ~dbname ~coll_name content_list =
+        let rec take_first n acc = function
+          | [] -> Lwt.return @@ acc
+          | x ->
+              let first, rest = Utilities.take_first n x in
+              let%lwt r =
+                Lwt_list.map_p
+                  (create ?is_upsert ?indexing_directive ?partition_key ?timeout
+                     ~dbname ~coll_name)
+                  first
+              in
+              take_first n (r @ acc) rest
+        in
+        take_first chunk_size [] content_list
+
+      type list_result_meta_data = {
+        rid : string;
+        self : string;
+        etag : string;
+        ts : int;
+        attachments : string;
+      }
+
+      let convert_to_list_result_meta_data json =
+        let open Yojson.Basic.Util in
+        try
+          let rid = json |> member "_rid" |> to_string in
+          let self = json |> member "_self" |> to_string in
+          let etag = json |> member "_etag" |> to_string in
+          let ts = json |> member "_ts" |> to_int in
+          let attachments = json |> member "_attachments" |> to_string in
+          Some { rid; self; etag; ts; attachments }
+        with Type_error _ -> None
+
+      type list_result = {
+        rid : string;
+        documents : (string * list_result_meta_data option) list;
+        count : int;
+      }
+
+      let convert_to_list_result value =
+        let open Yojson.Basic.Util in
+        let json = Yojson.Basic.from_string value in
+        let rid = json |> member "_rid" |> to_string in
+        let count = json |> member "_count" |> to_int in
+        let docs = json |> member "Documents" |> to_list in
+        let string_docs =
+          List.map
+            (fun x ->
+              (Yojson.Basic.to_string x, convert_to_list_result_meta_data x))
+            docs
+        in
+        { rid; documents = string_docs; count }
+
+      let list ?max_item_count ?continuation ?consistency_level ?session_token
+          ?a_im ?if_none_match ?partition_key_range_id ?timeout ~dbname
+          ~coll_name () =
+        let apply_a_im_to_header_if_some name values headers =
+          match values with
+          | None -> headers
+          | Some false -> headers
+          | Some true -> Cohttp.Header.add headers name "Incremental feed"
+        in
+        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let headers =
+          json_headers Account.Docs Utilities.Verb.Get
+            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+          |> apply_to_header_if_some "x-ms-max-item-count" string_of_int
+               max_item_count
+          |> apply_to_header_if_some "x-ms-continuation"
+               (fun x -> x)
+               continuation
+          |> apply_to_header_if_some "x-ms-consistency-level"
+               (fun x -> x)
+               consistency_level
+          |> apply_to_header_if_some "x-ms-session-token"
+               (fun x -> x)
+               session_token
+          |> apply_a_im_to_header_if_some "A-IM" a_im
+          |> apply_to_header_if_some "If-None-Match" (fun x -> x) if_none_match
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkeyrangeid"
+               (fun x -> x)
+               partition_key_range_id
+        in
+        let get_action =
+          Cohttp_lwt_unix.Client.get ~headers uri
+          >>= Lwt.return_some |> wrap_timeout timeout
+        in
+        match%lwt get_action with
+        | None -> timeout_error
+        | Some (resp, body) ->
+            let code = get_code resp in
+            let response_header = Response_headers.get_header resp in
+            let value body =
+              let%lwt body_string = Cohttp_lwt.Body.to_string body in
+              Lwt.return @@ convert_to_list_result body_string
+            in
+            let expected_code = 200 in
+            let result =
+              if code = expected_code then
+                let%lwt result = value body in
+                Lwt.return_ok (expected_code, response_header, result)
+              else Lwt.return_error (Azure_error (code, response_header))
+            in
+            let%lwt () = Cohttp_lwt.Body.drain_body body in
+            result
+
+      type consistency_level = Strong | Bounded | Session | Eventual
+
+      let string_of_consistency_level = function
+        | Strong -> "Strong"
+        | Bounded -> "Bounded"
+        | Session -> "Session"
+        | Eventual -> "Eventual"
+
+      let get ?if_none_match ?partition_key ?consistency_level ?session_token
+          ?timeout ~dbname ~coll_name doc_id =
+        let headers =
+          json_headers Account.Docs Utilities.Verb.Get
+            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+          |> apply_to_header_if_some "If-None-Match" (fun x -> x) if_none_match
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
+               (fun x -> x)
+               partition_key
+          |> apply_to_header_if_some "x-ms-consistency-level"
+               string_of_consistency_level consistency_level
+          |> apply_to_header_if_some "x-ms-session-token"
+               (fun x -> x)
+               session_token
+        in
+        let path =
+          "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
+        in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let response =
+          Cohttp_lwt_unix.Client.get ~headers uri
+          >>= Lwt.return_some |> wrap_timeout timeout
+        in
+        match%lwt response with
+        | Some (resp, body) ->
+            let code = get_code resp in
+            body |> Cohttp_lwt.Body.to_string >|= fun body ->
+            Result.ok (code, body)
+        | None -> timeout_error
+
+      let replace ?indexing_directive ?partition_key ?if_match ?timeout ~dbname
+          ~coll_name doc_id content =
+        let body = Cohttp_lwt.Body.of_string content in
+        let headers =
+          json_headers Account.Docs Utilities.Verb.Put
+            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+          |> apply_to_header_if_some "x-ms-indexing-directive"
+               string_of_indexing_directive indexing_directive
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
+               string_of_partition_key partition_key
+          |> apply_to_header_if_some "If-Match" (fun x -> x) if_match
+        in
+        let path =
+          "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
+        in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let response =
+          Cohttp_lwt_unix.Client.put ~headers ~body uri
+          >>= Lwt.return_some |> wrap_timeout timeout
+        in
+        match%lwt response with
+        | Some (resp, body) ->
+            let code = get_code resp in
+            Lwt.return_ok (code, body)
+        | None -> timeout_error
+
+      let delete ?partition_key ?timeout ~dbname ~coll_name doc_id =
+        let path =
+          Printf.sprintf "/dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
+        in
+        let headers =
+          Printf.sprintf "dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
+          |> headers Account.Docs Utilities.Verb.Delete
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
+               string_of_partition_key partition_key
+        in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let rec delete retry () =
+          let response =
+            Cohttp_lwt_unix.Client.delete ~headers uri
+            >>= Lwt.return_some |> wrap_timeout timeout
+          in
+          match%lwt response with
+          | Some (resp, body) ->
+              let code = get_code resp in
+              let%lwt () = Cohttp_lwt.Body.drain_body body in
+              if code = 429 then
+                let response_header = Response_headers.get_header resp in
+                let milliseconds =
+                  Response_headers.x_ms_retry_after_ms response_header
+                  |> Option.value ~default:"0" |> int_of_string_opt
+                  |> Option.value ~default:0 |> Int.to_float
+                in
+                let%lwt () = Lwt_unix.sleep (milliseconds /. 1000.) in
+                if retry > 0 then delete (retry - 1) () else timeout_error
+              else Lwt.return_ok code
+          | None -> timeout_error
+        in
+        delete 3 ()
+
+      let delete_multiple ?partition_key ?timeout ?(chunk_size = 100) ~dbname
+          ~coll_name doc_ids =
+        let rec take_first n acc = function
+          | [] -> Lwt.return @@ acc
+          | x ->
+              let first, rest = Utilities.take_first n x in
+              let%lwt r =
+                Lwt_list.map_p
+                  (delete ?partition_key ?timeout ~dbname ~coll_name)
+                  first
+              in
+              take_first n (r @ acc) rest
+        in
+        take_first chunk_size [] doc_ids
+
+      let query ?max_item_count ?continuation ?consistency_level ?session_token
+          ?is_partition ?partition_key ?timeout ~dbname ~coll_name query =
+        let headers s =
+          let h = headers Account.Docs Utilities.Verb.Post s in
+          Cohttp.Header.add h "x-ms-documentdb-isquery"
+            (Utility.string_of_bool true)
+          |> apply_to_header_if_some "x-ms-max-item-count" string_of_int
+               max_item_count
+          |> apply_to_header_if_some "x-ms-continuation"
+               (fun x -> x)
+               continuation
+          |> apply_to_header_if_some "x-ms-consistency-level"
+               (fun x -> x)
+               consistency_level
+          |> apply_to_header_if_some "x-ms-session-token"
+               (fun x -> x)
+               session_token
+          |> apply_to_header_if_some
+               "x-ms-documentdb-query-enablecrosspartition"
+               Utility.string_of_bool is_partition
+          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
+               string_of_partition_key partition_key
+          |> add_header "content-type" "application/query+json"
+        in
+        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
+        let headers = headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
+        let body =
+          Json_converter_j.string_of_query query |> Cohttp_lwt.Body.of_string
+        in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let response =
+          Cohttp_lwt_unix.Client.post ~headers ~body uri
+          >>= Lwt.return_some |> wrap_timeout timeout
+        in
+        match%lwt response with
+        | None -> timeout_error
+        | Some (resp, body) ->
+            let code = get_code resp in
+            let response_header = Response_headers.get_header resp in
+            let value () =
+              let%lwt body_string = Cohttp_lwt.Body.to_string body in
+              Lwt.return @@ convert_to_list_result body_string
+            in
+            let expected_code = 200 in
+            let result =
+              if code = expected_code then
+                let%lwt result = value () in
+                Lwt.return_ok (expected_code, response_header, result)
+              else Lwt.return_error (Azure_error (code, response_header))
+            in
+            let%lwt () = Cohttp_lwt.Body.drain_body body in
+            result
+    end
   end
 
   module User = struct
@@ -810,7 +1158,7 @@ module Database (Auth_key : Auth_key) = struct
           in
           result_or_error_with_result 200 value resp body
 
-    let delete ?timeout dbname user_name =
+    let delete ?timeout ~dbname ~user_name () =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in

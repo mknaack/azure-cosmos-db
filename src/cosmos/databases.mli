@@ -200,6 +200,116 @@ module Database (Auth_key : Auth_key) : sig
         Json_converter_t.query ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
     end
+
+    module DocumentLabels : sig
+      type indexing_directive = Include | Exclude
+
+      val create :
+        ?is_upsert:bool ->
+        ?indexing_directive:indexing_directive ->
+        ?partition_key:string ->
+        ?timeout:float ->
+        dbname:string ->
+        coll_name:string ->
+        string ->
+        (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+
+      val create_multiple :
+        ?is_upsert:bool ->
+        ?indexing_directive:indexing_directive ->
+        ?partition_key:string ->
+        ?timeout:float ->
+        ?chunk_size:int ->
+        dbname:string ->
+        coll_name:string ->
+        string list ->
+        (int * Json_converter_t.collection option, cosmos_error) result list
+        Lwt.t
+
+      type list_result_meta_data = {
+        rid : string;
+        self : string;
+        etag : string;
+        ts : int;
+        attachments : string;
+      }
+
+      type list_result = {
+        rid : string;
+        documents : (string * list_result_meta_data option) list;
+        count : int;
+      }
+
+      val list :
+        ?max_item_count:int ->
+        ?continuation:string ->
+        ?consistency_level:string ->
+        ?session_token:string ->
+        ?a_im:bool ->
+        ?if_none_match:string ->
+        ?partition_key_range_id:string ->
+        ?timeout:float ->
+        dbname:string ->
+        coll_name:string ->
+        unit ->
+        (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+
+      type consistency_level = Strong | Bounded | Session | Eventual
+
+      val string_of_consistency_level : consistency_level -> string
+
+      val get :
+        ?if_none_match:string ->
+        ?partition_key:string ->
+        ?consistency_level:consistency_level ->
+        ?session_token:string ->
+        ?timeout:float ->
+        dbname:string ->
+        coll_name:string ->
+        string ->
+        (int * string, cosmos_error) result Lwt.t
+
+      val replace :
+        ?indexing_directive:indexing_directive ->
+        ?partition_key:string ->
+        ?if_match:string ->
+        ?timeout:float ->
+        dbname:string ->
+        coll_name:string ->
+        string ->
+        string ->
+        (int * Cohttp_lwt.Body.t, cosmos_error) result Lwt.t
+
+      val delete :
+        ?partition_key:string ->
+        ?timeout:float ->
+        dbname:string ->
+        coll_name:string ->
+        string ->
+        (int, cosmos_error) result Lwt.t
+
+      val delete_multiple :
+        ?partition_key:string ->
+        ?timeout:float ->
+        ?chunk_size:int ->
+        dbname:string ->
+        coll_name:string ->
+        string list ->
+        (int, cosmos_error) result list Lwt.t
+
+      val query :
+        ?max_item_count:int ->
+        ?continuation:string ->
+        ?consistency_level:string ->
+        ?session_token:string ->
+        ?is_partition:bool ->
+        ?partition_key:string ->
+        ?timeout:float ->
+        dbname:string ->
+        coll_name:string ->
+        Json_converter_t.query ->
+        (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+    end
   end
 
   module User : sig
@@ -229,6 +339,10 @@ module Database (Auth_key : Auth_key) : sig
 
     (* [replace dbname oldname newname] will replace the user name from oldname to newname *)
     val delete :
-      ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      unit ->
+      (int, cosmos_error) result Lwt.t
   end
 end
