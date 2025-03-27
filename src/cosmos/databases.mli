@@ -208,6 +208,7 @@ module Database (Auth_key : Auth_key) : sig
       dbname:string ->
       unit ->
       (int * Json_converter_t.list_collections, cosmos_error) result Lwt.t
+    (** [list database_name] returns a list of collections in the database *)
 
     val create :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
@@ -217,6 +218,8 @@ module Database (Auth_key : Auth_key) : sig
       coll_name:string ->
       unit ->
       (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+    (** [create database_name collection_name] creates a collection in the
+        database [database_name] with name [collection_name] *)
 
     val create_if_not_exists :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
@@ -226,6 +229,9 @@ module Database (Auth_key : Auth_key) : sig
       coll_name:string ->
       unit ->
       (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+    (** [create_if_not_exists database_name collection_name] creates a
+        collection in the database [database_name] with name [collection_name]
+        if it not already exists. *)
 
     val get :
       ?timeout:float ->
@@ -233,6 +239,7 @@ module Database (Auth_key : Auth_key) : sig
       coll_name:string ->
       unit ->
       (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+    (** [get database_name collection_name] returns info about the collection *)
 
     val delete :
       ?timeout:float ->
@@ -240,6 +247,8 @@ module Database (Auth_key : Auth_key) : sig
       coll_name:string ->
       unit ->
       (int, cosmos_error) result Lwt.t
+    (** [delete database_name collection_name] deletes the collection
+        [collection_name] from the database [database_name] *)
 
     module DocumentLabels : sig
       type indexing_directive = Include | Exclude
@@ -253,6 +262,9 @@ module Database (Auth_key : Auth_key) : sig
         coll_name:string ->
         string ->
         (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+      (** [create database_name collection_name document] creates a document in
+          the collection [collection_name] in the database [database_name] with
+          content [document] *)
 
       val create_multiple :
         ?is_upsert:bool ->
@@ -265,6 +277,9 @@ module Database (Auth_key : Auth_key) : sig
         string list ->
         (int * Json_converter_t.collection option, cosmos_error) result list
         Lwt.t
+      (** [create_multiple database_name collection_name documents] creates a
+          list of documents in the collection [collection_name] in the database
+          [database_name] with content [documents] *)
 
       type list_result_meta_data = {
         rid : string;
@@ -293,6 +308,8 @@ module Database (Auth_key : Auth_key) : sig
         coll_name:string ->
         unit ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+      (** [list database_name collection_name] returns a list of documents in
+          the collection [collection_name] in the database [database_name] *)
 
       type consistency_level = Strong | Bounded | Session | Eventual
 
@@ -308,6 +325,9 @@ module Database (Auth_key : Auth_key) : sig
         coll_name:string ->
         string ->
         (int * string, cosmos_error) result Lwt.t
+      (** [get database_name collection_name document] returns the document
+          [document] in the collection [collection_name] in the database
+          [database_name] *)
 
       val replace :
         ?indexing_directive:indexing_directive ->
@@ -319,6 +339,9 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         (int * Cohttp_lwt.Body.t, cosmos_error) result Lwt.t
+      (** [replace database_name collection_name document] replaces the document
+          [document] in the collection [collection_name] in the database
+          [database_name] with content [document] *)
 
       val delete :
         ?partition_key:string ->
@@ -327,6 +350,9 @@ module Database (Auth_key : Auth_key) : sig
         coll_name:string ->
         string ->
         (int, cosmos_error) result Lwt.t
+      (** [delete database_name collection_name document] deletes the document
+          [document] in the collection [collection_name] in the database
+          [database_name] *)
 
       val delete_multiple :
         ?partition_key:string ->
@@ -336,6 +362,9 @@ module Database (Auth_key : Auth_key) : sig
         coll_name:string ->
         string list ->
         (int, cosmos_error) result list Lwt.t
+      (** [delete_multiple database_name collection_name documents] deletes the
+          list of documents [documents] in the collection [collection_name] in
+          the database [database_name] *)
 
       val query :
         ?max_item_count:int ->
@@ -349,6 +378,9 @@ module Database (Auth_key : Auth_key) : sig
         coll_name:string ->
         Json_converter_t.query ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+      (** [query database_name collection_name query] queries the collection
+          [collection_name] in the database [database_name] with query [query]
+      *)
     end
   end
 
@@ -359,12 +391,16 @@ module Database (Auth_key : Auth_key) : sig
       user_name:string ->
       unit ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
+    (** [create database_name user_name] creates a user in the database
+        [database_name] with name [user_name] *)
 
     val list :
       ?timeout:float ->
       dbname:string ->
       unit ->
       (int * Json_converter_t.list_users, cosmos_error) result Lwt.t
+    (** [list database_name] returns a list of users in the database
+        [database_name] *)
 
     val get :
       ?timeout:float ->
@@ -372,6 +408,8 @@ module Database (Auth_key : Auth_key) : sig
       user_name:string ->
       unit ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
+    (** [get database_name user_name] returns the user [user_name] in the
+        database [database_name] *)
 
     val replace :
       ?timeout:float ->
@@ -380,13 +418,16 @@ module Database (Auth_key : Auth_key) : sig
       new_user_name:string ->
       unit ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
+    (** [replace database_name user_name new_user_name] will replace the user
+        name from [user_name] to [new_user_name] *)
 
-    (* [replace dbname oldname newname] will replace the user name from oldname to newname *)
     val delete :
       ?timeout:float ->
       dbname:string ->
       user_name:string ->
       unit ->
       (int, cosmos_error) result Lwt.t
+    (** [delete database_name user_name] deletes the user [user_name] in the
+        database [database_name] *)
   end
 end
