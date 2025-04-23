@@ -43,13 +43,15 @@ module Database (Auth_key : Auth_key) : sig
     ?timeout:float ->
     string ->
     (int * Json_converter_t.database option, cosmos_error) result Lwt.t
-  (** [create database_name] creates a database in Cosmos with name database_name. *)
+  (** [create database_name] creates a database in Cosmos with name
+      database_name. *)
 
   val create_if_not_exists :
     ?timeout:float ->
     string ->
     (int * Json_converter_t.database option, cosmos_error) result Lwt.t
-  (** [create_if_not_exists database_name] creates a database in Cosmos with name database_name if it not already exists. *)
+  (** [create_if_not_exists database_name] creates a database in Cosmos with
+      name database_name if it not already exists. *)
 
   val get :
     ?timeout:float ->
