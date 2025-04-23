@@ -83,10 +83,11 @@ let ids = range 0 1000
 let create_a_lot_of_documents partition_key () =
   let start_time = Unix.time () in
   let%lwt () = Lwt_io.print "create_a_lot_of_documents " in
-  let values = List.map create_value ids in
+  let values =
+    List.map (fun content -> (partition_key, update_value content)) ids
+  in
   let%lwt result_list =
-    D.Collection.Document.create_multiple ?partition_key dbname collection_name
-      values
+    D.Collection.Document.create_multiple dbname collection_name values
   in
   let check expected_code = function
     | Result.Ok (code, _) -> code = expected_code
@@ -108,10 +109,12 @@ let create_a_lot_of_documents partition_key () =
 let update_a_lot_of_documents_with_upsert partition_key () =
   let start_time = Unix.time () in
   let%lwt () = Lwt_io.print "update_a_lot_of_documents_with_upsert " in
-  let values = List.map update_value ids in
+  let values =
+    List.map (fun content -> (partition_key, update_value content)) ids
+  in
   let%lwt result_list =
-    D.Collection.Document.create_multiple ?partition_key ~is_upsert:true dbname
-      collection_name values
+    D.Collection.Document.create_multiple ~is_upsert:true dbname collection_name
+      values
   in
   let check expected_code = function
     | Result.Ok (code, _) ->

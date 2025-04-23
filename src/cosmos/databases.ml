@@ -441,7 +441,7 @@ module Database (Auth_key : Auth_key) = struct
         in
         post 10 ()
 
-      let create_multiple ?is_upsert ?indexing_directive ?partition_key ?timeout
+      let create_multiple ?is_upsert ?indexing_directive ?timeout
           ?(chunk_size = 100) dbname coll_name content_list =
         let rec take_first n acc = function
           | [] -> Lwt.return @@ acc
@@ -449,8 +449,9 @@ module Database (Auth_key : Auth_key) = struct
               let first, rest = Utilities.take_first n x in
               let%lwt r =
                 Lwt_list.map_p
-                  (create ?is_upsert ?indexing_directive ?partition_key ?timeout
-                     dbname coll_name)
+                  (fun (partition_key, content) ->
+                    create ?is_upsert ?indexing_directive ?partition_key
+                      ?timeout dbname coll_name content)
                   first
               in
               take_first n (r @ acc) rest

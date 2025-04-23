@@ -109,12 +109,11 @@ module Database (Auth_key : Auth_key) : sig
       val create_multiple :
         ?is_upsert:bool ->
         ?indexing_directive:indexing_directive ->
-        ?partition_key:string ->
         ?timeout:float ->
         ?chunk_size:int ->
         string ->
         string ->
-        string list ->
+        (string option * string) list ->
         (int * Json_converter_t.collection option, cosmos_error) result list
         Lwt.t
 
