@@ -5,7 +5,7 @@
  (libraries
   base64
   yojson
-  atdgen
+  atdgen-runtime
   uri
   str
   cryptokit

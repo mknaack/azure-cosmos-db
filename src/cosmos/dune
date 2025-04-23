@@ -6,7 +6,7 @@
   yojson
   base64
   uri
-  atdgen
+  atdgen-runtime
   cohttp
   cohttp-lwt-unix
   cryptokit
