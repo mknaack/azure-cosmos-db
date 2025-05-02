@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: mknaack/azure-cosmos-db-base:0.9
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup environment
+        run: eval $(opam config env)
+        
+      - name: Run tests with coverage
+        run: dune runtest --instrument-with bisect_ppx --force
+        
+      - name: Generate coverage report
+        run: bisect-ppx-report coveralls coverage.json
+        
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.json
+          token: ${{ secrets.CODECOV_TOKEN }}
