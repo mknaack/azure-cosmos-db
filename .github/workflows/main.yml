@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: mknaack/azure-cosmos-db-base:0.9
+      options: --user root
     
     steps:
       - name: Checkout code
