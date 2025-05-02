@@ -21,12 +21,10 @@ jobs:
 
       - run: opam install . --deps-only --with-test
 
-      - name: Run tests with coverage
-        run: dune runtest --instrument-with bisect_ppx --force
-        
-      - name: Generate coverage report
-        run: bisect-ppx-report coveralls coverage.json
-        
+      - run: dune runtest --instrument-with bisect_ppx --force
+
+      - run: bisect-ppx-report coveralls coverage.json
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
