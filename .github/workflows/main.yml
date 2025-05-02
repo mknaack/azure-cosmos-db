@@ -7,19 +7,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
-    container:
-      image: mknaack/azure-cosmos-db-base:0.9
-      options: --user opam
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup environment
-        run: eval $(opam config env)
-        
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+
+      - run: opam install . --deps-only --with-test
+
       - name: Run tests with coverage
         run: dune runtest --instrument-with bisect_ppx --force
         
