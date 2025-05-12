@@ -9,12 +9,14 @@ on:
 jobs:
   builds:
     strategy:
+      fail-fast: false
+      matrix:
         os:
           - macos-latest
           - ubuntu-latest
         ocaml-compiler:
-          - "5.1"
-          - "5.2"
+          - "4.8"
+          - "5.3"
         allow-prerelease-opam:
           - true
         opam-repositories:
