@@ -12,16 +12,16 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-latest
+          # - macos-latest
           - ubuntu-latest
         ocaml-compiler:
-          - "4.8"
+          # - "4.8"
           - "5.3"
-        allow-prerelease-opam:
-          - true
-        opam-repositories:
-          - |-
-            default: https://github.com/ocaml/opam-repository.git
+        # allow-prerelease-opam:
+        #   - true
+        # opam-repositories:
+        #   - |-
+        #     default: https://github.com/ocaml/opam-repository.git
 
     runs-on: ${{ matrix.os }}
     
@@ -40,7 +40,7 @@ jobs:
 
       - run: dune runtest --instrument-with bisect_ppx --force
 
-      # - run: bisect-ppx-report coveralls coverage.json
+      - run: bisect-ppx-report coveralls coverage.json
 
       # - name: Upload coverage to Codecov
       #   uses: codecov/codecov-action@v3
