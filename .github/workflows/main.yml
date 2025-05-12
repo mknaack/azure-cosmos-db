@@ -33,8 +33,8 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          allow-prerelease-opam: ${{ matrix.allow-prerelease-opam }}
-          opam-repositories: ${{ matrix.opam-repositories }}
+          # allow-prerelease-opam: ${{ matrix.allow-prerelease-opam }}
+          # opam-repositories: ${{ matrix.opam-repositories }}
 
       - run: opam install . --deps-only --with-test
 
