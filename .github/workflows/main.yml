@@ -17,6 +17,7 @@ jobs:
           - "5.3"
 
     runs-on: ${{ matrix.os }}
+    environment: BuildAndTest
     
     steps:
       - name: Checkout code
