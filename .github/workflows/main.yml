@@ -29,9 +29,14 @@ jobs:
 
       - run: opam install . --deps-only --with-test
 
-      - run: opam exec -- dune runtest --instrument-with bisect_ppx --force
+      - name: Run tests
+        env:
+          AZURE_COSMOS_KEY: ${{ secrets.AZURE_COSMOS_KEY }}
+          AZURE_COSMOS_ENDPOINT: ${{ vars.AZURE_COSMOS_ENDPOINT }}
+        run: opam exec -- dune runtest --instrument-with bisect_ppx --force
 
       - if: ${{ matrix.ocaml-compiler == '5.3' }}
+        name: Upload coverage to coveralls
         env:
           COVERALLS_REPO_TOKEN: ${{secrets.GITHUB_TOKEN}}
           PULL_REQUEST_NUMBER: ${{github.event.number}}
