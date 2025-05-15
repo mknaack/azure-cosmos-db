@@ -33,7 +33,10 @@ jobs:
         env:
           AZURE_COSMOS_KEY: ${{ secrets.AZURE_COSMOS_KEY }}
           AZURE_COSMOS_ENDPOINT: ${{ vars.AZURE_COSMOS_ENDPOINT }}
-        run: opam exec -- dune runtest --instrument-with bisect_ppx --force
+        run: |
+          echo "AZURE_COSMOS_KEY=$AZURE_COSMOS_KEY"
+          echo "AZURE_COSMOS_ENDPOINT=$AZURE_COSMOS_ENDPOINT"
+          opam exec -- dune runtest --instrument-with bisect_ppx --force
 
       - if: ${{ matrix.ocaml-compiler == '5.3' }}
         name: Upload coverage to coveralls
