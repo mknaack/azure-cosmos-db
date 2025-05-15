@@ -45,8 +45,9 @@ jobs:
         env:
           COVERALLS_REPO_TOKEN: ${{secrets.GITHUB_TOKEN}}
           PULL_REQUEST_NUMBER: ${{github.event.number}}
-        run: opam exec -- bisect-ppx-report coveralls coverage.json
-        run: opam exec -- bisect-ppx-report send-to coveralls
+        run: |
+          opam exec -- bisect-ppx-report coveralls coverage.json
+          opam exec -- bisect-ppx-report send-to coveralls
       # - name: Upload coverage to Codecov
       #   uses: codecov/codecov-action@v5
       #   with:
