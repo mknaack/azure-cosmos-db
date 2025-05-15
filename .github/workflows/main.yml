@@ -17,7 +17,6 @@ jobs:
           - "5.3"
 
     runs-on: ${{ matrix.os }}
-    environment: BuildAndTest
     
     steps:
       - name: Checkout code
@@ -34,14 +33,7 @@ jobs:
         env:
           AZURE_COSMOS_KEY: ${{secrets.AZURE_COSMOS_KEY}}
           AZURE_COSMOS_ENDPOINT: ${{vars.AZURE_COSMOS_ENDPOINT}}
-        run: |
-          echo "AZURE_COSMOS_KEY=$AZURE_COSMOS_KEY"
-          echo "AZURE_COSMOS_ENDPOINT=$AZURE_COSMOS_ENDPOINT"
-          echo "AZURE_COSMOS_KEY=${{secrets.AZURE_COSMOS_KEY}}"
-          echo "AZURE_COSMOS_ENDPOINT=${{vars.AZURE_COSMOS_ENDPOINT}}"
-          if [ -z "$AZURE_COSMOS_KEY" ]; then echo "AZURE_COSMOS_KEY is not set"; else echo "AZURE_COSMOS_KEY is set"; fi
-          if [ -z "$AZURE_COSMOS_ENDPOINT" ]; then echo "AZURE_COSMOS_ENDPOINT is not set"; else echo "AZURE_COSMOS_ENDPOINT is set"; fi
-          opam exec -- dune runtest --instrument-with bisect_ppx --force
+        run: opam exec -- dune runtest --instrument-with bisect_ppx --force
 
       - if: ${{ matrix.ocaml-compiler == '5.3' }}
         name: Upload coverage to coveralls
