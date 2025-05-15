@@ -1,4 +1,4 @@
-[![codecov](https://codecov.io/bb/knaack/azure-cosmos-db/graph/badge.svg?token=G01ACFZDI9)](https://codecov.io/bb/knaack/azure-cosmos-db)
+[![Coverage Status](https://coveralls.io/repos/github/mknaack/azure-cosmos-db/badge.svg?branch=actions)](https://coveralls.io/github/mknaack/azure-cosmos-db?branch=actions)
 
 Azure cosmos db
 ===============
