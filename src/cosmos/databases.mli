@@ -1,9 +1,9 @@
 module type Auth_key = sig
   val master_key : string
-  (** Key value of cosmos container *)
+  (** Key value of Cosmos DB container *)
 
   val endpoint : string
-  (** Name of the endpoint of cosmos container *)
+  (** Name of the endpoint of Cosmos DB container *)
 end
 
 module Response_headers : sig
@@ -32,6 +32,7 @@ type cosmos_error =
 
 module Database (_ : Auth_key) : sig
   val get_code : Cohttp.Response.t -> int
+  (** [get_code response] extracts the status code from a Cohttp response *)
 
   val list_databases :
     ?timeout:float ->
@@ -67,6 +68,7 @@ module Database (_ : Auth_key) : sig
       ?timeout:float ->
       string ->
       (int * Json_converter_t.list_collections, cosmos_error) result Lwt.t
+    (** [list ?timeout database_name] returns a list of collections in the specified database *)
 
     val create :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
@@ -75,6 +77,7 @@ module Database (_ : Auth_key) : sig
       string ->
       string ->
       (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+    (** [create ?indexing_policy ?partition_key ?timeout database_name collection_name] creates a collection in the specified database *)
 
     val create_if_not_exists :
       ?indexing_policy:Json_converter_t.indexing_policy option ->
@@ -83,18 +86,21 @@ module Database (_ : Auth_key) : sig
       string ->
       string ->
       (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+    (** [create_if_not_exists ?indexing_policy ?partition_key ?timeout database_name collection_name] creates a collection in the specified database if it doesn't already exist *)
 
     val get :
       ?timeout:float ->
       string ->
       string ->
       (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+    (** [get ?timeout database_name collection_name] returns information about the specified collection *)
 
     val delete :
       ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
 
     module Document : sig
       type indexing_directive = Include | Exclude
+      (** Directive to include or exclude a document from indexing *)
 
       val create :
         ?is_upsert:bool ->
@@ -105,6 +111,7 @@ module Database (_ : Auth_key) : sig
         string ->
         string ->
         (int * Json_converter_t.collection option, cosmos_error) result Lwt.t
+      (** [create ?is_upsert ?indexing_directive ?partition_key ?timeout database_name collection_name document_json] creates a document in the specified collection *)
 
       val create_multiple :
         ?is_upsert:bool ->
@@ -116,19 +123,28 @@ module Database (_ : Auth_key) : sig
         (string option * string) list ->
         (int * Json_converter_t.collection option, cosmos_error) result list
         Lwt.t
+      (** [create_multiple ?is_upsert ?indexing_directive ?timeout ?chunk_size database_name collection_name documents] creates multiple documents in the specified collection *)
 
       type list_result_meta_data = {
         rid : string;
+        (** Resource ID *)
         self : string;
+        (** Self link *)
         etag : string;
+        (** Entity tag for optimistic concurrency *)
         ts : int;
+        (** Timestamp *)
         attachments : string;
+        (** Attachments link *)
       }
 
       type list_result = {
         rid : string;
+        (** Resource ID *)
         documents : (string * list_result_meta_data option) list;
+        (** List of documents with their metadata *)
         count : int;
+        (** Number of documents *)
       }
 
       val list :
@@ -143,10 +159,13 @@ module Database (_ : Auth_key) : sig
         string ->
         string ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+      (** [list ?max_item_count ?continuation ?consistency_level ?session_token ?a_im ?if_none_match ?partition_key_range_id ?timeout database_name collection_name] lists documents in the specified collection *)
 
       type consistency_level = Strong | Bounded | Session | Eventual
+      (** Consistency levels for Cosmos DB operations *)
 
       val string_of_consistency_level : consistency_level -> string
+      (** [string_of_consistency_level level] converts a consistency level to its string representation *)
 
       val get :
         ?if_none_match:string ->
@@ -158,6 +177,7 @@ module Database (_ : Auth_key) : sig
         string ->
         string ->
         (int * string, cosmos_error) result Lwt.t
+      (** [get ?if_none_match ?partition_key ?consistency_level ?session_token ?timeout database_name collection_name document_id] retrieves a document from the specified collection *)
 
       val replace :
         ?indexing_directive:indexing_directive ->
@@ -169,6 +189,7 @@ module Database (_ : Auth_key) : sig
         string ->
         string ->
         (int * Cohttp_lwt.Body.t, cosmos_error) result Lwt.t
+      (** [replace ?indexing_directive ?partition_key ?if_match ?timeout database_name collection_name document_id document_json] replaces a document in the specified collection *)
 
       val delete :
         ?partition_key:string ->
@@ -177,6 +198,7 @@ module Database (_ : Auth_key) : sig
         string ->
         string ->
         (int, cosmos_error) result Lwt.t
+      (** [delete ?partition_key ?timeout database_name collection_name document_id] deletes a document from the specified collection *)
 
       val delete_multiple :
         ?partition_key:string ->
@@ -186,6 +208,7 @@ module Database (_ : Auth_key) : sig
         string ->
         string list ->
         (int, cosmos_error) result list Lwt.t
+      (** [delete_multiple ?partition_key ?timeout ?chunk_size database_name collection_name document_ids] deletes multiple documents from the specified collection *)
 
       val query :
         ?max_item_count:int ->
@@ -199,6 +222,7 @@ module Database (_ : Auth_key) : sig
         string ->
         Json_converter_t.query ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+      (** [query ?max_item_count ?continuation ?consistency_level ?session_token ?is_partition ?partition_key ?timeout database_name collection_name query] executes a query against the specified collection *)
     end
   end
 
@@ -208,17 +232,20 @@ module Database (_ : Auth_key) : sig
       string ->
       string ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
+    (** [create ?timeout database_name user_name] creates a user in the specified database *)
 
     val list :
       ?timeout:float ->
       string ->
       (int * Json_converter_t.list_users, cosmos_error) result Lwt.t
+    (** [list ?timeout database_name] lists all users in the specified database *)
 
     val get :
       ?timeout:float ->
       string ->
       string ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
+    (** [get ?timeout database_name user_name] retrieves information about the specified user *)
 
     val replace :
       ?timeout:float ->
@@ -226,10 +253,11 @@ module Database (_ : Auth_key) : sig
       string ->
       string ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
+    (** [replace ?timeout database_name old_name new_name] replaces the user name from old_name to new_name *)
 
-    (* [replace dbname oldname newname] will replace the user name from oldname to newname *)
     val delete :
       ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
+    (** [delete ?timeout database_name user_name] deletes the specified user from the database *)
   end
 
   module Permission : sig
