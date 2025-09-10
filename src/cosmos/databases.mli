@@ -231,4 +231,13 @@ module Database (Auth_key : Auth_key) : sig
     val delete :
       ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
   end
+
+  module Permission : sig
+    val create :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      unit ->
+      (int * Json_converter_t.user, cosmos_error) result Lwt.t
+  end
 end

@@ -11,8 +11,7 @@ module type Auth_key = sig
 end
 
 module type Account = sig
-  (* type verb = Get | Post | Put | Delete *)
-  type resource = Dbs | Colls | Docs | Users
+  type resource = Dbs | Colls | Docs | Users | Permissions
 
   val authorization :
     Utilities.Verb.t -> resource -> Utilities.Ms_time.t -> string -> string
@@ -21,13 +20,14 @@ module type Account = sig
 end
 
 module Auth (Keys : Auth_key) : Account = struct
-  type resource = Dbs | Colls | Docs | Users
+  type resource = Dbs | Colls | Docs | Users | Permissions
 
   let string_of_resource = function
     | Dbs -> "dbs"
     | Colls -> "colls"
     | Docs -> "docs"
     | Users -> "users"
+    | Permissions -> "permissions"
 
   let authorization verb resource date db_name =
     (* "type=master&ver=1.0&sig=" ^ key *)
@@ -825,5 +825,35 @@ module Database (Auth_key : Auth_key) = struct
       | Some (resp, body) ->
           let%lwt () = Cohttp_lwt.Body.drain_body body in
           Lwt.return (result_or_error 204 resp)
+  end
+
+  module Permission = struct
+    let resource = Account.Users
+
+    let create ?timeout ~dbname ~user_name () =
+      let body =
+        ({ id = user_name } : Json_converter_j.create_user)
+        |> Json_converter_j.string_of_create_user |> Cohttp_lwt.Body.of_string
+      in
+      let uri =
+        Uri.make ~scheme:"https" ~host ~port:443
+          ~path:("/dbs/" ^ dbname ^ "/permissions")
+          ()
+      in
+      let headers =
+        json_headers resource Utilities.Verb.Post ("dbs/" ^ dbname)
+      in
+      let response =
+        Cohttp_lwt_unix.Client.post ~headers ~body uri
+        >>= Lwt.return_some |> wrap_timeout timeout
+      in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+          let value body =
+            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            Lwt.return @@ Json_converter_j.user_of_string body_string
+          in
+          result_or_error_with_result 201 value resp body
   end
 end

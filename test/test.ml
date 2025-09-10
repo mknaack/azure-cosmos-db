@@ -7,5 +7,6 @@ let () =
          ("integration test", Integration_test.test);
          ("partition key test", Integration_test.test_partition_key);
          ("user test", Users_test.test);
+         ("permission test", Permission_test.test);
          ("utility test", Test_utilities.test);
        ]
