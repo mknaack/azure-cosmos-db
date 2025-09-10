@@ -239,5 +239,7 @@ module Database (Auth_key : Auth_key) : sig
       user_name:string ->
       unit ->
       (int * Json_converter_t.user, cosmos_error) result Lwt.t
+    (** [create dbname user_name] will create a permission for the user with
+        name user_name in the database with name dbname *)
   end
 end
