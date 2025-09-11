@@ -233,13 +233,26 @@ module Database (Auth_key : Auth_key) : sig
   end
 
   module Permission : sig
+    type permission_mode = Read | All
+
     val create :
       ?timeout:float ->
       dbname:string ->
       user_name:string ->
-      unit ->
-      (int * Json_converter_t.user, cosmos_error) result Lwt.t
-    (** [create dbname user_name] will create a permission for the user with
+      coll_name:string ->
+      permission_mode ->
+      permission_name:string ->
+      (int * Json_converter_t.permission, cosmos_error) result Lwt.t
+    (** [create dbname user_name ()] will create a permission for the user with
         name user_name in the database with name dbname *)
+
+    val list :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      unit ->
+      (int * Json_converter_t.list_permissions, cosmos_error) result Lwt.t
+    (** [list dbname user_name ()] returns a list of all permissions for the
+        user with name user_name in the database with name dbname *)
   end
 end

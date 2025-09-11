@@ -828,20 +828,34 @@ module Database (Auth_key : Auth_key) = struct
   end
 
   module Permission = struct
-    let resource = Account.Users
+    let resource = Account.Permissions
+    let headers = headers resource
 
-    let create ?timeout ~dbname ~user_name () =
+    type permission_mode = Read | All
+
+    let string_of_permission_mode = function Read -> "Read" | All -> "All"
+
+    let create ?timeout ~dbname ~user_name ~coll_name permission_mode
+        ~permission_name =
+      let permission_mode = string_of_permission_mode permission_mode in
+      let resource_string =
+        Printf.sprintf "/dbs/%s/colls/%s" dbname coll_name
+      in
       let body =
-        ({ id = user_name } : Json_converter_j.create_user)
-        |> Json_converter_j.string_of_create_user |> Cohttp_lwt.Body.of_string
+        ({ id = permission_name; permission_mode; resource = resource_string }
+          : Json_converter_j.create_permission)
+        |> Json_converter_j.string_of_create_permission
+        |> Cohttp_lwt.Body.of_string
       in
       let uri =
-        Uri.make ~scheme:"https" ~host ~port:443
-          ~path:("/dbs/" ^ dbname ^ "/permissions")
-          ()
+        let path =
+          Printf.sprintf "/dbs/%s/users/%s/permissions" dbname user_name
+        in
+        Uri.make ~scheme:"https" ~host ~port:443 ~path ()
       in
       let headers =
-        json_headers resource Utilities.Verb.Post ("dbs/" ^ dbname)
+        json_headers resource Utilities.Verb.Post
+          (Printf.sprintf "dbs/%s/users/%s" dbname user_name)
       in
       let response =
         Cohttp_lwt_unix.Client.post ~headers ~body uri
@@ -852,8 +866,31 @@ module Database (Auth_key : Auth_key) = struct
       | Some (resp, body) ->
           let value body =
             let%lwt body_string = Cohttp_lwt.Body.to_string body in
-            Lwt.return @@ Json_converter_j.user_of_string body_string
+            Lwt.return @@ Json_converter_j.permission_of_string body_string
           in
           result_or_error_with_result 201 value resp body
+
+    let list ?timeout ~dbname ~user_name () =
+      let path =
+        Printf.sprintf "/dbs/%s/users/%s/permissions" dbname user_name
+      in
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let header_path = Printf.sprintf "dbs/%s/users/%s" dbname user_name in
+
+      let response =
+        Cohttp_lwt_unix.Client.get
+          ~headers:(headers Utilities.Verb.Get header_path)
+          uri
+        >>= Lwt.return_some |> wrap_timeout timeout
+      in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+          let value body =
+            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            Lwt.return
+            @@ Json_converter_j.list_permissions_of_string body_string
+          in
+          result_or_error_with_result 200 value resp body
   end
 end
