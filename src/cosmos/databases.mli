@@ -254,5 +254,16 @@ module Database (Auth_key : Auth_key) : sig
       (int * Json_converter_t.list_permissions, cosmos_error) result Lwt.t
     (** [list dbname user_name ()] returns a list of all permissions for the
         user with name user_name in the database with name dbname *)
+
+    val get :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      permission_name:string ->
+      unit ->
+      (int * Json_converter_t.permission, cosmos_error) result Lwt.t
+    (** [get dbname user_name permission_name ()] returns the permission with
+        name permission_name for the user with name user_name in the database
+        with name dbname *)
   end
 end

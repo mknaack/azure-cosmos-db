@@ -64,6 +64,17 @@ let create_permission_test _ () =
       in
       Lwt.return_unit
 
+let get_permission_test _ () =
+  let%lwt res = D.Permission.get ~dbname ~user_name ~permission_name () in
+  match res with
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, { id; token = _; _ }) ->
+      let _ = Alcotest.(check int) "Status same int" 200 code in
+      let _ =
+        Alcotest.(check string) "Create name is correct" permission_name id
+      in
+      Lwt.return_unit
+
 let list_permission_test _ () =
   let%lwt res = D.Permission.list ~dbname ~user_name () in
   match res with
@@ -92,8 +103,8 @@ let user_tests =
     Alcotest_lwt.test_case "create user" `Slow create_user_test;
     Alcotest_lwt.test_case "create permissions" `Slow create_permission_test;
     Alcotest_lwt.test_case "list permissions" `Slow list_permission_test;
-    (*      Alcotest_lwt.test_case "get user" `Slow get_user_test;
-          Alcotest_lwt.test_case "replace user" `Slow replace_user_test;
+    Alcotest_lwt.test_case "get user" `Slow get_permission_test;
+    (*      Alcotest_lwt.test_case "replace user" `Slow replace_user_test;
           Alcotest_lwt.test_case "delete user" `Slow delete_user_test;*)
     Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
   ]
