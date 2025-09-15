@@ -75,6 +75,17 @@ let get_permission_test _ () =
       in
       Lwt.return_unit
 
+let get_permission_timeout_test _ () =
+  let%lwt res =
+    D.Permission.get ~timeout:0.0 ~dbname ~user_name ~permission_name ()
+  in
+  match res with
+  | Result.Error Timeout_error ->
+      Alcotest.(check unit) "Timeout error" () ();
+      Lwt.return_unit
+  | Result.Error _ -> Alcotest.fail "Should fail with timeout error"
+  | Result.Ok _ -> Alcotest.fail "Should fail with timeout error"
+
 let list_permission_test _ () =
   let%lwt res = D.Permission.list ~dbname ~user_name () in
   match res with
@@ -87,6 +98,15 @@ let list_permission_test _ () =
       let permissions_length = List.length permissions in
       let _ = Alcotest.(check int) "Permissions length" 1 permissions_length in
       Lwt.return_unit
+
+let list_permission_timeout_test _ () =
+  let%lwt res = D.Permission.list ~timeout:0.0 ~dbname ~user_name () in
+  match res with
+  | Result.Error Timeout_error ->
+      Alcotest.(check unit) "Timeout error" () ();
+      Lwt.return_unit
+  | Result.Error _ -> Alcotest.fail "Should fail with timeout error"
+  | Result.Ok _ -> Alcotest.fail "Should fail with timeout error"
 
 let delete_database_test _ () =
   let%lwt res = D.delete dbname in
@@ -104,6 +124,9 @@ let user_tests =
     Alcotest_lwt.test_case "create permissions" `Slow create_permission_test;
     Alcotest_lwt.test_case "list permissions" `Slow list_permission_test;
     Alcotest_lwt.test_case "get user" `Slow get_permission_test;
+    Alcotest_lwt.test_case "get user timeout" `Slow get_permission_timeout_test;
+    Alcotest_lwt.test_case "list permissions timeout" `Slow
+      list_permission_timeout_test;
     (*      Alcotest_lwt.test_case "replace user" `Slow replace_user_test;
           Alcotest_lwt.test_case "delete user" `Slow delete_user_test;*)
     Alcotest_lwt.test_case "delete database" `Slow delete_database_test;
