@@ -275,5 +275,16 @@ module Database (Auth_key : Auth_key) : sig
       permission_name:string ->
       (int * Json_converter_t.permission, cosmos_error) result Lwt.t
     (** [replace dbname user_name ()] returns the updated permission *)
+
+    val delete :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      permission_name:string ->
+      unit ->
+      (int, cosmos_error) result Lwt.t
+    (** [delete dbname user_name permission_name ()] deletes the permission with
+        name permission_name for the user with name user_name in the database
+        with name dbname *)
   end
 end
