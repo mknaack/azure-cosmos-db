@@ -917,5 +917,41 @@ module Database (Auth_key : Auth_key) = struct
             Lwt.return @@ Json_converter_j.permission_of_string body_string
           in
           result_or_error_with_result 200 value resp body
+
+    let replace ?timeout ~dbname ~user_name ~coll_name permission_mode
+        ~permission_name =
+      let permission_mode = string_of_permission_mode permission_mode in
+      let resource_string =
+        Printf.sprintf "/dbs/%s/colls/%s" dbname coll_name
+      in
+      let body =
+        ({ id = permission_name; permission_mode; resource = resource_string }
+          : Json_converter_j.create_permission)
+        |> Json_converter_j.string_of_create_permission
+        |> Cohttp_lwt.Body.of_string
+      in
+      let path =
+        Printf.sprintf "/dbs/%s/users/%s/permissions/%s" dbname user_name
+          permission_name
+      in
+      let header_path =
+        Printf.sprintf "dbs/%s/users/%s/permissions/%s" dbname user_name
+          permission_name
+      in
+      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let response =
+        Cohttp_lwt_unix.Client.put
+          ~headers:(headers Utilities.Verb.Put header_path)
+          ~body uri
+        >>= Lwt.return_some |> wrap_timeout timeout
+      in
+      match%lwt response with
+      | None -> timeout_error
+      | Some (resp, body) ->
+          let value body =
+            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            Lwt.return @@ Json_converter_j.permission_of_string body_string
+          in
+          result_or_error_with_result 200 value resp body
   end
 end

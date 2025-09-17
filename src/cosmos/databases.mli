@@ -265,5 +265,15 @@ module Database (Auth_key : Auth_key) : sig
     (** [get dbname user_name permission_name ()] returns the permission with
         name permission_name for the user with name user_name in the database
         with name dbname *)
+
+    val replace :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      coll_name:string ->
+      permission_mode ->
+      permission_name:string ->
+      (int * Json_converter_t.permission, cosmos_error) result Lwt.t
+    (** [replace dbname user_name ()] returns the updated permission *)
   end
 end
