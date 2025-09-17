@@ -102,3 +102,25 @@ type list_users = {
   count <json name="_count">: int;
 }
 
+type create_permission = {
+  id: string;
+  permission_mode <json name="permissionMode">: string;
+  resource: string;
+}
+
+type permission = {
+  id: string;
+  permission_mode <json name="permissionMode">: string;
+  resource: string;
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+  token <json name="_token">: string;
+}
+
+type list_permissions = {
+  rid <json name="_rid">: string;
+  permissions <json name="Permissions">: permission list;
+  count <json name="_count">: int;
+}

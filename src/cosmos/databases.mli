@@ -231,4 +231,60 @@ module Database (Auth_key : Auth_key) : sig
     val delete :
       ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
   end
+
+  module Permission : sig
+    type permission_mode = Read | All
+
+    val create :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      coll_name:string ->
+      permission_mode ->
+      permission_name:string ->
+      (int * Json_converter_t.permission, cosmos_error) result Lwt.t
+    (** [create dbname user_name ()] will create a permission for the user with
+        name user_name in the database with name dbname *)
+
+    val list :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      unit ->
+      (int * Json_converter_t.list_permissions, cosmos_error) result Lwt.t
+    (** [list dbname user_name ()] returns a list of all permissions for the
+        user with name user_name in the database with name dbname *)
+
+    val get :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      permission_name:string ->
+      unit ->
+      (int * Json_converter_t.permission, cosmos_error) result Lwt.t
+    (** [get dbname user_name permission_name ()] returns the permission with
+        name permission_name for the user with name user_name in the database
+        with name dbname *)
+
+    val replace :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      coll_name:string ->
+      permission_mode ->
+      permission_name:string ->
+      (int * Json_converter_t.permission, cosmos_error) result Lwt.t
+    (** [replace dbname user_name ()] returns the updated permission *)
+
+    val delete :
+      ?timeout:float ->
+      dbname:string ->
+      user_name:string ->
+      permission_name:string ->
+      unit ->
+      (int, cosmos_error) result Lwt.t
+    (** [delete dbname user_name permission_name ()] deletes the permission with
+        name permission_name for the user with name user_name in the database
+        with name dbname *)
+  end
 end
