@@ -27,6 +27,11 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
+        strategy:
+          fail-fast: true
+          matrix:
+            parallel:
+              - 1
 
       - run: opam install . --deps-only --with-test
 
