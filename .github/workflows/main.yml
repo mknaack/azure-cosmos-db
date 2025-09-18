@@ -9,13 +9,15 @@ on:
 jobs:
   builds:
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os:
           - ubuntu-latest
         ocaml-compiler:
           - "5.3"
           - "4.12"
+        parallel:
+          - 1
 
     runs-on: ${{ matrix.os }}
     
@@ -27,11 +29,6 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-        strategy:
-          fail-fast: true
-          matrix:
-            parallel:
-              - 1
 
       - run: opam install . --deps-only --with-test
 
