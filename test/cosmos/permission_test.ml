@@ -55,7 +55,7 @@ let create_permission_test _ () =
   in
   match res with
   | Result.Error (Azure_error (code, _)) ->
-      Alcotest.fail @@ Printf.sprintf "Should not return error %d" code
+      Alcotest.fail (Printf.sprintf "Should not return error %d" code)
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, { id; _ }) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
@@ -90,7 +90,7 @@ let list_permission_test _ () =
   let%lwt res = D.Permission.list ~dbname ~user_name () in
   match res with
   | Result.Error (Azure_error (code, _)) ->
-      Alcotest.fail @@ Printf.sprintf "Should not return error %d" code
+      Alcotest.fail (Printf.sprintf "Should not return error %d" code)
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, { rid = _; permissions; count }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -115,7 +115,7 @@ let replace_permission_test _ () =
   in
   match res with
   | Result.Error (Azure_error (code, _)) ->
-      Alcotest.fail @@ Printf.sprintf "Should not return error %d" code
+      Alcotest.fail (Printf.sprintf "Should not return error %d" code)
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, { id; token = _; _ }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -140,7 +140,7 @@ let delete_permission_test _ () =
   let%lwt res = D.Permission.delete ~dbname ~user_name ~permission_name () in
   match res with
   | Result.Error (Azure_error (code, _)) ->
-      Alcotest.fail @@ Printf.sprintf "Should not return error %d" code
+      Alcotest.fail (Printf.sprintf "Should not return error %d" code)
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
