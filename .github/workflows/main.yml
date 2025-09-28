@@ -32,7 +32,8 @@ jobs:
 
       - run: opam install . --deps-only --with-test
 
-      - name: Run tests
+      - if: ${{ matrix.ocaml-compiler == '5.3' }}
+        name: Run tests
         env:
           AZURE_COSMOS_KEY: ${{secrets.AZURE_COSMOS_KEY}}
           AZURE_COSMOS_ENDPOINT: ${{vars.AZURE_COSMOS_ENDPOINT}}
