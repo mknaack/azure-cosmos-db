@@ -22,6 +22,7 @@ depends: [
   "cryptokit"
   "alcotest-lwt" {with-test}
   "bisect_ppx" {with-test}
+  "odoc" {with-doc}
 ]
 conflicts: [ "result" {< "1.5"} ]
 homepage: "https://github.com/mknaack/azure-cosmos-db"
@@ -30,4 +31,4 @@ dev-repo: "git+https://github.com/mknaack/azure-cosmos-db.git"
 build: [
   ["dune" "build" "-p" name "-j" jobs]
   ["dune" "runtest" "-p" name "-j" jobs] {with-test}
- ]
+]

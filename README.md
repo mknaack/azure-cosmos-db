@@ -9,7 +9,7 @@ Provides an interface to Microsoft Azure Cosmos db.
 
 [Microsoft documentation](https://docs.microsoft.com/en-us/rest/api/cosmos-db/)
 
-[API documentation](https://knaack.bitbucket.io/)
+[API documentation](https://mknaack.github.io/azure-cosmos-db/)
 
 # Quick start
 
