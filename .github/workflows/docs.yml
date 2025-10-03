@@ -32,12 +32,8 @@ jobs:
           
       - name: Install dependencies
         run: |
-          opam install . --deps-only
-          opam install odoc
+          opam install . --deps-only --with-test --with-doc 
           
-      - name: Build project
-        run: opam exec -- dune build
-        
       - name: Build documentation
         run: |
           opam exec -- dune build @doc
