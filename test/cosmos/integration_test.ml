@@ -616,6 +616,30 @@ let create_document_with_partition_key_test _ () =
       let _ = Alcotest.(check int) "Status same int" 201 code in
       Lwt.return_unit
 
+let create_document_with_partition_key_include_index_test _ () =
+  let%lwt res =
+    D.Collection.Document.create ~partition_key:"a Last name"
+      ~indexing_directive:D.Collection.Document.Include dbname_partition
+      collection_name_partition (create_value 2)
+  in
+  match res with
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, _) ->
+      let _ = Alcotest.(check int) "Status same int" 201 code in
+      Lwt.return_unit
+
+let create_document_with_partition_key_exclude_index_test _ () =
+  let%lwt res =
+    D.Collection.Document.create ~partition_key:"a Last name"
+      ~indexing_directive:D.Collection.Document.Exclude dbname_partition
+      collection_name_partition (create_value 3)
+  in
+  match res with
+  | Result.Error _ -> Alcotest.fail "Should not return error"
+  | Result.Ok (code, _) ->
+      let _ = Alcotest.(check int) "Status same int" 201 code in
+      Lwt.return_unit
+
 let replace_document_with_partition_key_test _ () =
   let%lwt res =
     D.Collection.Document.replace ~partition_key:"a Last name" dbname_partition
@@ -701,7 +725,7 @@ let query_document_count_with_partition_key_test _ () =
         let docs = List.map (fun (x, _) -> x) documents in
         let first = List.hd docs in
         let value_count = int_of_string first in
-        Alcotest.(check int) "Value count field" value_count 1
+        Alcotest.(check int) "Value count field" value_count 3
       in
       Lwt.return_unit
 
@@ -786,6 +810,10 @@ let test_partition_key_cosmos =
       create_collection_with_partition_key_test;
     Alcotest_lwt.test_case "create document with partition key" `Slow
       create_document_with_partition_key_test;
+    Alcotest_lwt.test_case "create document with partition key include index"
+      `Slow create_document_with_partition_key_include_index_test;
+    Alcotest_lwt.test_case "create document with partition key exclude index"
+      `Slow create_document_with_partition_key_exclude_index_test;
     Alcotest_lwt.test_case "replace document with partition key" `Slow
       replace_document_with_partition_key_test;
     Alcotest_lwt.test_case "upsert document with partition key" `Slow
