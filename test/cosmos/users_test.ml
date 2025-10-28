@@ -1,4 +1,3 @@
-open Lwt
 open Test_common
 open Cosmos
 
@@ -7,8 +6,8 @@ let user_name = "a_user_name"
 let replace_user_name = "replace_user_name"
 
 let create_database_test _ () =
-  let res = D.create dbname in
-  res >>= function
+  let%lwt res = D.create dbname in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, body) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
@@ -18,16 +17,16 @@ let create_database_test _ () =
             Alcotest.(check string) "Create name is correct" dbname id
         | None -> ()
       in
-      return ()
+      Lwt.return ()
 
 let create_user_test _ () =
-  let res = D.User.create dbname user_name in
-  res >>= function
+  let%lwt res = D.User.create dbname user_name in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, { id; _ }) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
       let _ = Alcotest.(check string) "Create name is correct" user_name id in
-      return ()
+      Lwt.return ()
 
 let create_user_timeout_test _ () =
   let%lwt res = D.User.create ~timeout:0.0 dbname user_name in
@@ -51,7 +50,7 @@ let list_user_test _ () =
       let _ =
         Alcotest.(check string) "Name of user" user_name (List.hd db).id
       in
-      return ()
+      Lwt.return ()
 
 let list_user_timeout_test _ () =
   let%lwt res = D.User.list ~timeout:0.0 dbname in
@@ -69,7 +68,7 @@ let get_user_test _ () =
   | Result.Ok (code, { id; _ }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
       let _ = Alcotest.(check string) "Create name is correct" user_name id in
-      return ()
+      Lwt.return ()
 
 let get_user_timeout_test _ () =
   let%lwt res = D.User.get ~timeout:0.0 dbname user_name in
@@ -89,7 +88,7 @@ let replace_user_test _ () =
       let _ =
         Alcotest.(check string) "Replace name is correct" replace_user_name id
       in
-      return ()
+      Lwt.return ()
 
 let replace_user_timeout_test _ () =
   let%lwt res =
@@ -108,7 +107,7 @@ let delete_user_test _ () =
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return ()
 
 let delete_database_test _ () =
   let%lwt res = D.delete dbname in
@@ -116,7 +115,7 @@ let delete_database_test _ () =
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return ()
 
 let user_tests =
   [
