@@ -1,4 +1,3 @@
-open Lwt
 open Cosmos
 open Databases
 open Json_j
@@ -35,7 +34,7 @@ let create_database_test _ () =
             Alcotest.(check string) "Create name is correct" dbname id
         | None -> ()
       in
-      return ()
+      Lwt.return_unit
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
 let check_result f = function
@@ -43,8 +42,8 @@ let check_result f = function
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
 let create_database_if_not_exists_test _ () =
-  let res = D.create_if_not_exists dbname in
-  res >>= function
+  let%lwt res = D.create_if_not_exists dbname in
+  match res with
   | Result.Ok (code, body) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
       let _ =
@@ -53,12 +52,12 @@ let create_database_if_not_exists_test _ () =
             Alcotest.(check string) "Create name is correct" dbname id
         | None -> ()
       in
-      return ()
+      Lwt.return_unit
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
 let list_databases _ () =
-  let res = D.list_databases () in
-  res >>= function
+  let%lwt res = D.list_databases () in
+  match res with
   | Result.Ok (code, { _rid; databases; _count = count }) ->
       let db =
         List.filter
@@ -70,7 +69,7 @@ let list_databases _ () =
       let _ =
         Alcotest.(check string) "Name of databases" dbname (List.hd db).id
       in
-      return ()
+      Lwt.return_unit
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
 (* let list_databases _ () =
@@ -83,8 +82,8 @@ let list_databases _ () =
    return () *)
 
 let get_database_test _ () =
-  let res = D.get dbname in
-  res >>= function
+  let%lwt res = D.get dbname in
+  match res with
   | Result.Ok (code, body) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
       let _ =
@@ -93,12 +92,12 @@ let get_database_test _ () =
             Alcotest.(check string) "Name of database" dbname id
         | None -> ()
       in
-      return ()
+      Lwt.return_unit
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
 let create_collection_test _ () =
-  let res = D.Collection.create dbname collection_name in
-  res >>= function
+  let%lwt res = D.Collection.create dbname collection_name in
+  match res with
   | Result.Ok (code, body) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
       let _ =
@@ -107,12 +106,12 @@ let create_collection_test _ () =
             Alcotest.(check string) "Create name is correct" collection_name id
         | None -> ()
       in
-      return ()
+      Lwt.return_unit
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
 let create_collection_if_not_exists_test _ () =
-  let res = D.Collection.create_if_not_exists dbname collection_name in
-  res >>= function
+  let%lwt res = D.Collection.create_if_not_exists dbname collection_name in
+  match res with
   | Result.Ok (code, body) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
       let _ =
@@ -121,7 +120,7 @@ let create_collection_if_not_exists_test _ () =
             Alcotest.(check string) "Create name is correct" collection_name id
         | None -> ()
       in
-      return ()
+      Lwt.return_unit
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
 let create_collection_if_not_exists_test_new_collection _ () =
@@ -140,27 +139,27 @@ let create_collection_if_not_exists_test_new_collection _ () =
                 "Create name is correct" collection_name_test id
           | None -> ()
         in
-        return ()
+        Lwt.return_unit
     | Result.Error _ -> Alcotest.fail "Should not return error"
   in
   match%lwt D.Collection.delete dbname collection_name_test with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return_unit
 
 let list_collection_test _ () =
-  let res = D.Collection.list dbname in
-  res >>= function
+  let%lwt res = D.Collection.list dbname in
+  match res with
   | Result.Ok (code, { rid = _; document_collections = _; count }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
       let _ = Alcotest.(check int) "Count" 1 count in
-      return ()
+      Lwt.return_unit
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
 let get_collection_test _ () =
-  let res = D.Collection.get dbname collection_name in
-  res >>= function
+  let%lwt res = D.Collection.get dbname collection_name in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, body) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -185,21 +184,21 @@ let get_collection_test _ () =
             Alcotest.(check string) "Name of database" collection_name id
         | None -> ()
       in
-      return ()
+      Lwt.return_unit
 
 let create_document_test _ () =
-  let res =
+  let%lwt res =
     D.Collection.Document.create dbname collection_name (create_value 1)
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
-      return ()
+      Lwt.return_unit
 
 let list_document_test _ () =
-  let res = D.Collection.Document.list dbname collection_name in
-  res >>= function
+  let%lwt res = D.Collection.Document.list dbname collection_name in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, headers, { rid = _; documents; count }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -245,7 +244,7 @@ let list_document_test _ () =
         Alcotest.(check string) "firstName" firstName "A First name 1";
         Alcotest.(check string) "lastName" lastName "a Last name"
       in
-      return ()
+      Lwt.return_unit
 
 let range i j =
   let rec loop acc k = if i = k then k :: acc else loop (k :: acc) (pred k) in
@@ -253,7 +252,7 @@ let range i j =
 
 let create_a_lot_of_documents_test _ () =
   let ids = range 21 100 in
-  let results =
+  let%lwt result_list =
     Lwt_list.map_p
       (fun id ->
         let res =
@@ -266,8 +265,6 @@ let create_a_lot_of_documents_test _ () =
     | Result.Ok (code, _) -> code = expected_code
     | _ -> false
   in
-  results >>= fun result_list ->
-  (* let results_length = List.filter (fun (Result.Ok (code, _)) -> code = 201) result_list |> List.length in *)
   let results_length = List.filter (check 201) result_list |> List.length in
   let length_429 = List.filter (check 429) result_list |> List.length in
   let _ = Alcotest.(check int) "Documents that was rejected" 0 length_429 in
@@ -281,7 +278,7 @@ let create_a_lot_of_documents_test _ () =
       "All documents should be created succesfully" (List.length ids)
       results_length
   in
-  return_unit
+  Lwt.return_unit
 
 let list_multiple_documents_test _ () =
   let list_values =
@@ -325,7 +322,7 @@ let list_multiple_documents_test _ () =
               (Response_headers.x_ms_continuation headers2)
           in
           let _ = Alcotest.(check int) "Count field" (count + count2) 10 in
-          return ())
+          Lwt.return_unit)
 
 let change_feed_test _ () =
   (* list all documents *)
@@ -384,7 +381,7 @@ let change_feed_test _ () =
                    ^ string_of_int error_code)
               | Result.Ok (code, _headers, _result) ->
                   let _ = Alcotest.(check int) "Status same int" 200 code in
-                  return ())))
+                  Lwt.return_unit)))
 
 let query_document_test _ () =
   let query =
@@ -395,8 +392,8 @@ let query_document_test _ () =
         parameters = [ { name = "@fname"; value = "A First name 1" } ];
       }
   in
-  let res = D.Collection.Document.query dbname collection_name query in
-  res >>= function
+  let%lwt res = D.Collection.Document.query dbname collection_name query in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _, { rid = _; documents; count }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -411,14 +408,14 @@ let query_document_test _ () =
         Alcotest.(check string) "firstName" firstName "A First name 1";
         Alcotest.(check string) "lastName" lastName "a Last name"
       in
-      return ()
+      Lwt.return_unit
 
 let query_document_count_test _ () =
   let query =
     Json_converter_t.{ query = "SELECT VALUE COUNT(1) FROM f"; parameters = [] }
   in
-  let res = D.Collection.Document.query dbname collection_name query in
-  res >>= function
+  let%lwt res = D.Collection.Document.query dbname collection_name query in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _, { rid = _; documents; count }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -429,65 +426,65 @@ let query_document_count_test _ () =
         let value_count = int_of_string first in
         Alcotest.(check int) "Value count field" value_count 11
       in
-      return ()
+      Lwt.return_unit
 
 let get_document_test _ () =
-  let res =
+  let%lwt res =
     D.Collection.Document.get dbname collection_name (document_id ^ "1")
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
-      return ()
+      Lwt.return_unit
 
 let replace_document_test _ () =
-  let res =
+  let%lwt res =
     D.Collection.Document.replace dbname collection_name (document_id ^ "1")
       (replace_value 1)
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
-      return ()
+      Lwt.return_unit
 
 let upsert_document_test _ () =
-  let res =
+  let%lwt res =
     D.Collection.Document.create ~is_upsert:true dbname collection_name
       (create_value 1)
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
-      return ()
+      Lwt.return_unit
 
 let delete_document_test _ () =
-  let res =
+  let%lwt res =
     D.Collection.Document.delete dbname collection_name (document_id ^ "1")
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return_unit
 
 let delete_collection_test _ () =
-  let res = D.Collection.delete dbname collection_name in
-  res >>= function
+  let%lwt res = D.Collection.delete dbname collection_name in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return_unit
 
 let delete_database_test _ () =
-  let res = D.delete dbname in
-  res >>= function
+  let%lwt res = D.delete dbname in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return_unit
 
 let create_database_if_not_exists_test_new_database _ () =
   let test_name = dbname ^ "create_new" in
@@ -504,14 +501,14 @@ let create_database_if_not_exists_test_new_database _ () =
               Alcotest.(check string) "Create name is correct" test_name id
           | None -> ()
         in
-        return ()
+        Lwt.return_unit
     | Result.Error _ -> Alcotest.fail "Should not return error"
   in
   match%lwt D.delete test_name with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return_unit
 
 let cosmos_test =
   [
@@ -550,8 +547,8 @@ let cosmos_test =
 let test = if should_run () then cosmos_test else []
 
 let create_database_with_partition_key_test _ () =
-  let res = D.create dbname_partition in
-  res >>= function
+  let%lwt res = D.create dbname_partition in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, body) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
@@ -561,7 +558,7 @@ let create_database_with_partition_key_test _ () =
             Alcotest.(check string) "Create name is correct" dbname_partition id
         | None -> ()
       in
-      return ()
+      Lwt.return_unit
 
 let create_collection_with_partition_key_test _ () =
   let partition_key =
@@ -569,11 +566,11 @@ let create_collection_with_partition_key_test _ () =
       Json_converter_t.
         { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
-  let res =
+  let%lwt res =
     D.Collection.create ~partition_key dbname_partition
       collection_name_partition
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, body) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
@@ -584,40 +581,40 @@ let create_collection_with_partition_key_test _ () =
               "Create name is correct" collection_name_partition id
         | None -> ()
       in
-      return ()
+      Lwt.return_unit
 
 let create_document_with_partition_key_test _ () =
-  let res =
+  let%lwt res =
     D.Collection.Document.create ~partition_key:"a Last name" dbname_partition
       collection_name_partition (create_value 1)
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
-      return ()
+      Lwt.return_unit
 
 let replace_document_with_partition_key_test _ () =
-  let res =
+  let%lwt res =
     D.Collection.Document.replace ~partition_key:"a Last name" dbname_partition
       collection_name_partition (document_id ^ "1") (replace_value 1)
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
-      return ()
+      Lwt.return_unit
 
 let upsert_document_with_partition_key_test _ () =
-  let res =
+  let%lwt res =
     D.Collection.Document.create ~is_upsert:true ~partition_key:"a Last name"
       dbname_partition collection_name_partition (create_value 1)
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
-      return ()
+      Lwt.return_unit
 
 let query_document_with_partition_key_test _ () =
   let query =
@@ -628,11 +625,11 @@ let query_document_with_partition_key_test _ () =
         parameters = [ { name = "@fname"; value = "A First name 1" } ];
       }
   in
-  let res =
+  let%lwt res =
     D.Collection.Document.query ~is_partition:true dbname_partition
       collection_name_partition query
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _, { rid = _; documents; count }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -647,33 +644,33 @@ let query_document_with_partition_key_test _ () =
         Alcotest.(check string) "firstName" firstName "A First name 1";
         Alcotest.(check string) "lastName" lastName "a Last name"
       in
-      return ()
+      Lwt.return_unit
 
 let query_document_count_without_partition_key_test _ () =
   (* Should fail due to the partition *)
   let query =
     Json_converter_t.{ query = "SELECT VALUE COUNT(1) FROM f"; parameters = [] }
   in
-  let res =
+  let%lwt res =
     D.Collection.Document.query ~is_partition:true dbname_partition
       collection_name_partition query
   in
-  res >>= function
+  match res with
   | Result.Ok _ | Result.Error Timeout_error | Result.Error Connection_error ->
       Alcotest.fail "Should not return error"
   | Result.Error (Azure_error (code, _)) ->
       let _ = Alcotest.(check int) "Status same int" 400 code in
-      return ()
+      Lwt.return_unit
 
 let query_document_count_with_partition_key_test _ () =
   let query =
     Json_converter_t.{ query = "SELECT VALUE COUNT(1) FROM f"; parameters = [] }
   in
-  let res =
+  let%lwt res =
     D.Collection.Document.query ~partition_key:"a Last name" ~is_partition:true
       dbname_partition collection_name_partition query
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, _, { rid = _; documents; count }) ->
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -684,34 +681,36 @@ let query_document_count_with_partition_key_test _ () =
         let value_count = int_of_string first in
         Alcotest.(check int) "Value count field" value_count 1
       in
-      return ()
+      Lwt.return_unit
 
 let delete_document_with_partition_key_test _ () =
-  let res =
+  let%lwt res =
     D.Collection.Document.delete ~partition_key:"a Last name" dbname_partition
       collection_name_partition (document_id ^ "1")
   in
-  res >>= function
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return_unit
 
 let delete_collection_with_partition_key_test _ () =
-  let res = D.Collection.delete dbname_partition collection_name_partition in
-  res >>= function
+  let%lwt res =
+    D.Collection.delete dbname_partition collection_name_partition
+  in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return_unit
 
 let delete_database_with_partition_test _ () =
-  let res = D.delete dbname_partition in
-  res >>= function
+  let%lwt res = D.delete dbname_partition in
+  match res with
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok code ->
       let _ = Alcotest.(check int) "Status same int" 204 code in
-      return ()
+      Lwt.return_unit
 
 let create_collection_with_partition_key_fail_test _ () =
   let partition_key =
@@ -719,13 +718,14 @@ let create_collection_with_partition_key_fail_test _ () =
       Json_converter_t.
         { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
-  let res =
+  let%lwt res =
     D.Collection.create ~partition_key dbname_partition
       collection_name_partition
   in
-  res >>= function
+  match res with
   | Result.Error (Azure_error (code, _)) ->
-      return @@ Alcotest.(check int) "Status same int" 404 code
+      Alcotest.(check int) "Status same int" 404 code;
+      Lwt.return_unit
   | Result.Error Timeout_error ->
       Alcotest.fail "Should not fail with Timeout_error"
   | Result.Error Connection_error ->
@@ -733,10 +733,11 @@ let create_collection_with_partition_key_fail_test _ () =
   | Result.Ok (_code, _body) -> Alcotest.fail "Should fail"
 
 let delete_database_with_partition_fail_test _ () =
-  let res = D.delete dbname_partition in
-  res >>= function
+  let%lwt res = D.delete dbname_partition in
+  match res with
   | Result.Error (Azure_error (code, _)) ->
-      return @@ Alcotest.(check int) "Status same int" 404 code
+      Alcotest.(check int) "Status same int" 404 code;
+      Lwt.return_unit
   | Result.Error Timeout_error ->
       Alcotest.fail "Should not fail with Timeout_error"
   | Result.Error Connection_error ->
@@ -744,12 +745,13 @@ let delete_database_with_partition_fail_test _ () =
   | Result.Ok _code -> Alcotest.fail "Should fail"
 
 let delete_database_with_partition_timeout_test _ () =
-  let res = D.delete ~timeout:0. dbname_partition in
-  res >>= function
+  let%lwt res = D.delete ~timeout:0. dbname_partition in
+  match res with
   | Result.Error (Azure_error _) ->
       Alcotest.fail "Should not fail with Azure_error"
   | Result.Error Timeout_error ->
-      return @@ Alcotest.(check unit) "Timeout" () ()
+      Alcotest.(check unit) "Timeout" () ();
+      Lwt.return_unit
   | Result.Error Connection_error ->
       Alcotest.fail "Should not fail with Connection_error"
   | Result.Ok _code -> Alcotest.fail "Should fail"
