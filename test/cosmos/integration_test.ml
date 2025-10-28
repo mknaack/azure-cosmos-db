@@ -72,6 +72,15 @@ let list_databases _ () =
       Lwt.return_unit
   | Result.Error _ -> Alcotest.fail "Should not return error"
 
+let list_databases_timeout_test _ () =
+  let%lwt res = D.list_databases ~timeout:0.0 () in
+  match res with
+  | Result.Error Timeout_error ->
+      Alcotest.(check unit) "Timeout error" () ();
+      Lwt.return_unit
+  | Result.Error _ -> Alcotest.fail "Should fail with timeout error"
+  | Result.Ok _ -> Alcotest.fail "Should fail with timeout error"
+
 (* let list_databases _ () =
    let res = D.list_databases () in
    res >>= fun (code, {_rid; databases; _count = count}) ->
@@ -94,6 +103,15 @@ let get_database_test _ () =
       in
       Lwt.return_unit
   | Result.Error _ -> Alcotest.fail "Should not return error"
+
+let get_database_timeout_test _ () =
+  let%lwt res = D.get ~timeout:0.0 dbname in
+  match res with
+  | Result.Error Timeout_error ->
+      Alcotest.(check unit) "Timeout error" () ();
+      Lwt.return_unit
+  | Result.Error _ -> Alcotest.fail "Should fail with timeout error"
+  | Result.Ok _ -> Alcotest.fail "Should fail with timeout error"
 
 let create_collection_test _ () =
   let%lwt res = D.Collection.create dbname collection_name in
@@ -516,7 +534,11 @@ let cosmos_test =
     Alcotest_lwt.test_case "create database if not exists" `Slow
       create_database_if_not_exists_test;
     Alcotest_lwt.test_case "list database" `Slow list_databases;
+    Alcotest_lwt.test_case "list database timeout" `Slow
+      list_databases_timeout_test;
     Alcotest_lwt.test_case "get database" `Slow get_database_test;
+    Alcotest_lwt.test_case "get database timeout" `Slow
+      get_database_timeout_test;
     Alcotest_lwt.test_case "create collection" `Slow create_collection_test;
     Alcotest_lwt.test_case "create collection if not exists" `Slow
       create_collection_if_not_exists_test;
