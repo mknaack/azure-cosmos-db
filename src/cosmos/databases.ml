@@ -5,6 +5,19 @@ open Lwt
 dune build @check
 *)
 
+let body_to_string body =
+  match body with
+  | #Cohttp.Body.t as b -> Lwt.return (Cohttp.Body.to_string b)
+  | `Stream str_stream -> (
+      let buffer = Buffer.create 1024 in
+      try%lwt
+        let%lwt () = Lwt_stream.iter (Buffer.add_string buffer) str_stream in
+        Lwt.return (Buffer.contents buffer)
+      with e ->
+        Printf.printf "Exception while processing http stream: %s\n"
+          (Printexc.to_string e);
+        Lwt.fail e)
+
 module type Auth_key = sig
   val master_key : string
   val endpoint : string
@@ -196,7 +209,7 @@ module Database (Auth_key : Auth_key) = struct
     match%lwt response with
     | Some (resp, body) ->
         let code = get_code resp in
-        let%lwt body_string = Cohttp_lwt.Body.to_string body in
+        let%lwt body_string = body_to_string body in
         let value = Json_converter_j.list_databases_of_string body_string in
         let%lwt () = Cohttp_lwt.Body.drain_body body in
         Lwt.return @@ Result.ok (code, value)
@@ -217,7 +230,7 @@ module Database (Auth_key : Auth_key) = struct
     | None -> timeout_error
     | Some (resp, body) ->
         let result body =
-          let%lwt body_string = Cohttp_lwt.Body.to_string body in
+          let%lwt body_string = body_to_string body in
           Lwt.return_some (Json_converter_j.database_of_string body_string)
         in
         result_or_error_with_result 201 result resp body
@@ -239,7 +252,7 @@ module Database (Auth_key : Auth_key) = struct
         let response_header = Response_headers.get_header resp in
         if code = 200 then
           let result body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return_some (Json_converter_j.database_of_string body_string)
           in
           result_or_error_with_result 200 result resp body
@@ -285,7 +298,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return
             @@ Json_converter_j.list_collections_of_string body_string
           in
@@ -315,7 +328,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return_some (Json_converter_j.collection_of_string body_string)
           in
           result_or_error_with_result 201 value resp body
@@ -338,7 +351,7 @@ module Database (Auth_key : Auth_key) = struct
           let headers = Response_headers.get_header resp in
           if code = 200 then
             let value body =
-              let%lwt body_string = Cohttp_lwt.Body.to_string body in
+              let%lwt body_string = body_to_string body in
               Lwt.return_some
                 (Json_converter_j.collection_of_string body_string)
             in
@@ -413,7 +426,7 @@ module Database (Auth_key : Auth_key) = struct
                 let%lwt value =
                   match code with
                   | 200 ->
-                      let%lwt body_string = Cohttp_lwt.Body.to_string body in
+                      let%lwt body_string = body_to_string body in
                       Lwt.return
                         (Some
                            (Json_converter_j.collection_of_string body_string))
@@ -538,7 +551,7 @@ module Database (Auth_key : Auth_key) = struct
             let code = get_code resp in
             let response_header = Response_headers.get_header resp in
             let value body =
-              let%lwt body_string = Cohttp_lwt.Body.to_string body in
+              let%lwt body_string = body_to_string body in
               Lwt.return @@ convert_to_list_result body_string
             in
             let expected_code = 200 in
@@ -585,8 +598,7 @@ module Database (Auth_key : Auth_key) = struct
         match%lwt response with
         | Some (resp, body) ->
             let code = get_code resp in
-            body |> Cohttp_lwt.Body.to_string >|= fun body ->
-            Result.ok (code, body)
+            body_to_string body >|= fun body -> Result.ok (code, body)
         | None -> timeout_error
 
       let replace ?indexing_directive ?partition_key ?if_match ?timeout dbname
@@ -704,7 +716,7 @@ module Database (Auth_key : Auth_key) = struct
             let code = get_code resp in
             let response_header = Response_headers.get_header resp in
             let value () =
-              let%lwt body_string = Cohttp_lwt.Body.to_string body in
+              let%lwt body_string = body_to_string body in
               Lwt.return @@ convert_to_list_result body_string
             in
             let expected_code = 200 in
@@ -744,7 +756,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return @@ Json_converter_j.user_of_string body_string
           in
           result_or_error_with_result 201 value resp body
@@ -763,7 +775,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return @@ Json_converter_j.list_users_of_string body_string
           in
           result_or_error_with_result 200 value resp body
@@ -782,7 +794,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return @@ Json_converter_j.user_of_string body_string
           in
           result_or_error_with_result 200 value resp body
@@ -805,7 +817,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return @@ Json_converter_j.user_of_string body_string
           in
           result_or_error_with_result 200 value resp body
@@ -865,7 +877,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return @@ Json_converter_j.permission_of_string body_string
           in
           result_or_error_with_result 201 value resp body
@@ -887,7 +899,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return
             @@ Json_converter_j.list_permissions_of_string body_string
           in
@@ -913,7 +925,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return @@ Json_converter_j.permission_of_string body_string
           in
           result_or_error_with_result 200 value resp body
@@ -949,7 +961,7 @@ module Database (Auth_key : Auth_key) = struct
       | None -> timeout_error
       | Some (resp, body) ->
           let value body =
-            let%lwt body_string = Cohttp_lwt.Body.to_string body in
+            let%lwt body_string = body_to_string body in
             Lwt.return @@ Json_converter_j.permission_of_string body_string
           in
           result_or_error_with_result 200 value resp body

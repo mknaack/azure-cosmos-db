@@ -6,6 +6,8 @@ module type Auth_key = sig
   (** Name of the endpoint of cosmos container *)
 end
 
+val body_to_string : Cohttp_lwt.Body.t -> string Lwt.t
+
 module Response_headers : sig
   type t
 
