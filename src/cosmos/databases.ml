@@ -579,8 +579,7 @@ module Database (Auth_key : Auth_key) = struct
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
           |> apply_to_header_if_some "If-None-Match" (fun x -> x) if_none_match
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
-               (fun x -> x)
-               partition_key
+               string_of_partition_key partition_key
           |> apply_to_header_if_some "x-ms-consistency-level"
                string_of_consistency_level consistency_level
           |> apply_to_header_if_some "x-ms-session-token"
