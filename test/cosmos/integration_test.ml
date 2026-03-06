@@ -582,6 +582,15 @@ let create_database_with_partition_key_test _ () =
       in
       Lwt.return_unit
 
+let create_database_with_partition_key_timeout_test _ () =
+  let%lwt res = D.create ~timeout:0.0 dbname_partition in
+  match res with
+  | Result.Error Timeout_error ->
+      Alcotest.(check unit) "Timeout error" () ();
+      Lwt.return_unit
+  | Result.Error _ -> Alcotest.fail "Should fail with timeout error"
+  | Result.Ok _ -> Alcotest.fail "Should fail with timeout error"
+
 let create_collection_with_partition_key_test _ () =
   let partition_key =
     Some
@@ -605,6 +614,23 @@ let create_collection_with_partition_key_test _ () =
       in
       Lwt.return_unit
 
+let create_collection_with_partition_key_timeout_test _ () =
+  let partition_key =
+    Some
+      Json_converter_t.
+        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+  in
+  let%lwt res =
+    D.Collection.create ~timeout:0.0 ~partition_key dbname_partition
+      collection_name_partition
+  in
+  match res with
+  | Result.Error Timeout_error ->
+      Alcotest.(check unit) "Timeout error" () ();
+      Lwt.return_unit
+  | Result.Error _ -> Alcotest.fail "Should fail with timeout error"
+  | Result.Ok _ -> Alcotest.fail "Should fail with timeout error"
+
 let create_document_with_partition_key_test _ () =
   let%lwt res =
     D.Collection.Document.create ~partition_key:"a Last name" dbname_partition
@@ -615,6 +641,18 @@ let create_document_with_partition_key_test _ () =
   | Result.Ok (code, _) ->
       let _ = Alcotest.(check int) "Status same int" 201 code in
       Lwt.return_unit
+
+let create_document_with_partition_key_timeout_test _ () =
+  let%lwt res =
+    D.Collection.Document.create ~timeout:0.0 ~partition_key:"a Last name"
+      dbname_partition collection_name_partition (create_value 1)
+  in
+  match res with
+  | Result.Error Timeout_error ->
+      Alcotest.(check unit) "Timeout error" () ();
+      Lwt.return_unit
+  | Result.Error _ -> Alcotest.fail "Should fail with timeout error"
+  | Result.Ok _ -> Alcotest.fail "Should fail with timeout error"
 
 let create_document_with_partition_key_include_index_test _ () =
   let%lwt res =
@@ -806,10 +844,16 @@ let test_partition_key_cosmos =
   [
     Alcotest_lwt.test_case "create database" `Slow
       create_database_with_partition_key_test;
+    Alcotest_lwt.test_case "create database with partition key timeout" `Slow
+      create_database_with_partition_key_timeout_test;
     Alcotest_lwt.test_case "create collection with partition key" `Slow
       create_collection_with_partition_key_test;
+    Alcotest_lwt.test_case "create collection with partition key timeout" `Slow
+      create_collection_with_partition_key_timeout_test;
     Alcotest_lwt.test_case "create document with partition key" `Slow
       create_document_with_partition_key_test;
+    Alcotest_lwt.test_case "create document with partition key timeout" `Slow
+      create_document_with_partition_key_timeout_test;
     Alcotest_lwt.test_case "create document with partition key include index"
       `Slow create_document_with_partition_key_include_index_test;
     Alcotest_lwt.test_case "create document with partition key exclude index"
