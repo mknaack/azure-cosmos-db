@@ -162,7 +162,7 @@ module Database (Auth_key : Auth_key) = struct
       Cohttp.Header.add header "authorization"
         (Account.authorization verb resource ms_date db_name)
     in
-    let header = Cohttp.Header.add header "x-ms-version" "2017-02-22" in
+    let header = Cohttp.Header.add header "x-ms-version" "2018-12-31" in
     let header =
       Cohttp.Header.add header "x-ms-date" (Utilities.Ms_time.x_ms_date ms_date)
     in
