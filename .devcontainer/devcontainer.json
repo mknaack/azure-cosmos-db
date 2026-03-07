@@ -1,14 +1,12 @@
 {
-    // "image": "azure-cosmos-db-base:latest",
-    "image": "mknaack/azure-cosmos-db-base:0.7",
     "name": "azure-cosmos-db",
-    // "build":{"dockerfile": "Dockerfile", "context": ".."},
-    // "postStartCommand": "eval $(opam env)",
-    "extensions": [
-        "ocamllabs.ocaml-platform",
-        "mutantdino.resourcemonitor"
-    ]
-    // "postCreateCommand": "opam install . --deps-only --with-test",
-    //"postStartCommand": "eval $(opam env)"
-    // "runArgs": ["--env-file",".devcontainer/devcontainer.env"]
+    "image": "ocaml/opam:debian-12-ocaml-5.3",
+    "customizations": {
+        "extensions": [
+            "ocamllabs.ocaml-platform",
+            "mutantdino.resourcemonitor"
+        ]
+    },
+    "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends libgmp-dev libssl-dev zlib1g-dev libev-dev pkg-config && opam install ocaml-lsp-server ocamlformat && opam install . --deps-only --with-test",
+    "postStartCommand": "eval $(opam env)"
 }
