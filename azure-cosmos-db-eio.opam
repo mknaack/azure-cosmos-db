@@ -1,0 +1,32 @@
+opam-version: "2.0"
+name: "azure-cosmos-db-eio"
+license: "MIT"
+synopsis: "Eio backend for azure-cosmos-db"
+description: """
+Provides an Eio-based backend for the Azure Cosmos DB interface.
+"""
+maintainer: "Morten Knaack <knaack@gmail>"
+authors: "Morten Knaack <knaack@gmail>"
+depends: [
+  "ocaml" {>= "5.0.0"}
+  "dune" {>= "2.9.0"}
+  "azure-cosmos-db"
+  "eio" {>= "1.0"}
+  "eio_main"
+  "cohttp-eio" {>= "6.0.0"}
+  "tls-eio"
+  "ca-certs"
+  "mirage-crypto-rng" {>= "1.0.0"}
+  "alcotest" {with-test}
+  "bisect_ppx" {with-test}
+  "odoc" {with-doc}
+]
+conflicts: [ "result" {< "1.5"} ]
+homepage: "https://github.com/mknaack/azure-cosmos-db"
+bug-reports: "https://github.com/mknaack/azure-cosmos-db/issues"
+dev-repo: "git+https://github.com/mknaack/azure-cosmos-db.git"
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+]
+x-maintenance-intent: [ "(latest)" ]

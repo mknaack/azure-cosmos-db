@@ -1,3 +1,4 @@
-; Tests have been moved to test/core/ (shared functors) and test/lwt/ (Lwt runner)
+; Tests have been moved to test/core/ (shared functors), test/lwt/ (Lwt runner),
+; and test/eio/ (Eio runner)
 
-(dirs core lwt)
+(dirs core lwt eio)
