@@ -1,20 +1,22 @@
 opam-version: "2.0"
-name: "azure-cosmos-db"
+name: "azure-cosmos-db-lwt"
 license: "MIT"
-synopsis: "Azure cosmos db interface"
+synopsis: "Lwt backend for azure-cosmos-db"
 description: """
-Provides an interface to the Azure Cosmos db.
+Provides an Lwt-based backend for the Azure Cosmos DB interface.
 """
 maintainer: "Morten Knaack <knaack@gmail>"
 authors: "Morten Knaack <knaack@gmail>"
 depends: [
   "ocaml" {>= "4.08.0"}
   "dune" {>= "2.9.0"}
-  "atdgen" {>= "2.0.0"}
-  "base64" {>= "3.5.0"}
-  "uri"
-  "cohttp"
-  "cryptokit"
+  "azure-cosmos-db"
+  "lwt"
+  "lwt_ppx" {>="2.0.2"}
+  "lwt_ssl"
+  "ssl"
+  "cohttp-lwt-unix"
+  "alcotest-lwt" {with-test}
   "bisect_ppx" {with-test}
   "odoc" {with-doc}
 ]

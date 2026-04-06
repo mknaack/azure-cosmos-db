@@ -1,6 +1,6 @@
 (executable
  (name cosmos_runner)
- (libraries azure-cosmos-db)
+ (libraries azure-cosmos-db-lwt)
  (preprocess
   (pps lwt_ppx)))
 

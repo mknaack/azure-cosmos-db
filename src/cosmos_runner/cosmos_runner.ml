@@ -3,7 +3,7 @@ how to run:
 dune exec ./src/cosmos_runner/cosmos_runner.exe   
 *)
 
-open Cosmos
+open Cosmos_lwt
 open Databases
 
 let master_key_env = "AZURE_COSMOS_KEY"
@@ -208,7 +208,7 @@ let main () =
   let () = print_endline "start" in
   let partition_key =
     Some
-      Json_converter_t.
+      Cosmos.Json_converter_t.
         { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let partition = Some "a Last name" in
