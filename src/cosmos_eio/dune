@@ -10,5 +10,6 @@
   ca-certs
   mirage-crypto-rng.unix)
  (instrumentation
-  (backend bisect_ppx --exclusions ../../bisect.exclude)
-  (deps ../../bisect.exclude)))
+  (backend bisect_ppx --exclusions bisect.exclude)
+  (deps
+   (file %{project_root}/bisect.exclude))))
