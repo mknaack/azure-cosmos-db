@@ -9,7 +9,7 @@ on:
 jobs:
   builds:
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
@@ -30,7 +30,13 @@ jobs:
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
-      - run: opam install . --deps-only --with-test
+      - if: ${{ matrix.ocaml-compiler == '4.12' }}
+        name: Install dependencies (OCaml 4.x)
+        run: opam install ./azure-cosmos-db.opam ./azure-cosmos-db-lwt.opam --deps-only --with-test
+
+      - if: ${{ matrix.ocaml-compiler != '4.12' }}
+        name: Install dependencies
+        run: opam install . --deps-only --with-test
 
       - if: ${{ matrix.ocaml-compiler == '5.3' }}
         name: Run tests
