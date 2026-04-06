@@ -1,4 +1,4 @@
-open Cosmos
+open Cosmos_lwt
 open Databases
 open Json_j
 open Test_common
@@ -70,7 +70,8 @@ let list_databases_with_partition_key_test _ () =
   | Result.Ok (code, { _rid; databases; _count = count }) ->
       let db =
         List.filter
-          (fun (x : Json_converter_t.database) -> x.id = dbname_partition)
+          (fun (x : Cosmos.Json_converter_t.database) ->
+            x.id = dbname_partition)
           databases
       in
       let _ = Alcotest.(check int) "Status same int" 200 code in
@@ -141,7 +142,7 @@ let create_database_if_not_exists_with_partition_key_test_new_database _ () =
 let create_collection_with_partition_key_test _ () =
   let partition_key =
     Some
-      Json_converter_t.
+      Cosmos.Json_converter_t.
         { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt res =
@@ -164,7 +165,7 @@ let create_collection_with_partition_key_test _ () =
 let create_collection_with_partition_key_timeout_test _ () =
   let partition_key =
     Some
-      Json_converter_t.
+      Cosmos.Json_converter_t.
         { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt res =
@@ -181,7 +182,7 @@ let create_collection_with_partition_key_timeout_test _ () =
 let create_collection_with_partition_key_if_not_exists_test _ () =
   let partition_key =
     Some
-      Json_converter_t.
+      Cosmos.Json_converter_t.
         { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt res =
@@ -206,7 +207,7 @@ let create_collection_with_partition_key_if_not_exists_test_new_collection _ ()
   let collection_name_test = collection_name_partition ^ "test_collection" in
   let partition_key =
     Some
-      Json_converter_t.
+      Cosmos.Json_converter_t.
         { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt () =
@@ -253,7 +254,7 @@ let get_collection_with_partition_key_test _ () =
       let _ =
         match body with
         | Some
-            Json_converter_t.
+            Cosmos.Json_converter_t.
               {
                 id;
                 rid = _;
@@ -345,7 +346,7 @@ let upsert_document_with_partition_key_test _ () =
 
 let query_document_with_partition_key_test _ () =
   let query =
-    Json_converter_t.
+    Cosmos.Json_converter_t.
       {
         query =
           "SELECT * FROM " ^ collection_name ^ " f WHERE f.firstName = @fname";
@@ -376,7 +377,8 @@ let query_document_with_partition_key_test _ () =
 let query_document_count_without_partition_key_test _ () =
   (* Should fail due to the partition *)
   let query =
-    Json_converter_t.{ query = "SELECT VALUE COUNT(1) FROM f"; parameters = [] }
+    Cosmos.Json_converter_t.
+      { query = "SELECT VALUE COUNT(1) FROM f"; parameters = [] }
   in
   let%lwt res =
     D.Collection.Document.query ~is_partition:true dbname_partition
@@ -391,7 +393,8 @@ let query_document_count_without_partition_key_test _ () =
 
 let query_document_count_with_partition_key_test _ () =
   let query =
-    Json_converter_t.{ query = "SELECT VALUE COUNT(1) FROM f"; parameters = [] }
+    Cosmos.Json_converter_t.
+      { query = "SELECT VALUE COUNT(1) FROM f"; parameters = [] }
   in
   let%lwt res =
     D.Collection.Document.query ~partition_key:"a Last name" ~is_partition:true
@@ -600,7 +603,7 @@ let delete_database_with_partition_test _ () =
 let create_collection_with_partition_key_fail_test _ () =
   let partition_key =
     Some
-      Json_converter_t.
+      Cosmos.Json_converter_t.
         { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt res =

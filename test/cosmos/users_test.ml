@@ -1,5 +1,4 @@
 open Test_common
-open Cosmos
 
 let dbname = "user_database"
 let user_name = "a_user_name"
@@ -43,7 +42,9 @@ let list_user_test _ () =
   | Result.Error _ -> Alcotest.fail "Should not return error"
   | Result.Ok (code, { rid = _; users; count }) ->
       let db =
-        List.filter (fun (x : Json_converter_t.user) -> x.id = user_name) users
+        List.filter
+          (fun (x : Cosmos.Json_converter_t.user) -> x.id = user_name)
+          users
       in
       let _ = Alcotest.(check int) "Status same int" 200 code in
       let _ = Alcotest.(check bool) "Count" true (count > 0) in

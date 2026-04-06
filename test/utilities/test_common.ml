@@ -1,4 +1,4 @@
-open Cosmos
+open Cosmos_lwt
 open Databases
 
 let master_key_env = "AZURE_COSMOS_KEY"

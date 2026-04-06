@@ -1,27 +1,6 @@
-open Lwt
-
 (*
  Azure cosmos database documentation: https://docs.microsoft.com/en-us/rest/api/cosmos-db/
-dune build @check
 *)
-
-let body_to_string body =
-  match body with
-  | #Cohttp.Body.t as b -> Lwt.return (Cohttp.Body.to_string b)
-  | `Stream str_stream -> (
-      let buffer = Buffer.create 1024 in
-      try%lwt
-        let%lwt () = Lwt_stream.iter (Buffer.add_string buffer) str_stream in
-        Lwt.return (Buffer.contents buffer)
-      with e ->
-        Printf.printf "Exception while processing http stream: %s\n"
-          (Printexc.to_string e);
-        Lwt.fail e)
-
-module type Auth_key = sig
-  val master_key : string
-  val endpoint : string
-end
 
 module type Account = sig
   type resource = Dbs | Colls | Docs | Users | Permissions
@@ -32,7 +11,7 @@ module type Account = sig
   val endpoint : string
 end
 
-module Auth (Keys : Auth_key) : Account = struct
+module Auth (Keys : Databases_intf.Auth_key) : Account = struct
   type resource = Dbs | Colls | Docs | Users | Permissions
 
   let string_of_resource = function
@@ -43,11 +22,8 @@ module Auth (Keys : Auth_key) : Account = struct
     | Permissions -> "permissions"
 
   let authorization verb resource date db_name =
-    (* "type=master&ver=1.0&sig=" ^ key *)
     let verb = Utilities.Verb.string_of_verb verb in
-    (* get, post, put *)
     let resource_type = string_of_resource resource in
-    (* "dbs", "colls", "docs". *)
     let resource_id = db_name in
     let date = Utilities.Ms_time.x_ms_date date in
     let result =
@@ -58,13 +34,6 @@ module Auth (Keys : Auth_key) : Account = struct
 
   let endpoint = Keys.endpoint
 end
-
-let wrap_timeout timeout command =
-  match timeout with
-  | None -> command
-  | Some t ->
-      let timeout = Lwt_unix.sleep t >|= fun () -> Option.none in
-      Lwt.pick [ timeout; command ]
 
 module Response_headers = struct
   type t = {
@@ -122,7 +91,7 @@ module Response_headers = struct
     | _ -> t
 
   let get_header resp =
-    resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_list
+    resp |> Cohttp.Response.headers |> Cohttp.Header.to_list
     |> List.fold_left update empty
 
   let content_type t = t.content_type
@@ -146,14 +115,25 @@ type cosmos_error =
   | Connection_error
   | Azure_error of int * Response_headers.t
 
-let ( >>= ) = Lwt.bind
-let timeout_error = Lwt.return_error Timeout_error
-let connection_error = Lwt.return_error Connection_error
+module Make
+    (IO : Databases_intf.IO)
+    (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
+    (Auth_key : Databases_intf.Auth_key) =
+struct
+  let ( let* ) = IO.bind
 
-module Database (Auth_key : Auth_key) = struct
   module Account = Auth (Auth_key)
 
   let host = Utility.adjust_host Account.endpoint
+  let timeout_error = IO.return (Error Timeout_error)
+  let connection_error = IO.return (Error Connection_error)
+
+  let wrap_timeout timeout command =
+    match timeout with
+    | None ->
+        let* result = command in
+        IO.return (Some result)
+    | Some t -> IO.with_timeout t command
 
   let headers resource verb db_name =
     let ms_date = Utilities.Ms_time.create_now () in
@@ -174,20 +154,14 @@ module Database (Auth_key : Auth_key) = struct
     header
 
   let get_code resp =
-    resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status
+    resp |> Cohttp.Response.status |> Cohttp.Code.code_of_status
 
   let result_or_error_with_result expected_code f (resp : Cohttp.Response.t)
       body =
     let code = get_code resp in
     let headers = Response_headers.get_header resp in
-    let r =
-      if code = expected_code then
-        let%lwt result = f body in
-        Lwt.return_ok (expected_code, result)
-      else Lwt.return_error (Azure_error (code, headers))
-    in
-    let%lwt () = Cohttp_lwt.Body.drain_body body in
-    r
+    if code = expected_code then IO.return (Ok (expected_code, f body))
+    else IO.return (Error (Azure_error (code, headers)))
 
   let result_or_error expected_code resp =
     let code = get_code resp in
@@ -198,88 +172,81 @@ module Database (Auth_key : Auth_key) = struct
 
   let with_204_do = result_or_error 204
 
+  let handle_http_error = function
+    | Http.Connection_refused -> connection_error
+    | Http.Other_error _exn -> connection_error
+
   let list_databases ?timeout () =
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
-    let response =
-      Cohttp_lwt_unix.Client.get
-        ~headers:(headers Account.Dbs Utilities.Verb.Get "")
-        uri
-      >>= Lwt.return_some |> wrap_timeout timeout
+    let* response =
+      Http.get ~headers:(headers Account.Dbs Utilities.Verb.Get "") uri
+      |> wrap_timeout timeout
     in
-    match%lwt response with
-    | Some (resp, body) ->
-        let code = get_code resp in
-        let%lwt body_string = body_to_string body in
-        let value = Json_converter_j.list_databases_of_string body_string in
-        let%lwt () = Cohttp_lwt.Body.drain_body body in
-        Lwt.return @@ Result.ok (code, value)
+    match response with
     | None -> timeout_error
+    | Some (Error e) -> handle_http_error e
+    | Some (Ok (resp, body)) ->
+        let code = get_code resp in
+        let value = Json_converter_j.list_databases_of_string body in
+        IO.return @@ Result.ok (code, value)
 
   let create ?timeout name =
     let body =
       ({ id = name } : Json_converter_j.create_database)
-      |> Json_converter_j.string_of_create_database |> Cohttp_lwt.Body.of_string
+      |> Json_converter_j.string_of_create_database
     in
     let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
-    let headers = json_headers Account.Dbs Utilities.Verb.Post "" in
-    let response =
-      Cohttp_lwt_unix.Client.post ~headers ~body uri
-      >>= Lwt.return_some |> wrap_timeout timeout
-    in
-    match%lwt response with
+    let hdrs = json_headers Account.Dbs Utilities.Verb.Post "" in
+    let* response = Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout in
+    match response with
     | None -> timeout_error
-    | Some (resp, body) ->
-        let result body =
-          let%lwt body_string = body_to_string body in
-          Lwt.return_some (Json_converter_j.database_of_string body_string)
-        in
+    | Some (Error e) -> handle_http_error e
+    | Some (Ok (resp, body)) ->
+        let result body = Some (Json_converter_j.database_of_string body) in
         result_or_error_with_result 201 result resp body
 
   let get ?timeout name =
     let uri =
       Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) ()
     in
-    let response =
-      Cohttp_lwt_unix.Client.get
+    let* response =
+      Http.get
         ~headers:(headers Account.Dbs Utilities.Verb.Get ("dbs/" ^ name))
         uri
-      >>= Lwt.return_some |> wrap_timeout timeout
+      |> wrap_timeout timeout
     in
-    match%lwt response with
+    match response with
     | None -> timeout_error
-    | Some (resp, body) ->
+    | Some (Error e) -> handle_http_error e
+    | Some (Ok (resp, body)) ->
         let code = get_code resp in
         let response_header = Response_headers.get_header resp in
         if code = 200 then
-          let result body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return_some (Json_converter_j.database_of_string body_string)
-          in
+          let result body = Some (Json_converter_j.database_of_string body) in
           result_or_error_with_result 200 result resp body
-        else Lwt.return_error (Azure_error (code, response_header))
+        else IO.return (Error (Azure_error (code, response_header)))
 
   let create_if_not_exists ?timeout name =
-    let%lwt exists = get ?timeout name in
+    let* exists = get ?timeout name in
     match exists with
-    | Ok (code, result) -> Lwt.return_ok (code, result)
+    | Ok (code, result) -> IO.return (Ok (code, result))
     | Error (Azure_error (404, _)) -> create ?timeout name
-    | Error x -> Lwt.return_error x
+    | Error x -> IO.return (Error x)
 
   let delete ?timeout name =
     let uri =
       Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) ()
     in
-    let response =
-      Cohttp_lwt_unix.Client.delete
+    let* response =
+      Http.delete
         ~headers:(headers Account.Dbs Utilities.Verb.Delete ("dbs/" ^ name))
         uri
-      >>= Lwt.return_some |> wrap_timeout timeout
+      |> wrap_timeout timeout
     in
-    match%lwt response with
+    match response with
     | None -> timeout_error
-    | Some (resp, body) ->
-        let%lwt () = Cohttp_lwt.Body.drain_body body in
-        Lwt.return (with_204_do resp)
+    | Some (Error e) -> handle_http_error e
+    | Some (Ok (resp, _body)) -> IO.return (with_204_do resp)
 
   module Collection = struct
     let list ?timeout dbname =
@@ -288,20 +255,17 @@ module Database (Auth_key : Auth_key) = struct
           ~path:("dbs/" ^ dbname ^ "/colls")
           ()
       in
-      let response =
-        Cohttp_lwt_unix.Client.get
+      let* response =
+        Http.get
           ~headers:(headers Account.Colls Utilities.Verb.Get ("dbs/" ^ dbname))
           uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return
-            @@ Json_converter_j.list_collections_of_string body_string
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Json_converter_j.list_collections_of_string body in
           result_or_error_with_result 200 value resp body
 
     let create ?(indexing_policy = None) ?(partition_key = None) ?timeout dbname
@@ -310,78 +274,72 @@ module Database (Auth_key : Auth_key) = struct
         ({ id = coll_name; indexing_policy; partition_key }
           : Json_converter_j.create_collection)
         |> Json_converter_j.string_of_create_collection
-        |> Cohttp_lwt.Body.of_string
       in
       let uri =
         Uri.make ~scheme:"https" ~host ~port:443
           ~path:("/dbs/" ^ dbname ^ "/colls")
           ()
       in
-      let headers =
+      let hdrs =
         json_headers Account.Colls Utilities.Verb.Post ("dbs/" ^ dbname)
       in
-      let response =
-        Cohttp_lwt_unix.Client.post ~headers ~body uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return_some (Json_converter_j.collection_of_string body_string)
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Some (Json_converter_j.collection_of_string body) in
           result_or_error_with_result 201 value resp body
 
     let get ?timeout name coll_name =
       let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let response =
-        Cohttp_lwt_unix.Client.get
+      let* response =
+        Http.get
           ~headers:
             (headers Account.Colls Utilities.Verb.Get
                ("dbs/" ^ name ^ "/colls/" ^ coll_name))
           uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
           let code = get_code resp in
-          let headers = Response_headers.get_header resp in
+          let hdrs = Response_headers.get_header resp in
           if code = 200 then
             let value body =
-              let%lwt body_string = body_to_string body in
-              Lwt.return_some
-                (Json_converter_j.collection_of_string body_string)
+              Some (Json_converter_j.collection_of_string body)
             in
             result_or_error_with_result 200 value resp body
-          else Lwt.return_error (Azure_error (code, headers))
+          else IO.return (Error (Azure_error (code, hdrs)))
 
     let create_if_not_exists ?(indexing_policy = None) ?(partition_key = None)
         ?timeout dbname coll_name =
-      let%lwt exists = get ?timeout dbname coll_name in
+      let* exists = get ?timeout dbname coll_name in
       match exists with
-      | Ok result -> Lwt.return (Result.ok result)
+      | Ok result -> IO.return (Result.ok result)
       | Error (Azure_error (404, _)) ->
           create ?timeout ~indexing_policy ~partition_key dbname coll_name
-      | Error x -> Lwt.return_error x
+      | Error x -> IO.return (Error x)
 
     let delete ?timeout name coll_name =
       let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
       let header_path = "dbs/" ^ name ^ "/colls/" ^ coll_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let response =
-        Cohttp_lwt_unix.Client.delete
+      let* response =
+        Http.delete
           ~headers:(headers Account.Colls Utilities.Verb.Delete header_path)
           uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let%lwt () = Cohttp_lwt.Body.drain_body body in
-          Lwt.return (with_204_do resp)
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, _body)) -> IO.return (with_204_do resp)
 
     module Document = struct
       type indexing_directive = Include | Exclude
@@ -401,10 +359,10 @@ module Database (Auth_key : Auth_key) = struct
 
       let create ?is_upsert ?indexing_directive ?partition_key ?timeout dbname
           coll_name content =
-        let body = Cohttp_lwt.Body.of_string content in
+        let body = content in
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        let headers =
+        let hdrs =
           json_headers Account.Docs Utilities.Verb.Post
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
           |> apply_to_header_if_some "x-ms-documentdb-is-upsert"
@@ -415,53 +373,61 @@ module Database (Auth_key : Auth_key) = struct
                string_of_partition_key partition_key
         in
         let rec post retry () =
-          try%lwt
-            let post_respons =
-              Cohttp_lwt_unix.Client.post ~headers ~body uri
-              >>= Lwt.return_some |> wrap_timeout timeout
-            in
-            match%lwt post_respons with
-            | Some (resp, body) ->
-                let code = get_code resp in
-                let%lwt value =
-                  match code with
-                  | 200 ->
-                      let%lwt body_string = body_to_string body in
-                      Lwt.return
-                        (Some
-                           (Json_converter_j.collection_of_string body_string))
-                  | _ -> Lwt.return None
-                in
-                let%lwt () = Cohttp_lwt.Body.drain_body body in
-                if code = 429 then
-                  let response_header = Response_headers.get_header resp in
-                  let milliseconds =
-                    Response_headers.x_ms_retry_after_ms response_header
-                    |> Option.value ~default:"0" |> int_of_string_opt
-                    |> Option.value ~default:0 |> Int.to_float
+          IO.catch
+            (fun () ->
+              let* post_response = Http.post ~headers:hdrs ~body uri in
+              match post_response with
+              | Error Http.Connection_refused ->
+                  if retry > 0 then
+                    let () = Random.self_init () in
+                    let sleep_time = Random.int 5 |> float_of_int in
+                    let* () = IO.sleep sleep_time in
+                    post (retry - 1) ()
+                  else connection_error
+              | Error (Http.Other_error exn) -> IO.return (raise exn)
+              | Ok (resp, body_str) ->
+                  let code = get_code resp in
+                  let value =
+                    match code with
+                    | 200 ->
+                        Some (Json_converter_j.collection_of_string body_str)
+                    | _ -> None
                   in
-                  let%lwt () = Lwt_unix.sleep (milliseconds /. 1000.) in
-                  if retry > 0 then post (retry - 1) () else timeout_error
-                else Lwt.return (Result.ok (code, value))
-            | None -> timeout_error
-          with Unix.Unix_error (ECONNREFUSED, _, _) ->
-            if retry > 0 then
-              let () = Random.self_init () in
-              let sleep = Random.int 5 |> float_of_int in
-              let%lwt () = Lwt_unix.sleep sleep in
-              post (retry - 1) ()
-            else connection_error
+                  if code = 429 then
+                    let response_header = Response_headers.get_header resp in
+                    let milliseconds =
+                      Response_headers.x_ms_retry_after_ms response_header
+                      |> Option.value ~default:"0" |> int_of_string_opt
+                      |> Option.value ~default:0 |> Int.to_float
+                    in
+                    let* () = IO.sleep (milliseconds /. 1000.) in
+                    if retry > 0 then post (retry - 1) () else timeout_error
+                  else IO.return (Result.ok (code, value)))
+            (fun _exn ->
+              if retry > 0 then
+                let () = Random.self_init () in
+                let sleep_time = Random.int 5 |> float_of_int in
+                let* () = IO.sleep sleep_time in
+                post (retry - 1) ()
+              else connection_error)
         in
-        post 10 ()
+        let with_timeout_wrapper () =
+          match timeout with
+          | None -> post 10 ()
+          | Some t -> (
+              let* result = IO.with_timeout t (post 10 ()) in
+              match result with Some r -> IO.return r | None -> timeout_error)
+        in
+        with_timeout_wrapper ()
 
       let create_multiple ?is_upsert ?indexing_directive ?timeout
           ?(chunk_size = 100) dbname coll_name content_list =
         let rec take_first n acc = function
-          | [] -> Lwt.return @@ acc
+          | [] -> IO.return @@ acc
           | x ->
               let first, rest = Utilities.take_first n x in
-              let%lwt r =
-                Lwt_list.map_p
+              let* r =
+                IO.parallel_map
                   (fun (partition_key, content) ->
                     create ?is_upsert ?indexing_directive ?partition_key
                       ?timeout dbname coll_name content)
@@ -521,7 +487,7 @@ module Database (Auth_key : Auth_key) = struct
         in
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        let headers =
+        let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
           |> apply_to_header_if_some "x-ms-max-item-count" string_of_int
@@ -541,28 +507,18 @@ module Database (Auth_key : Auth_key) = struct
                (fun x -> x)
                partition_key_range_id
         in
-        let get_action =
-          Cohttp_lwt_unix.Client.get ~headers uri
-          >>= Lwt.return_some |> wrap_timeout timeout
-        in
-        match%lwt get_action with
+        let* get_action = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
+        match get_action with
         | None -> timeout_error
-        | Some (resp, body) ->
+        | Some (Error e) -> handle_http_error e
+        | Some (Ok (resp, body)) ->
             let code = get_code resp in
             let response_header = Response_headers.get_header resp in
-            let value body =
-              let%lwt body_string = body_to_string body in
-              Lwt.return @@ convert_to_list_result body_string
-            in
             let expected_code = 200 in
-            let result =
-              if code = expected_code then
-                let%lwt result = value body in
-                Lwt.return_ok (expected_code, response_header, result)
-              else Lwt.return_error (Azure_error (code, response_header))
-            in
-            let%lwt () = Cohttp_lwt.Body.drain_body body in
-            result
+            if code = expected_code then
+              let result = convert_to_list_result body in
+              IO.return (Ok (expected_code, response_header, result))
+            else IO.return (Error (Azure_error (code, response_header)))
 
       type consistency_level = Strong | Bounded | Session | Eventual
 
@@ -574,7 +530,7 @@ module Database (Auth_key : Auth_key) = struct
 
       let get ?if_none_match ?partition_key ?consistency_level ?session_token
           ?timeout dbname coll_name doc_id =
-        let headers =
+        let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
           |> apply_to_header_if_some "If-None-Match" (fun x -> x) if_none_match
@@ -590,20 +546,18 @@ module Database (Auth_key : Auth_key) = struct
           "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
         in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        let response =
-          Cohttp_lwt_unix.Client.get ~headers uri
-          >>= Lwt.return_some |> wrap_timeout timeout
-        in
-        match%lwt response with
-        | Some (resp, body) ->
-            let code = get_code resp in
-            body_to_string body >|= fun body -> Result.ok (code, body)
+        let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
+        match response with
         | None -> timeout_error
+        | Some (Error e) -> handle_http_error e
+        | Some (Ok (resp, body)) ->
+            let code = get_code resp in
+            IO.return (Result.ok (code, body))
 
       let replace ?indexing_directive ?partition_key ?if_match ?timeout dbname
           coll_name doc_id content =
-        let body = Cohttp_lwt.Body.of_string content in
-        let headers =
+        let body = content in
+        let hdrs =
           json_headers Account.Docs Utilities.Verb.Put
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
           |> apply_to_header_if_some "x-ms-indexing-directive"
@@ -616,36 +570,36 @@ module Database (Auth_key : Auth_key) = struct
           "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
         in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        let response =
-          Cohttp_lwt_unix.Client.put ~headers ~body uri
-          >>= Lwt.return_some |> wrap_timeout timeout
+        let* response =
+          Http.put ~headers:hdrs ~body uri |> wrap_timeout timeout
         in
-        match%lwt response with
-        | Some (resp, body) ->
-            let code = get_code resp in
-            Lwt.return_ok (code, body)
+        match response with
         | None -> timeout_error
+        | Some (Error e) -> handle_http_error e
+        | Some (Ok (resp, body)) ->
+            let code = get_code resp in
+            IO.return (Ok (code, body))
 
       let delete ?partition_key ?timeout dbname coll_name doc_id =
         let path =
           Printf.sprintf "/dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
         in
-        let headers =
+        let hdrs =
           Printf.sprintf "dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
           |> headers Account.Docs Utilities.Verb.Delete
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
         in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        let rec delete retry () =
-          let response =
-            Cohttp_lwt_unix.Client.delete ~headers uri
-            >>= Lwt.return_some |> wrap_timeout timeout
+        let rec delete_loop retry () =
+          let* response =
+            Http.delete ~headers:hdrs uri |> wrap_timeout timeout
           in
-          match%lwt response with
-          | Some (resp, body) ->
+          match response with
+          | None -> timeout_error
+          | Some (Error e) -> handle_http_error e
+          | Some (Ok (resp, _body)) ->
               let code = get_code resp in
-              let%lwt () = Cohttp_lwt.Body.drain_body body in
               if code = 429 then
                 let response_header = Response_headers.get_header resp in
                 let milliseconds =
@@ -653,21 +607,20 @@ module Database (Auth_key : Auth_key) = struct
                   |> Option.value ~default:"0" |> int_of_string_opt
                   |> Option.value ~default:0 |> Int.to_float
                 in
-                let%lwt () = Lwt_unix.sleep (milliseconds /. 1000.) in
-                if retry > 0 then delete (retry - 1) () else timeout_error
-              else Lwt.return_ok code
-          | None -> timeout_error
+                let* () = IO.sleep (milliseconds /. 1000.) in
+                if retry > 0 then delete_loop (retry - 1) () else timeout_error
+              else IO.return (Ok code)
         in
-        delete 3 ()
+        delete_loop 3 ()
 
       let delete_multiple ?partition_key ?timeout ?(chunk_size = 100) dbname
           coll_name doc_ids =
         let rec take_first n acc = function
-          | [] -> Lwt.return @@ acc
+          | [] -> IO.return @@ acc
           | x ->
               let first, rest = Utilities.take_first n x in
-              let%lwt r =
-                Lwt_list.map_p
+              let* r =
+                IO.parallel_map
                   (delete ?partition_key ?timeout dbname coll_name)
                   first
               in
@@ -677,7 +630,7 @@ module Database (Auth_key : Auth_key) = struct
 
       let query ?max_item_count ?continuation ?consistency_level ?session_token
           ?is_partition ?partition_key ?timeout dbname coll_name query =
-        let headers s =
+        let make_headers s =
           let h = headers Account.Docs Utilities.Verb.Post s in
           Cohttp.Header.add h "x-ms-documentdb-isquery"
             (Utility.string_of_bool true)
@@ -700,33 +653,23 @@ module Database (Auth_key : Auth_key) = struct
           |> add_header "content-type" "application/query+json"
         in
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
-        let headers = headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
-        let body =
-          Json_converter_j.string_of_query query |> Cohttp_lwt.Body.of_string
-        in
+        let hdrs = make_headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
+        let body = Json_converter_j.string_of_query query in
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-        let response =
-          Cohttp_lwt_unix.Client.post ~headers ~body uri
-          >>= Lwt.return_some |> wrap_timeout timeout
+        let* response =
+          Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
         in
-        match%lwt response with
+        match response with
         | None -> timeout_error
-        | Some (resp, body) ->
+        | Some (Error e) -> handle_http_error e
+        | Some (Ok (resp, body)) ->
             let code = get_code resp in
             let response_header = Response_headers.get_header resp in
-            let value () =
-              let%lwt body_string = body_to_string body in
-              Lwt.return @@ convert_to_list_result body_string
-            in
             let expected_code = 200 in
-            let result =
-              if code = expected_code then
-                let%lwt result = value () in
-                Lwt.return_ok (expected_code, response_header, result)
-              else Lwt.return_error (Azure_error (code, response_header))
-            in
-            let%lwt () = Cohttp_lwt.Body.drain_body body in
-            result
+            if code = expected_code then
+              let result = convert_to_list_result body in
+              IO.return (Ok (expected_code, response_header, result))
+            else IO.return (Error (Azure_error (code, response_header)))
     end
   end
 
@@ -737,105 +680,85 @@ module Database (Auth_key : Auth_key) = struct
     let create ?timeout dbname user_name =
       let body =
         ({ id = user_name } : Json_converter_j.create_user)
-        |> Json_converter_j.string_of_create_user |> Cohttp_lwt.Body.of_string
+        |> Json_converter_j.string_of_create_user
       in
       let uri =
         Uri.make ~scheme:"https" ~host ~port:443
           ~path:("/dbs/" ^ dbname ^ "/users")
           ()
       in
-      let headers =
-        json_headers resource Utilities.Verb.Post ("dbs/" ^ dbname)
+      let hdrs = json_headers resource Utilities.Verb.Post ("dbs/" ^ dbname) in
+      let* response =
+        Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
-      let response =
-        Cohttp_lwt_unix.Client.post ~headers ~body uri
-        >>= Lwt.return_some |> wrap_timeout timeout
-      in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return @@ Json_converter_j.user_of_string body_string
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Json_converter_j.user_of_string body in
           result_or_error_with_result 201 value resp body
 
     let list ?timeout dbname =
       let path = "/dbs/" ^ dbname ^ "/users" in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
       let header_path = "dbs/" ^ dbname in
-      let response =
-        Cohttp_lwt_unix.Client.get
-          ~headers:(headers Utilities.Verb.Get header_path)
-          uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.get ~headers:(headers Utilities.Verb.Get header_path) uri
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return @@ Json_converter_j.list_users_of_string body_string
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Json_converter_j.list_users_of_string body in
           result_or_error_with_result 200 value resp body
 
     let get ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let response =
-        Cohttp_lwt_unix.Client.get
-          ~headers:(headers Utilities.Verb.Get header_path)
-          uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.get ~headers:(headers Utilities.Verb.Get header_path) uri
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return @@ Json_converter_j.user_of_string body_string
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Json_converter_j.user_of_string body in
           result_or_error_with_result 200 value resp body
 
     let replace ?timeout dbname user_name new_user_name =
       let body =
         ({ id = new_user_name } : Json_converter_j.create_user)
-        |> Json_converter_j.string_of_create_user |> Cohttp_lwt.Body.of_string
+        |> Json_converter_j.string_of_create_user
       in
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let response =
-        Cohttp_lwt_unix.Client.put
-          ~headers:(headers Utilities.Verb.Put header_path)
-          ~body uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.put ~headers:(headers Utilities.Verb.Put header_path) ~body uri
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return @@ Json_converter_j.user_of_string body_string
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Json_converter_j.user_of_string body in
           result_or_error_with_result 200 value resp body
 
     let delete ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let response =
-        Cohttp_lwt_unix.Client.delete
-          ~headers:(headers Utilities.Verb.Delete header_path)
-          uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.delete ~headers:(headers Utilities.Verb.Delete header_path) uri
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let%lwt () = Cohttp_lwt.Body.drain_body body in
-          Lwt.return (result_or_error 204 resp)
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, _body)) -> IO.return (result_or_error 204 resp)
   end
 
   module Permission = struct
@@ -856,7 +779,6 @@ module Database (Auth_key : Auth_key) = struct
         ({ id = permission_name; permission_mode; resource = resource_string }
           : Json_converter_j.create_permission)
         |> Json_converter_j.string_of_create_permission
-        |> Cohttp_lwt.Body.of_string
       in
       let uri =
         let path =
@@ -864,21 +786,18 @@ module Database (Auth_key : Auth_key) = struct
         in
         Uri.make ~scheme:"https" ~host ~port:443 ~path ()
       in
-      let headers =
+      let hdrs =
         json_headers resource Utilities.Verb.Post
           (Printf.sprintf "dbs/%s/users/%s" dbname user_name)
       in
-      let response =
-        Cohttp_lwt_unix.Client.post ~headers ~body uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return @@ Json_converter_j.permission_of_string body_string
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Json_converter_j.permission_of_string body in
           result_or_error_with_result 201 value resp body
 
     let list ?timeout ~dbname ~user_name () =
@@ -887,21 +806,15 @@ module Database (Auth_key : Auth_key) = struct
       in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
       let header_path = Printf.sprintf "dbs/%s/users/%s" dbname user_name in
-
-      let response =
-        Cohttp_lwt_unix.Client.get
-          ~headers:(headers Utilities.Verb.Get header_path)
-          uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.get ~headers:(headers Utilities.Verb.Get header_path) uri
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return
-            @@ Json_converter_j.list_permissions_of_string body_string
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Json_converter_j.list_permissions_of_string body in
           result_or_error_with_result 200 value resp body
 
     let get ?timeout ~dbname ~user_name ~permission_name () =
@@ -914,19 +827,15 @@ module Database (Auth_key : Auth_key) = struct
           permission_name
       in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let response =
-        Cohttp_lwt_unix.Client.get
-          ~headers:(headers Utilities.Verb.Get header_path)
-          uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.get ~headers:(headers Utilities.Verb.Get header_path) uri
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return @@ Json_converter_j.permission_of_string body_string
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Json_converter_j.permission_of_string body in
           result_or_error_with_result 200 value resp body
 
     let replace ?timeout ~dbname ~user_name ~coll_name permission_mode
@@ -939,7 +848,6 @@ module Database (Auth_key : Auth_key) = struct
         ({ id = permission_name; permission_mode; resource = resource_string }
           : Json_converter_j.create_permission)
         |> Json_converter_j.string_of_create_permission
-        |> Cohttp_lwt.Body.of_string
       in
       let path =
         Printf.sprintf "/dbs/%s/users/%s/permissions/%s" dbname user_name
@@ -950,19 +858,15 @@ module Database (Auth_key : Auth_key) = struct
           permission_name
       in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let response =
-        Cohttp_lwt_unix.Client.put
-          ~headers:(headers Utilities.Verb.Put header_path)
-          ~body uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.put ~headers:(headers Utilities.Verb.Put header_path) ~body uri
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let value body =
-            let%lwt body_string = body_to_string body in
-            Lwt.return @@ Json_converter_j.permission_of_string body_string
-          in
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, body)) ->
+          let value body = Json_converter_j.permission_of_string body in
           result_or_error_with_result 200 value resp body
 
     let delete ?timeout ~dbname ~user_name ~permission_name () =
@@ -975,16 +879,13 @@ module Database (Auth_key : Auth_key) = struct
           permission_name
       in
       let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let response =
-        Cohttp_lwt_unix.Client.delete
-          ~headers:(headers Utilities.Verb.Delete header_path)
-          uri
-        >>= Lwt.return_some |> wrap_timeout timeout
+      let* response =
+        Http.delete ~headers:(headers Utilities.Verb.Delete header_path) uri
+        |> wrap_timeout timeout
       in
-      match%lwt response with
+      match response with
       | None -> timeout_error
-      | Some (resp, body) ->
-          let%lwt () = Cohttp_lwt.Body.drain_body body in
-          Lwt.return (result_or_error 204 resp)
+      | Some (Error e) -> handle_http_error e
+      | Some (Ok (resp, _body)) -> IO.return (result_or_error 204 resp)
   end
 end
