@@ -1,11 +1,12 @@
 open Cosmos.Databases_core
 
 module Make
+    (Cfg : Test_io_intf.Config)
     (IO : Test_io_intf.IO)
     (D : Test_io_intf.DB with type 'a io := 'a IO.t) =
 struct
   let ( let* ) = IO.bind
-  let dbname = "user_database"
+  let dbname = Cfg.prefix ^ "user_database"
   let user_name = "a_user_name"
   let replace_user_name = "replace_user_name"
 

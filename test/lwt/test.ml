@@ -9,6 +9,10 @@ end
 
 module D = Database (MyAuthKeys)
 
+module Lwt_config : Test_core.Test_io_intf.Config = struct
+  let prefix = "lwt"
+end
+
 (* Lwt IO implementation for the test functor *)
 module Lwt_test_io : Test_core.Test_io_intf.IO with type 'a t = 'a Lwt.t =
 struct
@@ -28,9 +32,13 @@ struct
 end
 
 (* Instantiate the test functors *)
-module Integration = Test_core.Integration_tests.Make (Lwt_test_io) (D)
-module Users = Test_core.Users_tests.Make (Lwt_test_io) (D)
-module Permissions = Test_core.Permission_tests.Make (Lwt_test_io) (D)
+module Integration =
+  Test_core.Integration_tests.Make (Lwt_config) (Lwt_test_io) (D)
+
+module Users = Test_core.Users_tests.Make (Lwt_config) (Lwt_test_io) (D)
+
+module Permissions =
+  Test_core.Permission_tests.Make (Lwt_config) (Lwt_test_io) (D)
 
 (* Wrap async test functions for Alcotest_lwt *)
 let wrap_async_tests speed tests =

@@ -2,10 +2,12 @@ open Test_common_core
 open Cosmos.Databases_core
 
 module Make
+    (Cfg : Test_io_intf.Config)
     (IO : Test_io_intf.IO)
     (D : Test_io_intf.DB with type 'a io := 'a IO.t) =
 struct
   let ( let* ) = IO.bind
+  let dbname_partition = dbname_partition Cfg.prefix
 
   let create_value counter =
     let string_counter = string_of_int counter in

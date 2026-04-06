@@ -9,6 +9,10 @@ end
 
 module D = Database (MyAuthKeys)
 
+module Eio_config : Test_core.Test_io_intf.Config = struct
+  let prefix = "eio"
+end
+
 (* Eio IO implementation for the test functor *)
 module Eio_test_io : Test_core.Test_io_intf.IO with type 'a t = unit -> 'a =
 struct
@@ -31,9 +35,13 @@ struct
 end
 
 (* Instantiate the test functors *)
-module Integration = Test_core.Integration_tests.Make (Eio_test_io) (D)
-module Users = Test_core.Users_tests.Make (Eio_test_io) (D)
-module Permissions = Test_core.Permission_tests.Make (Eio_test_io) (D)
+module Integration =
+  Test_core.Integration_tests.Make (Eio_config) (Eio_test_io) (D)
+
+module Users = Test_core.Users_tests.Make (Eio_config) (Eio_test_io) (D)
+
+module Permissions =
+  Test_core.Permission_tests.Make (Eio_config) (Eio_test_io) (D)
 
 (* Wrap async test functions for plain Alcotest *)
 let wrap_async_tests speed tests =

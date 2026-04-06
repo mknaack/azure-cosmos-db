@@ -1,8 +1,7 @@
 let master_key_env = "AZURE_COSMOS_KEY"
 let endpoint_env = "AZURE_COSMOS_ENDPOINT"
-let dbname = "test"
 let collection_name = "testCollection"
-let dbname_partition = "testPartition"
+let dbname_partition prefix = prefix ^ "testPartition"
 let collection_name_partition = "testPartition"
 let document_id = "document_id"
 
