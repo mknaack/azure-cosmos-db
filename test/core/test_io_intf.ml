@@ -1,3 +1,7 @@
+module type Config = sig
+  val prefix : string
+end
+
 module type IO = sig
   include Cosmos.Databases_intf.IO
 
