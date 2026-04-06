@@ -22,15 +22,12 @@ module Auth (Keys : Databases_intf.Auth_key) : Account = struct
     | Permissions -> "permissions"
 
   let authorization verb resource date db_name =
-    let verb = Utilities.Verb.string_of_verb verb in
-    let resource_type = string_of_resource resource in
-    let resource_id = db_name in
-    let date = Utilities.Ms_time.x_ms_date date in
-    let result =
-      Utility.authorization_token_using_master_key verb resource_type
-        resource_id date Keys.master_key
-    in
-    result
+    Utility.authorization_token_using_master_key
+      (Utilities.Verb.string_of_verb verb)
+      (string_of_resource resource)
+      db_name
+      (Utilities.Ms_time.x_ms_date date)
+      Keys.master_key
 
   let endpoint = Keys.endpoint
 end
@@ -176,55 +173,52 @@ struct
     | Http.Connection_refused -> connection_error
     | Http.Other_error _exn -> connection_error
 
+  let make_uri path = Uri.make ~scheme:"https" ~host ~port:443 ~path ()
+
+  let header_path_of_path path =
+    if String.length path > 0 && path.[0] = '/' then
+      String.sub path 1 (String.length path - 1)
+    else path
+
+  let handle_response response f =
+    match response with
+    | None -> timeout_error
+    | Some (Error e) -> handle_http_error e
+    | Some (Ok (resp, body)) -> f resp body
+
   let list_databases ?timeout () =
-    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
+    let uri = make_uri "dbs" in
     let* response =
       Http.get ~headers:(headers Account.Dbs Utilities.Verb.Get "") uri
       |> wrap_timeout timeout
     in
-    match response with
-    | None -> timeout_error
-    | Some (Error e) -> handle_http_error e
-    | Some (Ok (resp, body)) ->
+    handle_response response (fun resp body ->
         let code = get_code resp in
         let value = Json_converter_j.list_databases_of_string body in
-        IO.return @@ Result.ok (code, value)
+        IO.return @@ Result.ok (code, value))
 
   let create ?timeout name =
     let body =
       ({ id = name } : Json_converter_j.create_database)
       |> Json_converter_j.string_of_create_database
     in
-    let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path:"dbs" () in
+    let uri = make_uri "dbs" in
     let hdrs = json_headers Account.Dbs Utilities.Verb.Post "" in
     let* response = Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout in
-    match response with
-    | None -> timeout_error
-    | Some (Error e) -> handle_http_error e
-    | Some (Ok (resp, body)) ->
+    handle_response response (fun resp body ->
         let result body = Some (Json_converter_j.database_of_string body) in
-        result_or_error_with_result 201 result resp body
+        result_or_error_with_result 201 result resp body)
 
   let get ?timeout name =
-    let uri =
-      Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) ()
-    in
+    let path = "dbs/" ^ name in
+    let uri = make_uri path in
     let* response =
-      Http.get
-        ~headers:(headers Account.Dbs Utilities.Verb.Get ("dbs/" ^ name))
-        uri
+      Http.get ~headers:(headers Account.Dbs Utilities.Verb.Get path) uri
       |> wrap_timeout timeout
     in
-    match response with
-    | None -> timeout_error
-    | Some (Error e) -> handle_http_error e
-    | Some (Ok (resp, body)) ->
-        let code = get_code resp in
-        let response_header = Response_headers.get_header resp in
-        if code = 200 then
-          let result body = Some (Json_converter_j.database_of_string body) in
-          result_or_error_with_result 200 result resp body
-        else IO.return (Error (Azure_error (code, response_header)))
+    handle_response response (fun resp body ->
+        let result body = Some (Json_converter_j.database_of_string body) in
+        result_or_error_with_result 200 result resp body)
 
   let create_if_not_exists ?timeout name =
     let* exists = get ?timeout name in
@@ -234,39 +228,27 @@ struct
     | Error x -> IO.return (Error x)
 
   let delete ?timeout name =
-    let uri =
-      Uri.make ~scheme:"https" ~host ~port:443 ~path:("dbs/" ^ name) ()
-    in
+    let path = "dbs/" ^ name in
+    let uri = make_uri path in
     let* response =
-      Http.delete
-        ~headers:(headers Account.Dbs Utilities.Verb.Delete ("dbs/" ^ name))
-        uri
+      Http.delete ~headers:(headers Account.Dbs Utilities.Verb.Delete path) uri
       |> wrap_timeout timeout
     in
-    match response with
-    | None -> timeout_error
-    | Some (Error e) -> handle_http_error e
-    | Some (Ok (resp, _body)) -> IO.return (with_204_do resp)
+    handle_response response (fun resp _body -> IO.return (with_204_do resp))
 
   module Collection = struct
     let list ?timeout dbname =
-      let uri =
-        Uri.make ~scheme:"https" ~host ~port:443
-          ~path:("dbs/" ^ dbname ^ "/colls")
-          ()
-      in
+      let path = "dbs/" ^ dbname ^ "/colls" in
+      let uri = make_uri path in
       let* response =
         Http.get
           ~headers:(headers Account.Colls Utilities.Verb.Get ("dbs/" ^ dbname))
           uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Json_converter_j.list_collections_of_string body in
-          result_or_error_with_result 200 value resp body
+          result_or_error_with_result 200 value resp body)
 
     let create ?(indexing_policy = None) ?(partition_key = None) ?timeout dbname
         coll_name =
@@ -275,47 +257,31 @@ struct
           : Json_converter_j.create_collection)
         |> Json_converter_j.string_of_create_collection
       in
-      let uri =
-        Uri.make ~scheme:"https" ~host ~port:443
-          ~path:("/dbs/" ^ dbname ^ "/colls")
-          ()
-      in
+      let path = "/dbs/" ^ dbname ^ "/colls" in
+      let uri = make_uri path in
       let hdrs =
         json_headers Account.Colls Utilities.Verb.Post ("dbs/" ^ dbname)
       in
       let* response =
         Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Some (Json_converter_j.collection_of_string body) in
-          result_or_error_with_result 201 value resp body
+          result_or_error_with_result 201 value resp body)
 
     let get ?timeout name coll_name =
       let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let uri = make_uri path in
       let* response =
         Http.get
           ~headers:
-            (headers Account.Colls Utilities.Verb.Get
-               ("dbs/" ^ name ^ "/colls/" ^ coll_name))
+            (headers Account.Colls Utilities.Verb.Get (header_path_of_path path))
           uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
-          let code = get_code resp in
-          let hdrs = Response_headers.get_header resp in
-          if code = 200 then
-            let value body =
-              Some (Json_converter_j.collection_of_string body)
-            in
-            result_or_error_with_result 200 value resp body
-          else IO.return (Error (Azure_error (code, hdrs)))
+      handle_response response (fun resp body ->
+          let value body = Some (Json_converter_j.collection_of_string body) in
+          result_or_error_with_result 200 value resp body)
 
     let create_if_not_exists ?(indexing_policy = None) ?(partition_key = None)
         ?timeout dbname coll_name =
@@ -328,18 +294,16 @@ struct
 
     let delete ?timeout name coll_name =
       let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
-      let header_path = "dbs/" ^ name ^ "/colls/" ^ coll_name in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let uri = make_uri path in
       let* response =
         Http.delete
-          ~headers:(headers Account.Colls Utilities.Verb.Delete header_path)
+          ~headers:
+            (headers Account.Colls Utilities.Verb.Delete
+               (header_path_of_path path))
           uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, _body)) -> IO.return (with_204_do resp)
+      handle_response response (fun resp _body -> IO.return (with_204_do resp))
 
     module Document = struct
       type indexing_directive = Include | Exclude
@@ -359,32 +323,31 @@ struct
 
       let create ?is_upsert ?indexing_directive ?partition_key ?timeout dbname
           coll_name content =
-        let body = content in
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
-        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let uri = make_uri path in
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Post
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
-          |> apply_to_header_if_some "x-ms-documentdb-is-upsert"
-               Utility.string_of_bool is_upsert
+          |> apply_to_header_if_some "x-ms-documentdb-is-upsert" string_of_bool
+               is_upsert
           |> apply_to_header_if_some "x-ms-indexing-directive"
                string_of_indexing_directive indexing_directive
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
         in
+        let () = Random.self_init () in
         let rec post retry () =
           IO.catch
             (fun () ->
-              let* post_response = Http.post ~headers:hdrs ~body uri in
+              let* post_response = Http.post ~headers:hdrs ~body:content uri in
               match post_response with
               | Error Http.Connection_refused ->
                   if retry > 0 then
-                    let () = Random.self_init () in
                     let sleep_time = Random.int 5 |> float_of_int in
                     let* () = IO.sleep sleep_time in
                     post (retry - 1) ()
                   else connection_error
-              | Error (Http.Other_error exn) -> IO.return (raise exn)
+              | Error (Http.Other_error exn) -> raise exn
               | Ok (resp, body_str) ->
                   let code = get_code resp in
                   let value =
@@ -405,7 +368,6 @@ struct
                   else IO.return (Result.ok (code, value)))
             (fun _exn ->
               if retry > 0 then
-                let () = Random.self_init () in
                 let sleep_time = Random.int 5 |> float_of_int in
                 let* () = IO.sleep sleep_time in
                 post (retry - 1) ()
@@ -486,39 +448,29 @@ struct
           | Some true -> Cohttp.Header.add headers name "Incremental feed"
         in
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
-        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let uri = make_uri path in
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
           |> apply_to_header_if_some "x-ms-max-item-count" string_of_int
                max_item_count
-          |> apply_to_header_if_some "x-ms-continuation"
-               (fun x -> x)
-               continuation
-          |> apply_to_header_if_some "x-ms-consistency-level"
-               (fun x -> x)
+          |> apply_to_header_if_some "x-ms-continuation" Fun.id continuation
+          |> apply_to_header_if_some "x-ms-consistency-level" Fun.id
                consistency_level
-          |> apply_to_header_if_some "x-ms-session-token"
-               (fun x -> x)
-               session_token
+          |> apply_to_header_if_some "x-ms-session-token" Fun.id session_token
           |> apply_a_im_to_header_if_some "A-IM" a_im
-          |> apply_to_header_if_some "If-None-Match" (fun x -> x) if_none_match
+          |> apply_to_header_if_some "If-None-Match" Fun.id if_none_match
           |> apply_to_header_if_some "x-ms-documentdb-partitionkeyrangeid"
-               (fun x -> x)
-               partition_key_range_id
+               Fun.id partition_key_range_id
         in
         let* get_action = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
-        match get_action with
-        | None -> timeout_error
-        | Some (Error e) -> handle_http_error e
-        | Some (Ok (resp, body)) ->
+        handle_response get_action (fun resp body ->
             let code = get_code resp in
             let response_header = Response_headers.get_header resp in
-            let expected_code = 200 in
-            if code = expected_code then
+            if code = 200 then
               let result = convert_to_list_result body in
-              IO.return (Ok (expected_code, response_header, result))
-            else IO.return (Error (Azure_error (code, response_header)))
+              IO.return (Ok (200, response_header, result))
+            else IO.return (Error (Azure_error (code, response_header))))
 
       type consistency_level = Strong | Bounded | Session | Eventual
 
@@ -533,30 +485,24 @@ struct
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
-          |> apply_to_header_if_some "If-None-Match" (fun x -> x) if_none_match
+          |> apply_to_header_if_some "If-None-Match" Fun.id if_none_match
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
           |> apply_to_header_if_some "x-ms-consistency-level"
                string_of_consistency_level consistency_level
-          |> apply_to_header_if_some "x-ms-session-token"
-               (fun x -> x)
-               session_token
+          |> apply_to_header_if_some "x-ms-session-token" Fun.id session_token
         in
         let path =
           "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
         in
-        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let uri = make_uri path in
         let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
-        match response with
-        | None -> timeout_error
-        | Some (Error e) -> handle_http_error e
-        | Some (Ok (resp, body)) ->
+        handle_response response (fun resp body ->
             let code = get_code resp in
-            IO.return (Result.ok (code, body))
+            IO.return (Result.ok (code, body)))
 
       let replace ?indexing_directive ?partition_key ?if_match ?timeout dbname
           coll_name doc_id content =
-        let body = content in
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Put
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
@@ -564,33 +510,30 @@ struct
                string_of_indexing_directive indexing_directive
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
-          |> apply_to_header_if_some "If-Match" (fun x -> x) if_match
+          |> apply_to_header_if_some "If-Match" Fun.id if_match
         in
         let path =
           "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
         in
-        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let uri = make_uri path in
         let* response =
-          Http.put ~headers:hdrs ~body uri |> wrap_timeout timeout
+          Http.put ~headers:hdrs ~body:content uri |> wrap_timeout timeout
         in
-        match response with
-        | None -> timeout_error
-        | Some (Error e) -> handle_http_error e
-        | Some (Ok (resp, body)) ->
+        handle_response response (fun resp body ->
             let code = get_code resp in
-            IO.return (Ok (code, body))
+            IO.return (Ok (code, body)))
 
       let delete ?partition_key ?timeout dbname coll_name doc_id =
         let path =
           Printf.sprintf "/dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
         in
         let hdrs =
-          Printf.sprintf "dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
+          header_path_of_path path
           |> headers Account.Docs Utilities.Verb.Delete
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
         in
-        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let uri = make_uri path in
         let rec delete_loop retry () =
           let* response =
             Http.delete ~headers:hdrs uri |> wrap_timeout timeout
@@ -632,22 +575,16 @@ struct
           ?is_partition ?partition_key ?timeout dbname coll_name query =
         let make_headers s =
           let h = headers Account.Docs Utilities.Verb.Post s in
-          Cohttp.Header.add h "x-ms-documentdb-isquery"
-            (Utility.string_of_bool true)
+          Cohttp.Header.add h "x-ms-documentdb-isquery" (string_of_bool true)
           |> apply_to_header_if_some "x-ms-max-item-count" string_of_int
                max_item_count
-          |> apply_to_header_if_some "x-ms-continuation"
-               (fun x -> x)
-               continuation
-          |> apply_to_header_if_some "x-ms-consistency-level"
-               (fun x -> x)
+          |> apply_to_header_if_some "x-ms-continuation" Fun.id continuation
+          |> apply_to_header_if_some "x-ms-consistency-level" Fun.id
                consistency_level
-          |> apply_to_header_if_some "x-ms-session-token"
-               (fun x -> x)
-               session_token
+          |> apply_to_header_if_some "x-ms-session-token" Fun.id session_token
           |> apply_to_header_if_some
-               "x-ms-documentdb-query-enablecrosspartition"
-               Utility.string_of_bool is_partition
+               "x-ms-documentdb-query-enablecrosspartition" string_of_bool
+               is_partition
           |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
           |> add_header "content-type" "application/query+json"
@@ -655,21 +592,17 @@ struct
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
         let hdrs = make_headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
         let body = Json_converter_j.string_of_query query in
-        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let uri = make_uri path in
         let* response =
           Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
         in
-        match response with
-        | None -> timeout_error
-        | Some (Error e) -> handle_http_error e
-        | Some (Ok (resp, body)) ->
+        handle_response response (fun resp body ->
             let code = get_code resp in
             let response_header = Response_headers.get_header resp in
-            let expected_code = 200 in
-            if code = expected_code then
+            if code = 200 then
               let result = convert_to_list_result body in
-              IO.return (Ok (expected_code, response_header, result))
-            else IO.return (Error (Azure_error (code, response_header)))
+              IO.return (Ok (200, response_header, result))
+            else IO.return (Error (Azure_error (code, response_header))))
     end
   end
 
@@ -682,51 +615,38 @@ struct
         ({ id = user_name } : Json_converter_j.create_user)
         |> Json_converter_j.string_of_create_user
       in
-      let uri =
-        Uri.make ~scheme:"https" ~host ~port:443
-          ~path:("/dbs/" ^ dbname ^ "/users")
-          ()
-      in
+      let uri = make_uri ("/dbs/" ^ dbname ^ "/users") in
       let hdrs = json_headers resource Utilities.Verb.Post ("dbs/" ^ dbname) in
       let* response =
         Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Json_converter_j.user_of_string body in
-          result_or_error_with_result 201 value resp body
+          result_or_error_with_result 201 value resp body)
 
     let list ?timeout dbname =
       let path = "/dbs/" ^ dbname ^ "/users" in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let header_path = "dbs/" ^ dbname in
+      let uri = make_uri path in
       let* response =
-        Http.get ~headers:(headers Utilities.Verb.Get header_path) uri
+        Http.get ~headers:(headers Utilities.Verb.Get ("dbs/" ^ dbname)) uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Json_converter_j.list_users_of_string body in
-          result_or_error_with_result 200 value resp body
+          result_or_error_with_result 200 value resp body)
 
     let get ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
-      let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let uri = make_uri path in
       let* response =
-        Http.get ~headers:(headers Utilities.Verb.Get header_path) uri
+        Http.get
+          ~headers:(headers Utilities.Verb.Get (header_path_of_path path))
+          uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Json_converter_j.user_of_string body in
-          result_or_error_with_result 200 value resp body
+          result_or_error_with_result 200 value resp body)
 
     let replace ?timeout dbname user_name new_user_name =
       let body =
@@ -734,31 +654,28 @@ struct
         |> Json_converter_j.string_of_create_user
       in
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
-      let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let uri = make_uri path in
       let* response =
-        Http.put ~headers:(headers Utilities.Verb.Put header_path) ~body uri
+        Http.put
+          ~headers:(headers Utilities.Verb.Put (header_path_of_path path))
+          ~body uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Json_converter_j.user_of_string body in
-          result_or_error_with_result 200 value resp body
+          result_or_error_with_result 200 value resp body)
 
     let delete ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
-      let header_path = "dbs/" ^ dbname ^ "/users/" ^ user_name in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let uri = make_uri path in
       let* response =
-        Http.delete ~headers:(headers Utilities.Verb.Delete header_path) uri
+        Http.delete
+          ~headers:(headers Utilities.Verb.Delete (header_path_of_path path))
+          uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, _body)) -> IO.return (result_or_error 204 resp)
+      handle_response response (fun resp _body ->
+          IO.return (result_or_error 204 resp))
   end
 
   module Permission = struct
@@ -780,12 +697,10 @@ struct
           : Json_converter_j.create_permission)
         |> Json_converter_j.string_of_create_permission
       in
-      let uri =
-        let path =
-          Printf.sprintf "/dbs/%s/users/%s/permissions" dbname user_name
-        in
-        Uri.make ~scheme:"https" ~host ~port:443 ~path ()
+      let path =
+        Printf.sprintf "/dbs/%s/users/%s/permissions" dbname user_name
       in
+      let uri = make_uri path in
       let hdrs =
         json_headers resource Utilities.Verb.Post
           (Printf.sprintf "dbs/%s/users/%s" dbname user_name)
@@ -793,50 +708,42 @@ struct
       let* response =
         Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Json_converter_j.permission_of_string body in
-          result_or_error_with_result 201 value resp body
+          result_or_error_with_result 201 value resp body)
 
     let list ?timeout ~dbname ~user_name () =
       let path =
         Printf.sprintf "/dbs/%s/users/%s/permissions" dbname user_name
       in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
-      let header_path = Printf.sprintf "dbs/%s/users/%s" dbname user_name in
+      let uri = make_uri path in
       let* response =
-        Http.get ~headers:(headers Utilities.Verb.Get header_path) uri
+        Http.get
+          ~headers:
+            (headers Utilities.Verb.Get
+               (Printf.sprintf "dbs/%s/users/%s" dbname user_name))
+          uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Json_converter_j.list_permissions_of_string body in
-          result_or_error_with_result 200 value resp body
+          result_or_error_with_result 200 value resp body)
 
     let get ?timeout ~dbname ~user_name ~permission_name () =
       let path =
         Printf.sprintf "/dbs/%s/users/%s/permissions/%s" dbname user_name
           permission_name
       in
-      let header_path =
-        Printf.sprintf "dbs/%s/users/%s/permissions/%s" dbname user_name
-          permission_name
-      in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let uri = make_uri path in
       let* response =
-        Http.get ~headers:(headers Utilities.Verb.Get header_path) uri
+        Http.get
+          ~headers:(headers Utilities.Verb.Get (header_path_of_path path))
+          uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Json_converter_j.permission_of_string body in
-          result_or_error_with_result 200 value resp body
+          result_or_error_with_result 200 value resp body)
 
     let replace ?timeout ~dbname ~user_name ~coll_name permission_mode
         ~permission_name =
@@ -853,39 +760,30 @@ struct
         Printf.sprintf "/dbs/%s/users/%s/permissions/%s" dbname user_name
           permission_name
       in
-      let header_path =
-        Printf.sprintf "dbs/%s/users/%s/permissions/%s" dbname user_name
-          permission_name
-      in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let uri = make_uri path in
       let* response =
-        Http.put ~headers:(headers Utilities.Verb.Put header_path) ~body uri
+        Http.put
+          ~headers:(headers Utilities.Verb.Put (header_path_of_path path))
+          ~body uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, body)) ->
+      handle_response response (fun resp body ->
           let value body = Json_converter_j.permission_of_string body in
-          result_or_error_with_result 200 value resp body
+          result_or_error_with_result 200 value resp body)
 
     let delete ?timeout ~dbname ~user_name ~permission_name () =
       let path =
         Printf.sprintf "/dbs/%s/users/%s/permissions/%s" dbname user_name
           permission_name
       in
-      let header_path =
-        Printf.sprintf "dbs/%s/users/%s/permissions/%s" dbname user_name
-          permission_name
-      in
-      let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+      let uri = make_uri path in
       let* response =
-        Http.delete ~headers:(headers Utilities.Verb.Delete header_path) uri
+        Http.delete
+          ~headers:(headers Utilities.Verb.Delete (header_path_of_path path))
+          uri
         |> wrap_timeout timeout
       in
-      match response with
-      | None -> timeout_error
-      | Some (Error e) -> handle_http_error e
-      | Some (Ok (resp, _body)) -> IO.return (result_or_error 204 resp)
+      handle_response response (fun resp _body ->
+          IO.return (result_or_error 204 resp))
   end
 end
