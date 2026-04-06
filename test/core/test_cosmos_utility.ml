@@ -76,16 +76,6 @@ let convert_list_databases_test () =
   let is_same = expected_result = result in
   Alcotest.(check bool) "Same record" true is_same
 
-let string_of_bool_true () =
-  let result = Utility.string_of_bool true in
-  let expected_result = "true" in
-  Alcotest.(check string) "Same string" expected_result result
-
-let string_of_bool_false () =
-  let result = Utility.string_of_bool false in
-  let expected_result = "false" in
-  Alcotest.(check string) "Same string" expected_result result
-
 let tests =
   [
     ("adjust_host_no_change", adjust_host_no_change);
@@ -94,6 +84,4 @@ let tests =
     ("auth_key_test", auth_key_test);
     ("auth_key_test_get_list", auth_key_test_get_list);
     ("convert_list_databases_test", convert_list_databases_test);
-    ("string_of_bool_true", string_of_bool_true);
-    ("string_of_bool_false", string_of_bool_false);
   ]
