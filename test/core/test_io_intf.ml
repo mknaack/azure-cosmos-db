@@ -1,69 +1,59 @@
-module type Auth_key = Cosmos.Databases_intf.Auth_key
+module type IO = sig
+  include Cosmos.Databases_intf.IO
 
-val body_to_string : Cohttp_lwt.Body.t -> string Lwt.t
-
-module Response_headers : sig
-  type t = Cosmos.Databases_core.Response_headers.t
-
-  val content_type : t -> string option
-  val date : t -> string option
-  val etag : t -> string option
-  val x_ms_activity_id : t -> string option
-  val x_ms_alt_content_path : t -> string option
-  val x_ms_continuation : t -> string option
-  val x_ms_item_count : t -> string option
-  val x_ms_request_charge : t -> string option
-  val x_ms_resource_quota : t -> string option
-  val x_ms_resource_usage : t -> string option
-  val x_ms_retry_after_ms : t -> string option
-  val x_ms_schemaversion : t -> string option
-  val x_ms_serviceversion : t -> string option
-  val x_ms_session_token : t -> string option
+  val run : 'a t -> 'a
 end
 
-type cosmos_error = Cosmos.Databases_core.cosmos_error =
-  | Timeout_error
-  | Connection_error
-  | Azure_error of int * Response_headers.t
+module type DB = sig
+  type 'a io
 
-module Database (Auth_key : Auth_key) : sig
   val get_code : Cohttp.Response.t -> int
 
   val list_databases :
     ?timeout:float ->
     unit ->
-    (int * Cosmos.Json_converter_t.list_databases, cosmos_error) result Lwt.t
-  (** [list_databases] returns a list of databases *)
+    ( int * Cosmos.Json_converter_t.list_databases,
+      Cosmos.Databases_core.cosmos_error )
+    result
+    io
 
   val create :
     ?timeout:float ->
     string ->
-    (int * Cosmos.Json_converter_t.database option, cosmos_error) result Lwt.t
-  (** [create database_name] creates a database in Cosmos with name
-      database_name. *)
+    ( int * Cosmos.Json_converter_t.database option,
+      Cosmos.Databases_core.cosmos_error )
+    result
+    io
 
   val create_if_not_exists :
     ?timeout:float ->
     string ->
-    (int * Cosmos.Json_converter_t.database option, cosmos_error) result Lwt.t
-  (** [create_if_not_exists database_name] creates a database in Cosmos with
-      name database_name if it not already exists. *)
+    ( int * Cosmos.Json_converter_t.database option,
+      Cosmos.Databases_core.cosmos_error )
+    result
+    io
 
   val get :
     ?timeout:float ->
     string ->
-    (int * Cosmos.Json_converter_t.database option, cosmos_error) result Lwt.t
-  (** [get database_name] returns info about the database *)
+    ( int * Cosmos.Json_converter_t.database option,
+      Cosmos.Databases_core.cosmos_error )
+    result
+    io
 
-  val delete : ?timeout:float -> string -> (int, cosmos_error) result Lwt.t
-  (** [delete database_name] deletes the database [database_name] from Cosmos *)
+  val delete :
+    ?timeout:float ->
+    string ->
+    (int, Cosmos.Databases_core.cosmos_error) result io
 
   module Collection : sig
     val list :
       ?timeout:float ->
       string ->
-      (int * Cosmos.Json_converter_t.list_collections, cosmos_error) result
-      Lwt.t
+      ( int * Cosmos.Json_converter_t.list_collections,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val create :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
@@ -71,8 +61,10 @@ module Database (Auth_key : Auth_key) : sig
       ?timeout:float ->
       string ->
       string ->
-      (int * Cosmos.Json_converter_t.collection option, cosmos_error) result
-      Lwt.t
+      ( int * Cosmos.Json_converter_t.collection option,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val create_if_not_exists :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
@@ -80,18 +72,25 @@ module Database (Auth_key : Auth_key) : sig
       ?timeout:float ->
       string ->
       string ->
-      (int * Cosmos.Json_converter_t.collection option, cosmos_error) result
-      Lwt.t
+      ( int * Cosmos.Json_converter_t.collection option,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val get :
       ?timeout:float ->
       string ->
       string ->
-      (int * Cosmos.Json_converter_t.collection option, cosmos_error) result
-      Lwt.t
+      ( int * Cosmos.Json_converter_t.collection option,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val delete :
-      ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
+      ?timeout:float ->
+      string ->
+      string ->
+      (int, Cosmos.Databases_core.cosmos_error) result io
 
     module Document : sig
       type indexing_directive = Include | Exclude
@@ -104,8 +103,10 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         string ->
-        (int * Cosmos.Json_converter_t.collection option, cosmos_error) result
-        Lwt.t
+        ( int * Cosmos.Json_converter_t.collection option,
+          Cosmos.Databases_core.cosmos_error )
+        result
+        io
 
       val create_multiple :
         ?is_upsert:bool ->
@@ -115,9 +116,11 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         (string option * string) list ->
-        (int * Cosmos.Json_converter_t.collection option, cosmos_error) result
+        ( int * Cosmos.Json_converter_t.collection option,
+          Cosmos.Databases_core.cosmos_error )
+        result
         list
-        Lwt.t
+        io
 
       type list_result_meta_data = {
         rid : string;
@@ -144,7 +147,10 @@ module Database (Auth_key : Auth_key) : sig
         ?timeout:float ->
         string ->
         string ->
-        (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+        ( int * Cosmos.Databases_core.Response_headers.t * list_result,
+          Cosmos.Databases_core.cosmos_error )
+        result
+        io
 
       type consistency_level = Strong | Bounded | Session | Eventual
 
@@ -159,7 +165,7 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         string ->
-        (int * string, cosmos_error) result Lwt.t
+        (int * string, Cosmos.Databases_core.cosmos_error) result io
 
       val replace :
         ?indexing_directive:indexing_directive ->
@@ -170,7 +176,7 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         string ->
-        (int * string, cosmos_error) result Lwt.t
+        (int * string, Cosmos.Databases_core.cosmos_error) result io
 
       val delete :
         ?partition_key:string ->
@@ -178,7 +184,7 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         string ->
-        (int, cosmos_error) result Lwt.t
+        (int, Cosmos.Databases_core.cosmos_error) result io
 
       val delete_multiple :
         ?partition_key:string ->
@@ -187,7 +193,7 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         string list ->
-        (int, cosmos_error) result list Lwt.t
+        (int, Cosmos.Databases_core.cosmos_error) result list io
 
       val query :
         ?max_item_count:int ->
@@ -200,7 +206,10 @@ module Database (Auth_key : Auth_key) : sig
         string ->
         string ->
         Cosmos.Json_converter_t.query ->
-        (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+        ( int * Cosmos.Databases_core.Response_headers.t * list_result,
+          Cosmos.Databases_core.cosmos_error )
+        result
+        io
     end
   end
 
@@ -209,28 +218,43 @@ module Database (Auth_key : Auth_key) : sig
       ?timeout:float ->
       string ->
       string ->
-      (int * Cosmos.Json_converter_t.user, cosmos_error) result Lwt.t
+      ( int * Cosmos.Json_converter_t.user,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val list :
       ?timeout:float ->
       string ->
-      (int * Cosmos.Json_converter_t.list_users, cosmos_error) result Lwt.t
+      ( int * Cosmos.Json_converter_t.list_users,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val get :
       ?timeout:float ->
       string ->
       string ->
-      (int * Cosmos.Json_converter_t.user, cosmos_error) result Lwt.t
+      ( int * Cosmos.Json_converter_t.user,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val replace :
       ?timeout:float ->
       string ->
       string ->
       string ->
-      (int * Cosmos.Json_converter_t.user, cosmos_error) result Lwt.t
+      ( int * Cosmos.Json_converter_t.user,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val delete :
-      ?timeout:float -> string -> string -> (int, cosmos_error) result Lwt.t
+      ?timeout:float ->
+      string ->
+      string ->
+      (int, Cosmos.Databases_core.cosmos_error) result io
   end
 
   module Permission : sig
@@ -243,15 +267,20 @@ module Database (Auth_key : Auth_key) : sig
       coll_name:string ->
       permission_mode ->
       permission_name:string ->
-      (int * Cosmos.Json_converter_t.permission, cosmos_error) result Lwt.t
+      ( int * Cosmos.Json_converter_t.permission,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val list :
       ?timeout:float ->
       dbname:string ->
       user_name:string ->
       unit ->
-      (int * Cosmos.Json_converter_t.list_permissions, cosmos_error) result
-      Lwt.t
+      ( int * Cosmos.Json_converter_t.list_permissions,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val get :
       ?timeout:float ->
@@ -259,7 +288,10 @@ module Database (Auth_key : Auth_key) : sig
       user_name:string ->
       permission_name:string ->
       unit ->
-      (int * Cosmos.Json_converter_t.permission, cosmos_error) result Lwt.t
+      ( int * Cosmos.Json_converter_t.permission,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val replace :
       ?timeout:float ->
@@ -268,7 +300,10 @@ module Database (Auth_key : Auth_key) : sig
       coll_name:string ->
       permission_mode ->
       permission_name:string ->
-      (int * Cosmos.Json_converter_t.permission, cosmos_error) result Lwt.t
+      ( int * Cosmos.Json_converter_t.permission,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
 
     val delete :
       ?timeout:float ->
@@ -276,6 +311,6 @@ module Database (Auth_key : Auth_key) : sig
       user_name:string ->
       permission_name:string ->
       unit ->
-      (int, cosmos_error) result Lwt.t
+      (int, Cosmos.Databases_core.cosmos_error) result io
   end
 end
