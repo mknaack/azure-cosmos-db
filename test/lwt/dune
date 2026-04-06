@@ -1,0 +1,7 @@
+(test
+ (name test)
+ (libraries test_core azure-cosmos-db-lwt alcotest-lwt utilities app_config)
+ (flags
+  (:standard -annot -short-paths))
+ (preprocess
+  (pps lwt_ppx)))
