@@ -10,7 +10,7 @@
  (targets json_converter_j.ml json_converter_j.mli)
  (deps json_converter.atd)
  (action
-  (run atdgen -j -j-std %{deps})))
+  (run atdgen -j %{deps})))
 
 (rule
  (targets json_converter_t.ml json_converter_t.mli)

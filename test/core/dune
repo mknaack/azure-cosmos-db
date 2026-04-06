@@ -8,10 +8,10 @@
  (targets json_j.ml json_j.mli)
  (deps json.atd)
  (action
-  (run atdgen -j -j-std %{deps})))
+  (run atdgen -j %{deps})))
 
 (rule
  (targets json_t.ml json_t.mli)
  (deps json.atd)
  (action
-  (run atdgen -t -j-std %{deps})))
+  (run atdgen -t %{deps})))
