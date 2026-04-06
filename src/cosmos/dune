@@ -3,8 +3,9 @@
  (public_name azure-cosmos-db)
  (libraries yojson base64 uri atdgen-runtime cohttp cryptokit str utilities)
  (instrumentation
-  (backend bisect_ppx --exclusions ../../bisect.exclude)
-  (deps ../../bisect.exclude)))
+  (backend bisect_ppx --exclusions bisect.exclude)
+  (deps
+   (file %{project_root}/bisect.exclude))))
 
 (rule
  (targets json_converter_j.ml json_converter_j.mli)

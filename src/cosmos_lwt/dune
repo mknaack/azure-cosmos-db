@@ -3,7 +3,8 @@
  (public_name azure-cosmos-db-lwt)
  (libraries cosmos lwt cohttp-lwt-unix)
  (instrumentation
-  (backend bisect_ppx --exclusions ../../bisect.exclude)
-  (deps ../../bisect.exclude))
+  (backend bisect_ppx --exclusions bisect.exclude)
+  (deps
+   (file %{project_root}/bisect.exclude)))
  (preprocess
   (pps lwt_ppx)))
