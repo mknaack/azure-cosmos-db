@@ -22,9 +22,8 @@ let create_database_test _ () =
 
 let create_collection_test _ () =
   let partition_key =
-    Some
-      Cosmos.Json_converter_t.
-        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+    Cosmos.Json_converter_t.
+      { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt res = D.Collection.create ~partition_key dbname coll_name in
   match res with

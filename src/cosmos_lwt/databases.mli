@@ -67,7 +67,7 @@ module Database (Auth_key : Auth_key) : sig
 
     val create :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
-      ?partition_key:Cosmos.Json_converter_t.create_partition_key option ->
+      partition_key:Cosmos.Json_converter_t.create_partition_key ->
       ?timeout:float ->
       string ->
       string ->
@@ -76,7 +76,7 @@ module Database (Auth_key : Auth_key) : sig
 
     val create_if_not_exists :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
-      ?partition_key:Cosmos.Json_converter_t.create_partition_key option ->
+      partition_key:Cosmos.Json_converter_t.create_partition_key ->
       ?timeout:float ->
       string ->
       string ->
@@ -99,7 +99,7 @@ module Database (Auth_key : Auth_key) : sig
       val create :
         ?is_upsert:bool ->
         ?indexing_directive:indexing_directive ->
-        ?partition_key:string ->
+        partition_key:string ->
         ?timeout:float ->
         string ->
         string ->
@@ -114,7 +114,7 @@ module Database (Auth_key : Auth_key) : sig
         ?chunk_size:int ->
         string ->
         string ->
-        (string option * string) list ->
+        (string * string) list ->
         (int * Cosmos.Json_converter_t.collection option, cosmos_error) result
         list
         Lwt.t
@@ -152,7 +152,7 @@ module Database (Auth_key : Auth_key) : sig
 
       val get :
         ?if_none_match:string ->
-        ?partition_key:string ->
+        partition_key:string ->
         ?consistency_level:consistency_level ->
         ?session_token:string ->
         ?timeout:float ->
@@ -163,7 +163,7 @@ module Database (Auth_key : Auth_key) : sig
 
       val replace :
         ?indexing_directive:indexing_directive ->
-        ?partition_key:string ->
+        partition_key:string ->
         ?if_match:string ->
         ?timeout:float ->
         string ->
@@ -173,7 +173,7 @@ module Database (Auth_key : Auth_key) : sig
         (int * string, cosmos_error) result Lwt.t
 
       val delete :
-        ?partition_key:string ->
+        partition_key:string ->
         ?timeout:float ->
         string ->
         string ->
@@ -181,7 +181,7 @@ module Database (Auth_key : Auth_key) : sig
         (int, cosmos_error) result Lwt.t
 
       val delete_multiple :
-        ?partition_key:string ->
+        partition_key:string ->
         ?timeout:float ->
         ?chunk_size:int ->
         string ->

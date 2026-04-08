@@ -142,7 +142,7 @@ let delete_a_lot_of_documents partition_key () =
   let%lwt () = Lwt_io.print "delete_a_lot_of_documents " in
   let values = List.map make_id ids in
   let%lwt result_list =
-    D.Collection.Document.delete_multiple ?partition_key dbname collection_name
+    D.Collection.Document.delete_multiple ~partition_key dbname collection_name
       values
   in
   let check expected_code = function
@@ -199,7 +199,7 @@ let do_with_partition partition_key partition () =
   let%lwt () = create_collection partition_key () in
   let%lwt () = create_a_lot_of_documents partition () in
   let%lwt () = update_a_lot_of_documents_with_upsert partition () in
-  let%lwt () = get_a_lot_of_documents partition () in
+  let%lwt () = get_a_lot_of_documents None () in
   let%lwt () = delete_a_lot_of_documents partition () in
   let%lwt () = delete_database () in
   Lwt.return_unit
@@ -207,12 +207,10 @@ let do_with_partition partition_key partition () =
 let main () =
   let () = print_endline "start" in
   let partition_key =
-    Some
-      Cosmos.Json_converter_t.
-        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+    Cosmos.Json_converter_t.
+      { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
-  let partition = Some "a Last name" in
-  let%lwt () = do_with_partition None None () in
+  let partition = "a Last name" in
   let%lwt () = do_with_partition partition_key partition () in
   Lwt.return_unit
 

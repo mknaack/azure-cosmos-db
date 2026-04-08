@@ -151,9 +151,8 @@ struct
 
   let create_collection_with_partition_key_test () =
     let partition_key =
-      Some
-        Cosmos.Json_converter_t.
-          { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+      Cosmos.Json_converter_t.
+        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
     in
     let* res =
       D.Collection.create ~partition_key dbname_partition
@@ -174,9 +173,8 @@ struct
 
   let create_collection_with_partition_key_timeout_test () =
     let partition_key =
-      Some
-        Cosmos.Json_converter_t.
-          { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+      Cosmos.Json_converter_t.
+        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
     in
     let* res =
       D.Collection.create ~timeout:0.0 ~partition_key dbname_partition
@@ -191,9 +189,8 @@ struct
 
   let create_collection_with_partition_key_if_not_exists_test () =
     let partition_key =
-      Some
-        Cosmos.Json_converter_t.
-          { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+      Cosmos.Json_converter_t.
+        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
     in
     let* res =
       D.Collection.create_if_not_exists ~partition_key dbname_partition
@@ -216,9 +213,8 @@ struct
       =
     let collection_name_test = collection_name_partition ^ "test_collection" in
     let partition_key =
-      Some
-        Cosmos.Json_converter_t.
-          { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+      Cosmos.Json_converter_t.
+        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
     in
     let* () =
       let* res =
@@ -367,8 +363,8 @@ struct
         }
     in
     let* res =
-      D.Collection.Document.query ~is_partition:true dbname_partition
-        collection_name_partition query
+      D.Collection.Document.query ~partition_key:"a Last name"
+        ~is_partition:true dbname_partition collection_name_partition query
     in
     match res with
     | Result.Error _ -> Alcotest.fail "Should not return error"
@@ -616,9 +612,8 @@ struct
 
   let create_collection_with_partition_key_fail_test () =
     let partition_key =
-      Some
-        Cosmos.Json_converter_t.
-          { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+      Cosmos.Json_converter_t.
+        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
     in
     let* res =
       D.Collection.create ~partition_key dbname_partition

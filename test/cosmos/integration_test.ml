@@ -141,9 +141,8 @@ let create_database_if_not_exists_with_partition_key_test_new_database _ () =
 
 let create_collection_with_partition_key_test _ () =
   let partition_key =
-    Some
-      Cosmos.Json_converter_t.
-        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+    Cosmos.Json_converter_t.
+      { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt res =
     D.Collection.create ~partition_key dbname_partition
@@ -164,9 +163,8 @@ let create_collection_with_partition_key_test _ () =
 
 let create_collection_with_partition_key_timeout_test _ () =
   let partition_key =
-    Some
-      Cosmos.Json_converter_t.
-        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+    Cosmos.Json_converter_t.
+      { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt res =
     D.Collection.create ~timeout:0.0 ~partition_key dbname_partition
@@ -181,9 +179,8 @@ let create_collection_with_partition_key_timeout_test _ () =
 
 let create_collection_with_partition_key_if_not_exists_test _ () =
   let partition_key =
-    Some
-      Cosmos.Json_converter_t.
-        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+    Cosmos.Json_converter_t.
+      { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt res =
     D.Collection.create_if_not_exists ~partition_key dbname_partition
@@ -206,9 +203,8 @@ let create_collection_with_partition_key_if_not_exists_test_new_collection _ ()
     =
   let collection_name_test = collection_name_partition ^ "test_collection" in
   let partition_key =
-    Some
-      Cosmos.Json_converter_t.
-        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+    Cosmos.Json_converter_t.
+      { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt () =
     match%lwt
@@ -354,7 +350,8 @@ let query_document_with_partition_key_test _ () =
       }
   in
   let%lwt res =
-    D.Collection.Document.query ~is_partition:true dbname_partition
+    D.Collection.Document.query ~partition_key:\"a Last name\"
+      ~is_partition:true dbname_partition
       collection_name_partition query
   in
   match res with
@@ -602,9 +599,8 @@ let delete_database_with_partition_test _ () =
 
 let create_collection_with_partition_key_fail_test _ () =
   let partition_key =
-    Some
-      Cosmos.Json_converter_t.
-        { paths = [ "/lastName" ]; kind = "Hash"; version = None }
+    Cosmos.Json_converter_t.
+      { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let%lwt res =
     D.Collection.create ~partition_key dbname_partition
