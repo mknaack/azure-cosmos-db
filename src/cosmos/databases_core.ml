@@ -250,7 +250,7 @@ struct
           let value body = Json_converter_j.list_collections_of_string body in
           result_or_error_with_result 200 value resp body)
 
-    let create ?(indexing_policy = None) ?(partition_key = None) ?timeout dbname
+    let create ?(indexing_policy = None) ~partition_key ?timeout dbname
         coll_name =
       let body =
         ({ id = coll_name; indexing_policy; partition_key }
@@ -283,8 +283,8 @@ struct
           let value body = Some (Json_converter_j.collection_of_string body) in
           result_or_error_with_result 200 value resp body)
 
-    let create_if_not_exists ?(indexing_policy = None) ?(partition_key = None)
-        ?timeout dbname coll_name =
+    let create_if_not_exists ?(indexing_policy = None) ~partition_key ?timeout
+        dbname coll_name =
       let* exists = get ?timeout dbname coll_name in
       match exists with
       | Ok result -> IO.return (Result.ok result)
@@ -321,7 +321,7 @@ struct
 
       let add_header name value header = Cohttp.Header.add header name value
 
-      let create ?is_upsert ?indexing_directive ?partition_key ?timeout dbname
+      let create ?is_upsert ?indexing_directive ~partition_key ?timeout dbname
           coll_name content =
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
         let uri = make_uri path in
@@ -332,8 +332,8 @@ struct
                is_upsert
           |> apply_to_header_if_some "x-ms-indexing-directive"
                string_of_indexing_directive indexing_directive
-          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
-               string_of_partition_key partition_key
+          |> add_header "x-ms-documentdb-partitionkey"
+               (string_of_partition_key partition_key)
         in
         let () = Random.self_init () in
         let rec post retry () =
@@ -391,7 +391,7 @@ struct
               let* r =
                 IO.parallel_map
                   (fun (partition_key, content) ->
-                    create ?is_upsert ?indexing_directive ?partition_key
+                    create ?is_upsert ?indexing_directive ~partition_key
                       ?timeout dbname coll_name content)
                   first
               in
@@ -480,14 +480,14 @@ struct
         | Session -> "Session"
         | Eventual -> "Eventual"
 
-      let get ?if_none_match ?partition_key ?consistency_level ?session_token
+      let get ?if_none_match ~partition_key ?consistency_level ?session_token
           ?timeout dbname coll_name doc_id =
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
           |> apply_to_header_if_some "If-None-Match" Fun.id if_none_match
-          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
-               string_of_partition_key partition_key
+          |> add_header "x-ms-documentdb-partitionkey"
+               (string_of_partition_key partition_key)
           |> apply_to_header_if_some "x-ms-consistency-level"
                string_of_consistency_level consistency_level
           |> apply_to_header_if_some "x-ms-session-token" Fun.id session_token
@@ -501,15 +501,15 @@ struct
             let code = get_code resp in
             IO.return (Result.ok (code, body)))
 
-      let replace ?indexing_directive ?partition_key ?if_match ?timeout dbname
+      let replace ?indexing_directive ~partition_key ?if_match ?timeout dbname
           coll_name doc_id content =
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Put
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
           |> apply_to_header_if_some "x-ms-indexing-directive"
                string_of_indexing_directive indexing_directive
-          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
-               string_of_partition_key partition_key
+          |> add_header "x-ms-documentdb-partitionkey"
+               (string_of_partition_key partition_key)
           |> apply_to_header_if_some "If-Match" Fun.id if_match
         in
         let path =
@@ -523,15 +523,15 @@ struct
             let code = get_code resp in
             IO.return (Ok (code, body)))
 
-      let delete ?partition_key ?timeout dbname coll_name doc_id =
+      let delete ~partition_key ?timeout dbname coll_name doc_id =
         let path =
           Printf.sprintf "/dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
         in
         let hdrs =
           header_path_of_path path
           |> headers Account.Docs Utilities.Verb.Delete
-          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
-               string_of_partition_key partition_key
+          |> add_header "x-ms-documentdb-partitionkey"
+               (string_of_partition_key partition_key)
         in
         let uri = make_uri path in
         let rec delete_loop retry () =
@@ -556,7 +556,7 @@ struct
         in
         delete_loop 3 ()
 
-      let delete_multiple ?partition_key ?timeout ?(chunk_size = 100) dbname
+      let delete_multiple ~partition_key ?timeout ?(chunk_size = 100) dbname
           coll_name doc_ids =
         let rec take_first n acc = function
           | [] -> IO.return @@ acc
@@ -564,7 +564,7 @@ struct
               let first, rest = Utilities.take_first n x in
               let* r =
                 IO.parallel_map
-                  (delete ?partition_key ?timeout dbname coll_name)
+                  (delete ~partition_key ?timeout dbname coll_name)
                   first
               in
               take_first n (r @ acc) rest

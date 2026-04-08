@@ -61,7 +61,7 @@ module type DB = sig
 
     val create :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
-      ?partition_key:Cosmos.Json_converter_t.create_partition_key option ->
+      partition_key:Cosmos.Json_converter_t.create_partition_key ->
       ?timeout:float ->
       string ->
       string ->
@@ -72,7 +72,7 @@ module type DB = sig
 
     val create_if_not_exists :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
-      ?partition_key:Cosmos.Json_converter_t.create_partition_key option ->
+      partition_key:Cosmos.Json_converter_t.create_partition_key ->
       ?timeout:float ->
       string ->
       string ->
@@ -102,7 +102,7 @@ module type DB = sig
       val create :
         ?is_upsert:bool ->
         ?indexing_directive:indexing_directive ->
-        ?partition_key:string ->
+        partition_key:string ->
         ?timeout:float ->
         string ->
         string ->
@@ -119,7 +119,7 @@ module type DB = sig
         ?chunk_size:int ->
         string ->
         string ->
-        (string option * string) list ->
+        (string * string) list ->
         ( int * Cosmos.Json_converter_t.collection option,
           Cosmos.Databases_core.cosmos_error )
         result
@@ -162,7 +162,7 @@ module type DB = sig
 
       val get :
         ?if_none_match:string ->
-        ?partition_key:string ->
+        partition_key:string ->
         ?consistency_level:consistency_level ->
         ?session_token:string ->
         ?timeout:float ->
@@ -173,7 +173,7 @@ module type DB = sig
 
       val replace :
         ?indexing_directive:indexing_directive ->
-        ?partition_key:string ->
+        partition_key:string ->
         ?if_match:string ->
         ?timeout:float ->
         string ->
@@ -183,7 +183,7 @@ module type DB = sig
         (int * string, Cosmos.Databases_core.cosmos_error) result io
 
       val delete :
-        ?partition_key:string ->
+        partition_key:string ->
         ?timeout:float ->
         string ->
         string ->
@@ -191,7 +191,7 @@ module type DB = sig
         (int, Cosmos.Databases_core.cosmos_error) result io
 
       val delete_multiple :
-        ?partition_key:string ->
+        partition_key:string ->
         ?timeout:float ->
         ?chunk_size:int ->
         string ->
