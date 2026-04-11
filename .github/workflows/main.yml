@@ -7,46 +7,97 @@ on:
   workflow_dispatch:
 
 jobs:
-  builds:
+  build-core:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
         ocaml-compiler:
           - "5.3"
           - "4.12"
-        parallel:
-          - 1
 
-    runs-on: ${{ matrix.os }}
-    
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set-up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
-      - if: ${{ matrix.ocaml-compiler == '4.12' }}
-        name: Install dependencies (OCaml 4.x)
+      - name: Install core dependencies
+        run: opam install ./azure-cosmos-db.opam --deps-only --with-test
+
+      - name: Build core package
+        run: opam exec -- dune build -p azure-cosmos-db
+
+  build-lwt:
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml-compiler:
+          - "5.3"
+          - "4.12"
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+
+      - name: Install lwt dependencies
         run: opam install ./azure-cosmos-db.opam ./azure-cosmos-db-lwt.opam --deps-only --with-test
 
-      - if: ${{ matrix.ocaml-compiler != '4.12' }}
-        name: Install dependencies
+      - name: Build lwt package
+        run: opam exec -- dune build -p azure-cosmos-db,azure-cosmos-db-lwt
+
+  build-eio:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3"
+
+      - name: Install eio dependencies
+        run: opam install ./azure-cosmos-db.opam ./azure-cosmos-db-eio.opam --deps-only --with-test
+
+      - name: Build eio package
+        run: opam exec -- dune build -p azure-cosmos-db,azure-cosmos-db-eio
+
+  test:
+    needs: [build-core, build-lwt, build-eio]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3"
+
+      - name: Install all dependencies
         run: opam install . --deps-only --with-test
 
-      - if: ${{ matrix.ocaml-compiler == '5.3' }}
-        name: Run tests
+      - name: Run tests
         env:
           AZURE_COSMOS_KEY: ${{secrets.AZURE_COSMOS_KEY}}
           AZURE_COSMOS_ENDPOINT: ${{vars.AZURE_COSMOS_ENDPOINT}}
         run: opam exec -- dune runtest --instrument-with bisect_ppx --force
 
-      - if: ${{ matrix.ocaml-compiler == '5.3' }}
-        name: Upload coverage to coveralls
+      - name: Upload coverage to coveralls
         env:
           COVERALLS_REPO_TOKEN: ${{secrets.GITHUB_TOKEN}}
           PULL_REQUEST_NUMBER: ${{github.event.number}}
