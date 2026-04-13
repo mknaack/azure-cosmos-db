@@ -1,5 +1,6 @@
 (test
  (name test)
+ (package azure-cosmos-db-eio)
  (libraries test_core azure-cosmos-db-eio alcotest eio_main utilities)
  (flags
   (:standard -annot -short-paths)))
