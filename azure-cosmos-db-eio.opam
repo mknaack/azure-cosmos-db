@@ -11,7 +11,7 @@ bug-reports: "https://github.com/mknaack/azure-cosmos-db/issues"
 depends: [
   "dune" {>= "3.21"}
   "ocaml" {>= "5.0.0"}
-  "azure-cosmos-db"
+  "azure-cosmos-db" {= version}
   "eio" {>= "1.0"}
   "eio_main"
   "cohttp-eio" {>= "6.0.0"}

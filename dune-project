@@ -39,7 +39,8 @@
  (depends
   (ocaml
    (>= 4.08.0))
-  azure-cosmos-db
+  (azure-cosmos-db
+   (= :version))
   lwt
   (lwt_ppx
    (>= 2.0.2))
@@ -61,7 +62,8 @@
  (depends
   (ocaml
    (>= 5.0.0))
-  azure-cosmos-db
+  (azure-cosmos-db
+   (= :version))
   (eio
    (>= 1.0))
   eio_main
