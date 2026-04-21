@@ -7,6 +7,9 @@
             "mutantdino.resourcemonitor"
         ]
     },
+    "mounts": [
+        "source=${localEnv:HOME}/.gitconfig,target=/home/opam/.gitconfig,type=bind,consistency=cached"
+    ],
     "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends libgmp-dev libssl-dev zlib1g-dev libev-dev pkg-config && opam install ocaml-lsp-server ocamlformat && opam install . --deps-only --with-test",
     "postStartCommand": "eval $(opam env)"
 }
