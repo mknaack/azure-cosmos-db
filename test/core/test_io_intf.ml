@@ -215,6 +215,114 @@ module type DB = sig
         result
         io
     end
+
+    module Batch : sig
+      type operation =
+        | Create of {
+            if_match : string option;
+            if_none_match : string option;
+            body : string;
+          }
+        | Upsert of {
+            if_match : string option;
+            if_none_match : string option;
+            body : string;
+          }
+        | Read of {
+            id : string;
+            if_match : string option;
+            if_none_match : string option;
+          }
+        | Delete of {
+            id : string;
+            if_match : string option;
+            if_none_match : string option;
+          }
+        | Replace of {
+            id : string;
+            if_match : string option;
+            if_none_match : string option;
+            body : string;
+          }
+        | Patch of {
+            id : string;
+            if_match : string option;
+            patch_op : patch_operation;
+          }
+
+      and patch_operation =
+        | Add of { path : string; value : string }
+        | Set of { path : string; value : string }
+        | ReplacePath of { path : string; value : string }
+        | Remove of { path : string }
+        | Increment of { path : string; value : int }
+
+      type operation_result = {
+        status_code : int;
+        request_charge : float;
+        etag : string option;
+        resource_body : string option;
+      }
+
+      type batch_result = {
+        outcomes : operation_result list;
+        total_request_charge : float;
+      }
+
+      type validation_error =
+        | Too_many_operations of int
+        | Mixed_patch_operations
+        | Empty_batch
+
+      val validate : operation list -> (unit, validation_error) result
+      val is_success : operation_result -> bool
+
+      val execute :
+        ?timeout:float ->
+        ?atomic:bool ->
+        ?should_validate:bool ->
+        partition_key:string ->
+        string ->
+        string ->
+        operation list ->
+        (batch_result, Cosmos.Databases_core.cosmos_error) result io
+    end
+
+    module Batch_builder : sig
+      type t
+
+      val empty : t
+
+      val add_create :
+        ?if_match:string -> ?if_none_match:string -> body:string -> t -> t
+
+      val add_upsert :
+        ?if_match:string -> ?if_none_match:string -> body:string -> t -> t
+
+      val add_read :
+        ?if_match:string -> ?if_none_match:string -> id:string -> t -> t
+
+      val add_delete :
+        ?if_match:string -> ?if_none_match:string -> id:string -> t -> t
+
+      val add_replace :
+        ?if_match:string ->
+        ?if_none_match:string ->
+        id:string ->
+        body:string ->
+        t ->
+        t
+
+      val add_patch :
+        ?if_match:string ->
+        id:string ->
+        patch_op:Batch.patch_operation ->
+        t ->
+        t
+
+      val to_operations : t -> Batch.operation list
+      val length : t -> int
+    end
   end
 
   module User : sig
