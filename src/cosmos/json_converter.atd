@@ -124,3 +124,28 @@ type list_permissions = {
   permissions <json name="Permissions">: permission list;
   count <json name="_count">: int;
 }
+
+type batch_operation_type = [ Create | Upsert | Read | Delete | Replace | Patch ]
+
+type batch_operation = {
+  operationType: batch_operation_type;
+  partitionKey <json name="partitionKey">: string;
+  ?ifMatch <json name="ifMatch">: string option;
+  ?ifNoneMatch <json name="ifNoneMatch">: string option;
+  ?id: string option;
+  ?resourceBody <json name="resourceBody">: string option;
+  ?from <json name="from">: string option;
+  ?value <json name="value">: string option;
+}
+
+type batch_request = batch_operation list
+
+type batch_operation_result = {
+  statusCode <json name="statusCode">: int;
+  requestCharge <json name="requestCharge">: float;
+  ?eTag <json name="eTag">: string option;
+  ?resourceBody <json name="resourceBody">: string option;
+  ?statusMessage <json name="statusMessage">: string option;
+}
+
+type batch_response = batch_operation_result list

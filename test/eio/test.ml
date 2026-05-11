@@ -43,6 +43,8 @@ module Users = Test_core.Users_tests.Make (Eio_config) (Eio_test_io) (D)
 module Permissions =
   Test_core.Permission_tests.Make (Eio_config) (Eio_test_io) (D)
 
+module Batch = Test_core.Batch_tests.Make (Eio_config) (Eio_test_io) (D)
+
 (* Wrap async test functions for plain Alcotest *)
 let wrap_async_tests speed tests =
   List.map
@@ -69,6 +71,11 @@ let permission_tests =
     wrap_async_tests `Slow Permissions.tests
   else []
 
+let batch_tests =
+  if Test_core.Test_common_core.should_run () then
+    wrap_async_tests `Slow Batch.tests
+  else []
+
 let () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
@@ -80,5 +87,6 @@ let () =
           ("partition key test", integration_tests);
           ("user test", user_tests);
           ("permission test", permission_tests);
+          ("batch test", batch_tests);
           ("utility test", wrap_sync_tests `Quick Test_core.Test_utilities.tests);
         ])

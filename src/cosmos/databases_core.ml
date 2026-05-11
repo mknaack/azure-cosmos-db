@@ -604,6 +604,341 @@ struct
               IO.return (Ok (200, response_header, result))
             else IO.return (Error (Azure_error (code, response_header))))
     end
+
+    module Batch = struct
+      type operation =
+        | Create of {
+            if_match : string option;
+            if_none_match : string option;
+            body : string;
+          }
+        | Upsert of {
+            if_match : string option;
+            if_none_match : string option;
+            body : string;
+          }
+        | Read of {
+            id : string;
+            if_match : string option;
+            if_none_match : string option;
+          }
+        | Delete of {
+            id : string;
+            if_match : string option;
+            if_none_match : string option;
+          }
+        | Replace of {
+            id : string;
+            if_match : string option;
+            if_none_match : string option;
+            body : string;
+          }
+        | Patch of {
+            id : string;
+            if_match : string option;
+            patch_op : patch_operation;
+          }
+
+      and patch_operation =
+        | Add of { path : string; value : string }
+        | Set of { path : string; value : string }
+        | ReplacePath of { path : string; value : string }
+        | Remove of { path : string }
+        | Increment of { path : string; value : int }
+
+      type operation_result = {
+        status_code : int;
+        request_charge : float;
+        etag : string option;
+        resource_body : string option;
+      }
+
+      type batch_result = {
+        outcomes : operation_result list;
+        total_request_charge : float;
+      }
+
+      type validation_error =
+        | Too_many_operations of int
+        | Mixed_patch_operations
+        | Empty_batch
+
+      let string_of_operation_type = function
+        | Create _ -> "Create"
+        | Upsert _ -> "Upsert"
+        | Read _ -> "Read"
+        | Delete _ -> "Delete"
+        | Replace _ -> "Replace"
+        | Patch _ -> "Patch"
+
+      let format_partition_key pk = Printf.sprintf "[%S]" pk
+
+      let fix_resourceBody_in_batch_json json_str =
+        let regex = Str.regexp "\"resourceBody\":\"\\\\\"\\(.*?\\)\\\\\"\"" in
+        let replace_func s =
+          let body = Str.matched_group 1 s in
+          Printf.sprintf "\"resourceBody\":%s" body
+        in
+        Str.global_substitute regex replace_func json_str
+
+      let construct_batch_request_body batch_ops =
+        let json_ops =
+          List.map
+            (fun (op_type, op) ->
+              let base_fields = [ ("operationType", op_type) ] in
+              let optional_fields = [] in
+              let optional_fields =
+                match op.Json_converter_t.ifMatch with
+                | Some v ->
+                    ("ifMatch", Printf.sprintf "\"%s\"" v) :: optional_fields
+                | None -> ("ifMatch", "\"\"") :: optional_fields
+              in
+              let optional_fields =
+                match op.Json_converter_t.ifNoneMatch with
+                | Some v ->
+                    ("ifNoneMatch", Printf.sprintf "\"%s\"" v)
+                    :: optional_fields
+                | None -> ("ifNoneMatch", "\"\"") :: optional_fields
+              in
+              let optional_fields =
+                match op.Json_converter_t.id with
+                | Some v -> ("id", Printf.sprintf "\"%s\"" v) :: optional_fields
+                | None -> optional_fields
+              in
+              let optional_fields =
+                match op.Json_converter_t.resourceBody with
+                | Some v -> ("resourceBody", v) :: optional_fields
+                | None -> optional_fields
+              in
+              let optional_fields =
+                match op.Json_converter_t.from with
+                | Some v ->
+                    ("from", Printf.sprintf "\"%s\"" v) :: optional_fields
+                | None -> optional_fields
+              in
+              let optional_fields =
+                match op.Json_converter_t.value with
+                | Some v ->
+                    ("value", Printf.sprintf "\"%s\"" v) :: optional_fields
+                | None -> optional_fields
+              in
+              let all_fields = base_fields @ optional_fields in
+              let field_strs =
+                List.map
+                  (fun (k, v) -> Printf.sprintf "\"%s\":%s" k v)
+                  all_fields
+              in
+              Printf.sprintf "{%s}" (String.concat "," field_strs))
+            batch_ops
+        in
+        Printf.sprintf "[%s]" (String.concat "," json_ops)
+
+      let operation_to_batch_op partition_key = function
+        | Create { if_match; if_none_match; body } ->
+            ( Json_converter_j.string_of_batch_operation_type `Create,
+              {
+                Json_converter_t.operationType = `Create;
+                partitionKey = format_partition_key partition_key;
+                ifMatch = if_match;
+                ifNoneMatch = if_none_match;
+                id = None;
+                resourceBody = Some body;
+                from = None;
+                value = None;
+              } )
+        | Upsert { if_match; if_none_match; body } ->
+            ( Json_converter_j.string_of_batch_operation_type `Upsert,
+              {
+                Json_converter_t.operationType = `Upsert;
+                partitionKey = format_partition_key partition_key;
+                ifMatch = if_match;
+                ifNoneMatch = if_none_match;
+                id = None;
+                resourceBody = Some body;
+                from = None;
+                value = None;
+              } )
+        | Read { id; if_match; if_none_match } ->
+            ( Json_converter_j.string_of_batch_operation_type `Read,
+              {
+                Json_converter_t.operationType = `Read;
+                partitionKey = format_partition_key partition_key;
+                ifMatch = if_match;
+                ifNoneMatch = if_none_match;
+                id = Some id;
+                resourceBody = None;
+                from = None;
+                value = None;
+              } )
+        | Delete { id; if_match; if_none_match } ->
+            ( Json_converter_j.string_of_batch_operation_type `Delete,
+              {
+                Json_converter_t.operationType = `Delete;
+                partitionKey = format_partition_key partition_key;
+                ifMatch = if_match;
+                ifNoneMatch = if_none_match;
+                id = Some id;
+                resourceBody = None;
+                from = None;
+                value = None;
+              } )
+        | Replace { id; if_match; if_none_match; body } ->
+            ( Json_converter_j.string_of_batch_operation_type `Replace,
+              {
+                Json_converter_t.operationType = `Replace;
+                partitionKey = format_partition_key partition_key;
+                ifMatch = if_match;
+                ifNoneMatch = if_none_match;
+                id = Some id;
+                resourceBody = Some body;
+                from = None;
+                value = None;
+              } )
+        | Patch { id; if_match; patch_op } ->
+            let value_str =
+              match patch_op with
+              | Add { path; value } ->
+                  Printf.sprintf {|{"path": "%s", "op": "add", "value": %s}|}
+                    path value
+              | Set { path; value } ->
+                  Printf.sprintf {|{"path": "%s", "op": "set", "value": %s}|}
+                    path value
+              | ReplacePath { path; value } ->
+                  Printf.sprintf
+                    {|{"path": "%s", "op": "replace", "value": %s}|} path value
+              | Remove { path } ->
+                  Printf.sprintf {|{"path": "%s", "op": "remove"}|} path
+              | Increment { path; value } ->
+                  Printf.sprintf {|{"path": "%s", "op": "incr", "value": %d}|}
+                    path value
+            in
+            ( Json_converter_j.string_of_batch_operation_type `Patch,
+              {
+                Json_converter_t.operationType = `Patch;
+                partitionKey = format_partition_key partition_key;
+                ifMatch = if_match;
+                ifNoneMatch = None;
+                id = Some id;
+                resourceBody = None;
+                from = Some "";
+                value = Some value_str;
+              } )
+
+      let has_patch_operation ops =
+        List.exists (function Patch _ -> true | _ -> false) ops
+
+      let has_non_patch_operation ops =
+        List.exists
+          (function
+            | Create _ | Upsert _ | Delete _ | Replace _ -> true | _ -> false)
+          ops
+
+      let validate ops =
+        let count = List.length ops in
+        if count = 0 then Error Empty_batch
+        else if count > 100 then Error (Too_many_operations count)
+        else if has_patch_operation ops && has_non_patch_operation ops then
+          Error Mixed_patch_operations
+        else Ok ()
+
+      let is_success result =
+        result.status_code >= 200 && result.status_code < 300
+
+      let execute ?timeout ?(atomic = true) ?(should_validate = true)
+          ~partition_key dbname coll_name operations =
+        let* () =
+          if should_validate then
+            match validate operations with
+            | Error e ->
+                let msg =
+                  match e with
+                  | Too_many_operations n ->
+                      Printf.sprintf "Too many operations: %d" n
+                  | Mixed_patch_operations ->
+                      "Cannot mix Patch with Create/Delete/Replace"
+                  | Empty_batch -> "Empty batch"
+                in
+                failwith msg
+            | Ok () -> IO.return ()
+          else IO.return ()
+        in
+        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
+        let uri = make_uri path in
+        let batch_ops =
+          List.map (operation_to_batch_op partition_key) operations
+        in
+        let body = construct_batch_request_body batch_ops in
+        let hdrs =
+          let h =
+            json_headers Account.Docs Utilities.Verb.Post
+              ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+          in
+          let h = Cohttp.Header.add h "x-ms-cosmos-is-batch-request" "True" in
+          let h =
+            Cohttp.Header.add h "x-ms-documentdb-partitionkey"
+              (format_partition_key partition_key)
+          in
+          Cohttp.Header.add h "x-ms-cosmos-batch-atomic"
+            (if atomic then "true" else "false")
+        in
+        let* response =
+          Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
+        in
+        handle_response response (fun resp body ->
+            let code = get_code resp in
+            let response_header = Response_headers.get_header resp in
+            if code = 200 || code = 207 then
+              let outcomes =
+                let parse_result json =
+                  let open Yojson.Safe.Util in
+                  {
+                    status_code = json |> member "statusCode" |> to_int;
+                    request_charge = json |> member "requestCharge" |> to_number;
+                    etag = json |> member "eTag" |> to_string_option;
+                    resource_body =
+                      (match json |> member "resourceBody" with
+                      | `Null -> None
+                      | v -> Some (Yojson.Safe.to_string v));
+                  }
+                in
+                Yojson.Safe.from_string body
+                |> Yojson.Safe.Util.to_list |> List.map parse_result
+              in
+              let total_charge =
+                List.fold_left
+                  (fun acc r -> acc +. r.request_charge)
+                  0.0 outcomes
+              in
+              IO.return (Ok { outcomes; total_request_charge = total_charge })
+            else IO.return (Error (Azure_error (code, response_header))))
+    end
+
+    module Batch_builder = struct
+      type t = Batch.operation list
+
+      let empty = []
+
+      let add_create ?if_match ?if_none_match ~body t =
+        Batch.Create { if_match; if_none_match; body } :: t
+
+      let add_upsert ?if_match ?if_none_match ~body t =
+        Batch.Upsert { if_match; if_none_match; body } :: t
+
+      let add_read ?if_match ?if_none_match ~id t =
+        Batch.Read { id; if_match; if_none_match } :: t
+
+      let add_delete ?if_match ?if_none_match ~id t =
+        Batch.Delete { id; if_match; if_none_match } :: t
+
+      let add_replace ?if_match ?if_none_match ~id ~body t =
+        Batch.Replace { id; if_match; if_none_match; body } :: t
+
+      let add_patch ?if_match ~id ~patch_op t =
+        Batch.Patch { id; if_match; patch_op } :: t
+
+      let to_operations t = List.rev t
+      let length t = List.length t
+    end
   end
 
   module User = struct
