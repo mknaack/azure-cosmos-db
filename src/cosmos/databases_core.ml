@@ -673,14 +673,6 @@ struct
 
       let format_partition_key pk = Printf.sprintf "[%S]" pk
 
-      let fix_resourceBody_in_batch_json json_str =
-        let regex = Str.regexp "\"resourceBody\":\"\\\\\"\\(.*?\\)\\\\\"\"" in
-        let replace_func s =
-          let body = Str.matched_group 1 s in
-          Printf.sprintf "\"resourceBody\":%s" body
-        in
-        Str.global_substitute regex replace_func json_str
-
       let construct_batch_request_body batch_ops =
         let json_ops =
           List.map
@@ -840,9 +832,6 @@ struct
         else if has_patch_operation ops && has_non_patch_operation ops then
           Error Mixed_patch_operations
         else Ok ()
-
-      let is_success result =
-        result.status_code >= 200 && result.status_code < 300
 
       let execute ?timeout ?(atomic = true) ?(should_validate = true)
           ~partition_key dbname coll_name operations =

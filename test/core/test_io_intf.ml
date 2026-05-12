@@ -275,7 +275,6 @@ module type DB = sig
         | Empty_batch
 
       val validate : operation list -> (unit, validation_error) result
-      val is_success : operation_result -> bool
 
       val execute :
         ?timeout:float ->
