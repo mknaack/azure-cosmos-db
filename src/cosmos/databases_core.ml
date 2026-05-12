@@ -678,41 +678,22 @@ struct
           List.map
             (fun (op_type, op) ->
               let base_fields = [ ("operationType", op_type) ] in
-              let optional_fields = [] in
               let optional_fields =
-                match op.Json_converter_t.ifMatch with
-                | Some v ->
-                    ("ifMatch", Printf.sprintf "\"%s\"" v) :: optional_fields
-                | None -> ("ifMatch", "\"\"") :: optional_fields
-              in
-              let optional_fields =
-                match op.Json_converter_t.ifNoneMatch with
-                | Some v ->
-                    ("ifNoneMatch", Printf.sprintf "\"%s\"" v)
-                    :: optional_fields
-                | None -> ("ifNoneMatch", "\"\"") :: optional_fields
-              in
-              let optional_fields =
-                match op.Json_converter_t.id with
-                | Some v -> ("id", Printf.sprintf "\"%s\"" v) :: optional_fields
-                | None -> optional_fields
-              in
-              let optional_fields =
-                match op.Json_converter_t.resourceBody with
-                | Some v -> ("resourceBody", v) :: optional_fields
-                | None -> optional_fields
-              in
-              let optional_fields =
-                match op.Json_converter_t.from with
-                | Some v ->
-                    ("from", Printf.sprintf "\"%s\"" v) :: optional_fields
-                | None -> optional_fields
-              in
-              let optional_fields =
-                match op.Json_converter_t.value with
-                | Some v ->
-                    ("value", Printf.sprintf "\"%s\"" v) :: optional_fields
-                | None -> optional_fields
+                let add_string_field name opt acc =
+                  Option.fold opt ~none:acc ~some:(fun v ->
+                      (name, Printf.sprintf "\"%s\"" v) :: acc)
+                in
+                let add_field name opt acc =
+                  Option.fold opt ~none:acc ~some:(fun v -> (name, v) :: acc)
+                in
+                []
+                |> add_string_field "ifMatch" op.Json_converter_t.ifMatch
+                |> add_string_field "ifNoneMatch"
+                     op.Json_converter_t.ifNoneMatch
+                |> add_string_field "id" op.Json_converter_t.id
+                |> add_field "resourceBody" op.Json_converter_t.resourceBody
+                |> add_string_field "from" op.Json_converter_t.from
+                |> add_string_field "value" op.Json_converter_t.value
               in
               let all_fields = base_fields @ optional_fields in
               let field_strs =
@@ -725,67 +706,43 @@ struct
         in
         Printf.sprintf "[%s]" (String.concat "," json_ops)
 
-      let operation_to_batch_op partition_key = function
+      let make_batch_op partition_key ~operation_type ~if_match ~if_none_match
+          ~id ~resource_body ~from ~value () =
+        ( Json_converter_j.string_of_batch_operation_type operation_type,
+          {
+            Json_converter_t.operationType = operation_type;
+            partitionKey = format_partition_key partition_key;
+            ifMatch = if_match;
+            ifNoneMatch = if_none_match;
+            id;
+            resourceBody = resource_body;
+            from;
+            value;
+          } )
+
+      let operation_to_batch_op partition_key op =
+        let open Json_converter_t in
+        match op with
         | Create { if_match; if_none_match; body } ->
-            ( Json_converter_j.string_of_batch_operation_type `Create,
-              {
-                Json_converter_t.operationType = `Create;
-                partitionKey = format_partition_key partition_key;
-                ifMatch = if_match;
-                ifNoneMatch = if_none_match;
-                id = None;
-                resourceBody = Some body;
-                from = None;
-                value = None;
-              } )
+            make_batch_op partition_key ~operation_type:`Create ~if_match
+              ~if_none_match ~id:None ~resource_body:(Some body) ~from:None
+              ~value:None ()
         | Upsert { if_match; if_none_match; body } ->
-            ( Json_converter_j.string_of_batch_operation_type `Upsert,
-              {
-                Json_converter_t.operationType = `Upsert;
-                partitionKey = format_partition_key partition_key;
-                ifMatch = if_match;
-                ifNoneMatch = if_none_match;
-                id = None;
-                resourceBody = Some body;
-                from = None;
-                value = None;
-              } )
+            make_batch_op partition_key ~operation_type:`Upsert ~if_match
+              ~if_none_match ~id:None ~resource_body:(Some body) ~from:None
+              ~value:None ()
         | Read { id; if_match; if_none_match } ->
-            ( Json_converter_j.string_of_batch_operation_type `Read,
-              {
-                Json_converter_t.operationType = `Read;
-                partitionKey = format_partition_key partition_key;
-                ifMatch = if_match;
-                ifNoneMatch = if_none_match;
-                id = Some id;
-                resourceBody = None;
-                from = None;
-                value = None;
-              } )
+            make_batch_op partition_key ~operation_type:`Read ~if_match
+              ~if_none_match ~id:(Some id) ~resource_body:None ~from:None
+              ~value:None ()
         | Delete { id; if_match; if_none_match } ->
-            ( Json_converter_j.string_of_batch_operation_type `Delete,
-              {
-                Json_converter_t.operationType = `Delete;
-                partitionKey = format_partition_key partition_key;
-                ifMatch = if_match;
-                ifNoneMatch = if_none_match;
-                id = Some id;
-                resourceBody = None;
-                from = None;
-                value = None;
-              } )
+            make_batch_op partition_key ~operation_type:`Delete ~if_match
+              ~if_none_match ~id:(Some id) ~resource_body:None ~from:None
+              ~value:None ()
         | Replace { id; if_match; if_none_match; body } ->
-            ( Json_converter_j.string_of_batch_operation_type `Replace,
-              {
-                Json_converter_t.operationType = `Replace;
-                partitionKey = format_partition_key partition_key;
-                ifMatch = if_match;
-                ifNoneMatch = if_none_match;
-                id = Some id;
-                resourceBody = Some body;
-                from = None;
-                value = None;
-              } )
+            make_batch_op partition_key ~operation_type:`Replace ~if_match
+              ~if_none_match ~id:(Some id) ~resource_body:(Some body) ~from:None
+              ~value:None ()
         | Patch { id; if_match; patch_op } ->
             let value_str =
               match patch_op with
@@ -804,17 +761,9 @@ struct
                   Printf.sprintf {|{"path": "%s", "op": "incr", "value": %d}|}
                     path value
             in
-            ( Json_converter_j.string_of_batch_operation_type `Patch,
-              {
-                Json_converter_t.operationType = `Patch;
-                partitionKey = format_partition_key partition_key;
-                ifMatch = if_match;
-                ifNoneMatch = None;
-                id = Some id;
-                resourceBody = None;
-                from = Some "";
-                value = Some value_str;
-              } )
+            make_batch_op partition_key ~operation_type:`Patch ~if_match
+              ~if_none_match:None ~id:(Some id) ~resource_body:None
+              ~from:(Some "") ~value:(Some value_str) ()
 
       let has_patch_operation ops =
         List.exists (function Patch _ -> true | _ -> false) ops
