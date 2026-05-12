@@ -53,14 +53,16 @@ struct
     let* result =
       D.Collection.Batch.execute ~partition_key dbname coll_name ops
     in
+    let is_success (result : D.Collection.Batch.operation_result) =
+      result.status_code >= 200 && result.status_code < 300
+    in
     match result with
     | Ok { outcomes; _ } ->
         List.iteri
           (fun i r ->
             Alcotest.(check bool)
               (Printf.sprintf "Operation %d succeeded" i)
-              true
-              (D.Collection.Batch.is_success r))
+              true (is_success r))
           outcomes;
         IO.return ()
     | Error _ -> Alcotest.fail "Batch should succeed"
@@ -88,12 +90,14 @@ struct
       D.Collection.Batch.execute ~partition_key ~atomic:true dbname coll_name
         ops
     in
+    let is_success (result : D.Collection.Batch.operation_result) =
+      result.status_code >= 200 && result.status_code < 300
+    in
+
     match result with
     | Ok { outcomes; _ } ->
         (* In atomic mode with conflict, both should fail *)
-        let all_failed =
-          List.for_all (fun r -> not (D.Collection.Batch.is_success r)) outcomes
-        in
+        let all_failed = List.for_all (fun r -> not (is_success r)) outcomes in
         Alcotest.(check bool)
           "Atomic batch should fail entirely on conflict" true all_failed;
         IO.return ()
@@ -129,14 +133,16 @@ struct
     let* result =
       D.Collection.Batch.execute ~partition_key dbname coll_name ops
     in
+    let is_success (result : D.Collection.Batch.operation_result) =
+      result.status_code >= 200 && result.status_code < 300
+    in
     match result with
     | Ok { outcomes; _ } ->
         List.iteri
           (fun i r ->
             Alcotest.(check bool)
               (Printf.sprintf "Operation %d succeeded" i)
-              true
-              (D.Collection.Batch.is_success r))
+              true (is_success r))
           outcomes;
         IO.return ()
     | Error _ -> Alcotest.fail "Mixed operations batch should succeed"
