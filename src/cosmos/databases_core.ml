@@ -186,6 +186,41 @@ struct
     | Some (Error e) -> handle_http_error e
     | Some (Ok (resp, body)) -> f resp body
 
+  let with_throttle_retry ~max_retries f =
+    let rec retry_loop attempt () =
+      IO.catch
+        (fun () ->
+          let* result = f () in
+          match result with
+          | Ok (resp, body) ->
+              let code = get_code resp in
+              if code = 429 then
+                let response_header = Response_headers.get_header resp in
+                let milliseconds =
+                  Response_headers.x_ms_retry_after_ms response_header
+                  |> Option.value ~default:"0" |> int_of_string_opt
+                  |> Option.value ~default:0 |> Int.to_float
+                in
+                let* () = IO.sleep (milliseconds /. 1000.) in
+                if attempt > 0 then retry_loop (attempt - 1) ()
+                else timeout_error
+              else IO.return (Ok (code, resp, body))
+          | Error Http.Connection_refused ->
+              if attempt > 0 then
+                let sleep_time = Random.int 5 |> float_of_int in
+                let* () = IO.sleep sleep_time in
+                retry_loop (attempt - 1) ()
+              else connection_error
+          | Error (Http.Other_error exn) -> raise exn)
+        (fun _exn ->
+          if attempt > 0 then
+            let sleep_time = Random.int 5 |> float_of_int in
+            let* () = IO.sleep sleep_time in
+            retry_loop (attempt - 1) ()
+          else connection_error)
+    in
+    retry_loop max_retries ()
+
   let list_databases ?timeout () =
     let uri = make_uri "dbs" in
     let* response =
@@ -237,6 +272,8 @@ struct
     handle_response response (fun resp _body -> IO.return (with_204_do resp))
 
   module Collection = struct
+    let string_of_partition_key s = Printf.sprintf "[%S]" s
+
     let list ?timeout dbname =
       let path = "dbs/" ^ dbname ^ "/colls" in
       let uri = make_uri path in
@@ -312,8 +349,6 @@ struct
         | Include -> "Include"
         | Exclude -> "Exclude"
 
-      let string_of_partition_key s = "[\"" ^ s ^ "\"]"
-
       let apply_to_header_if_some name string_of values headers =
         match values with
         | None -> headers
@@ -336,51 +371,24 @@ struct
                (string_of_partition_key partition_key)
         in
         let () = Random.self_init () in
-        let rec post retry () =
-          IO.catch
-            (fun () ->
-              let* post_response = Http.post ~headers:hdrs ~body:content uri in
-              match post_response with
-              | Error Http.Connection_refused ->
-                  if retry > 0 then
-                    let sleep_time = Random.int 5 |> float_of_int in
-                    let* () = IO.sleep sleep_time in
-                    post (retry - 1) ()
-                  else connection_error
-              | Error (Http.Other_error exn) -> raise exn
-              | Ok (resp, body_str) ->
-                  let code = get_code resp in
-                  let value =
-                    match code with
-                    | 200 ->
-                        Some (Json_converter_j.collection_of_string body_str)
-                    | _ -> None
-                  in
-                  if code = 429 then
-                    let response_header = Response_headers.get_header resp in
-                    let milliseconds =
-                      Response_headers.x_ms_retry_after_ms response_header
-                      |> Option.value ~default:"0" |> int_of_string_opt
-                      |> Option.value ~default:0 |> Int.to_float
-                    in
-                    let* () = IO.sleep (milliseconds /. 1000.) in
-                    if retry > 0 then post (retry - 1) () else timeout_error
-                  else IO.return (Result.ok (code, value)))
-            (fun _exn ->
-              if retry > 0 then
-                let sleep_time = Random.int 5 |> float_of_int in
-                let* () = IO.sleep sleep_time in
-                post (retry - 1) ()
-              else connection_error)
+        let do_post () = Http.post ~headers:hdrs ~body:content uri in
+        let extract_value code body_str =
+          match code with
+          | 200 -> Some (Json_converter_j.collection_of_string body_str)
+          | _ -> None
         in
-        let with_timeout_wrapper () =
-          match timeout with
-          | None -> post 10 ()
-          | Some t -> (
-              let* result = IO.with_timeout t (post 10 ()) in
-              match result with Some r -> IO.return r | None -> timeout_error)
-        in
-        with_timeout_wrapper ()
+        let* retry_result = with_throttle_retry ~max_retries:10 do_post in
+        match retry_result with
+        | Error e -> IO.return (Error e)
+        | Ok (code, _resp, body_str) -> (
+            let value = extract_value code body_str in
+            match timeout with
+            | None -> IO.return (Result.ok (code, value))
+            | Some t -> (
+                let* timed_result = IO.with_timeout t (IO.return ()) in
+                match timed_result with
+                | None -> timeout_error
+                | Some () -> IO.return (Result.ok (code, value))))
 
       let create_multiple ?is_upsert ?indexing_directive ?timeout
           ?(chunk_size = 100) dbname coll_name content_list =
@@ -534,27 +542,18 @@ struct
                (string_of_partition_key partition_key)
         in
         let uri = make_uri path in
-        let rec delete_loop retry () =
-          let* response =
-            Http.delete ~headers:hdrs uri |> wrap_timeout timeout
-          in
-          match response with
-          | None -> timeout_error
-          | Some (Error e) -> handle_http_error e
-          | Some (Ok (resp, _body)) ->
-              let code = get_code resp in
-              if code = 429 then
-                let response_header = Response_headers.get_header resp in
-                let milliseconds =
-                  Response_headers.x_ms_retry_after_ms response_header
-                  |> Option.value ~default:"0" |> int_of_string_opt
-                  |> Option.value ~default:0 |> Int.to_float
-                in
-                let* () = IO.sleep (milliseconds /. 1000.) in
-                if retry > 0 then delete_loop (retry - 1) () else timeout_error
-              else IO.return (Ok code)
-        in
-        delete_loop 3 ()
+        let do_delete () = Http.delete ~headers:hdrs uri in
+        let* retry_result = with_throttle_retry ~max_retries:3 do_delete in
+        match retry_result with
+        | Error e -> IO.return (Error e)
+        | Ok (code, _resp, _body) -> (
+            match timeout with
+            | None -> IO.return (Ok code)
+            | Some t -> (
+                let* timed_result = IO.with_timeout t (IO.return ()) in
+                match timed_result with
+                | None -> timeout_error
+                | Some () -> IO.return (Ok code)))
 
       let delete_multiple ~partition_key ?timeout ?(chunk_size = 100) dbname
           coll_name doc_ids =
@@ -671,8 +670,6 @@ struct
         | Replace _ -> "Replace"
         | Patch _ -> "Patch"
 
-      let format_partition_key pk = Printf.sprintf "[%S]" pk
-
       let construct_batch_request_body batch_ops =
         let json_ops =
           List.map
@@ -711,7 +708,7 @@ struct
         ( Json_converter_j.string_of_batch_operation_type operation_type,
           {
             Json_converter_t.operationType = operation_type;
-            partitionKey = format_partition_key partition_key;
+            partitionKey = string_of_partition_key partition_key;
             ifMatch = if_match;
             ifNoneMatch = if_none_match;
             id;
@@ -814,7 +811,7 @@ struct
           let h = Cohttp.Header.add h "x-ms-cosmos-is-batch-request" "True" in
           let h =
             Cohttp.Header.add h "x-ms-documentdb-partitionkey"
-              (format_partition_key partition_key)
+              (string_of_partition_key partition_key)
           in
           Cohttp.Header.add h "x-ms-cosmos-batch-atomic"
             (if atomic then "true" else "false")
