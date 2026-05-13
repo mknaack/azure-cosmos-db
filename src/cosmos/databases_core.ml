@@ -153,19 +153,18 @@ struct
   let get_code resp =
     resp |> Cohttp.Response.status |> Cohttp.Code.code_of_status
 
-  let result_or_error_with_result expected_code f (resp : Cohttp.Response.t)
-      body =
-    let code = get_code resp in
-    let headers = Response_headers.get_header resp in
-    if code = expected_code then IO.return (Ok (expected_code, f body))
-    else IO.return (Error (Azure_error (code, headers)))
+  let azure_error resp =
+    Azure_error (get_code resp, Response_headers.get_header resp)
 
   let result_or_error expected_code resp =
     let code = get_code resp in
     if code = expected_code then Result.ok expected_code
-    else
-      let response_header = Response_headers.get_header resp in
-      Result.error (Azure_error (code, response_header))
+    else Result.error (azure_error resp)
+
+  let result_or_error_with_result expected_code f resp body =
+    let code = get_code resp in
+    if code = expected_code then IO.return (Ok (expected_code, f body))
+    else IO.return (Error (azure_error resp))
 
   let with_204_do = result_or_error 204
 
@@ -273,9 +272,19 @@ struct
 
   module Collection = struct
     let string_of_partition_key s = Printf.sprintf "[%S]" s
+    let path_of_collections dbname = Printf.sprintf "dbs/%s/colls" dbname
+
+    let path_of_collection dbname coll_name =
+      Printf.sprintf "dbs/%s/colls/%s" dbname coll_name
+
+    let path_of_docs dbname coll_name =
+      Printf.sprintf "/dbs/%s/colls/%s/docs" dbname coll_name
+
+    let path_of_doc dbname coll_name doc_id =
+      Printf.sprintf "/dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
 
     let list ?timeout dbname =
-      let path = "dbs/" ^ dbname ^ "/colls" in
+      let path = path_of_collections dbname in
       let uri = make_uri path in
       let* response =
         Http.get
@@ -294,7 +303,7 @@ struct
           : Json_converter_j.create_collection)
         |> Json_converter_j.string_of_create_collection
       in
-      let path = "/dbs/" ^ dbname ^ "/colls" in
+      let path = path_of_collections dbname in
       let uri = make_uri path in
       let hdrs =
         json_headers Account.Colls Utilities.Verb.Post ("dbs/" ^ dbname)
@@ -307,7 +316,7 @@ struct
           result_or_error_with_result 201 value resp body)
 
     let get ?timeout name coll_name =
-      let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
+      let path = path_of_collection name coll_name in
       let uri = make_uri path in
       let* response =
         Http.get
@@ -330,7 +339,7 @@ struct
       | Error x -> IO.return (Error x)
 
     let delete ?timeout name coll_name =
-      let path = "/dbs/" ^ name ^ "/colls/" ^ coll_name in
+      let path = path_of_collection name coll_name in
       let uri = make_uri path in
       let* response =
         Http.delete
@@ -353,7 +362,7 @@ struct
 
       let create ?is_upsert ?indexing_directive ~partition_key ?timeout dbname
           coll_name content =
-        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
+        let path = path_of_docs dbname coll_name in
         let uri = make_uri path in
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Post
@@ -450,11 +459,11 @@ struct
           | Some false -> headers
           | Some true -> Cohttp.Header.add headers name "Incremental feed"
         in
-        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
+        let path = path_of_docs dbname coll_name in
         let uri = make_uri path in
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
-            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+            (header_path_of_path path)
           |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
                string_of_int max_item_count
           |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
@@ -489,9 +498,10 @@ struct
 
       let get ?if_none_match ~partition_key ?consistency_level ?session_token
           ?timeout dbname coll_name doc_id =
+        let path = path_of_doc dbname coll_name doc_id in
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
-            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+            (header_path_of_path path)
           |> Utilities.apply_to_header_if_some "If-None-Match" Fun.id
                if_none_match
           |> add_header "x-ms-documentdb-partitionkey"
@@ -501,9 +511,6 @@ struct
           |> Utilities.apply_to_header_if_some "x-ms-session-token" Fun.id
                session_token
         in
-        let path =
-          "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
-        in
         let uri = make_uri path in
         let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
         handle_response response (fun resp body ->
@@ -512,17 +519,15 @@ struct
 
       let replace ?indexing_directive ~partition_key ?if_match ?timeout dbname
           coll_name doc_id content =
+        let path = path_of_doc dbname coll_name doc_id in
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Put
-            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
+            (header_path_of_path path)
           |> Utilities.apply_to_header_if_some "x-ms-indexing-directive"
                string_of_indexing_directive indexing_directive
           |> add_header "x-ms-documentdb-partitionkey"
                (string_of_partition_key partition_key)
           |> Utilities.apply_to_header_if_some "If-Match" Fun.id if_match
-        in
-        let path =
-          "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
         in
         let uri = make_uri path in
         let* response =
@@ -533,9 +538,7 @@ struct
             IO.return (Ok (code, body)))
 
       let delete ~partition_key ?timeout dbname coll_name doc_id =
-        let path =
-          Printf.sprintf "/dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
-        in
+        let path = path_of_doc dbname coll_name doc_id in
         let hdrs =
           header_path_of_path path
           |> headers Account.Docs Utilities.Verb.Delete
@@ -573,6 +576,7 @@ struct
 
       let query ?max_item_count ?continuation ?consistency_level ?session_token
           ?is_partition ?partition_key ?timeout dbname coll_name query =
+        let path = path_of_docs dbname coll_name in
         let make_headers s =
           let h = headers Account.Docs Utilities.Verb.Post s in
           Cohttp.Header.add h "x-ms-documentdb-isquery" (string_of_bool true)
@@ -591,8 +595,7 @@ struct
                string_of_partition_key partition_key
           |> add_header "content-type" "application/query+json"
         in
-        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
-        let hdrs = make_headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
+        let hdrs = make_headers (header_path_of_path path) in
         let body = Json_converter_j.string_of_query query in
         let uri = make_uri path in
         let* response =
@@ -797,7 +800,7 @@ struct
             | Ok () -> IO.return ()
           else IO.return ()
         in
-        let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
+        let path = path_of_docs dbname coll_name in
         let uri = make_uri path in
         let batch_ops =
           List.map (operation_to_batch_op partition_key) operations
