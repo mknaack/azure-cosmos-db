@@ -11,3 +11,6 @@ end
 module Verb = Verb
 
 val take_first : int -> 'a list -> 'a list * 'a list
+
+val apply_to_header_if_some :
+  string -> ('a -> string) -> 'a option -> Cohttp.Header.t -> Cohttp.Header.t

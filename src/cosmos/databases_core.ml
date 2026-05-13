@@ -349,11 +349,6 @@ struct
         | Include -> "Include"
         | Exclude -> "Exclude"
 
-      let apply_to_header_if_some name string_of values headers =
-        match values with
-        | None -> headers
-        | Some value -> Cohttp.Header.add headers name (string_of value)
-
       let add_header name value header = Cohttp.Header.add header name value
 
       let create ?is_upsert ?indexing_directive ~partition_key ?timeout dbname
@@ -363,9 +358,9 @@ struct
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Post
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
-          |> apply_to_header_if_some "x-ms-documentdb-is-upsert" string_of_bool
-               is_upsert
-          |> apply_to_header_if_some "x-ms-indexing-directive"
+          |> Utilities.apply_to_header_if_some "x-ms-documentdb-is-upsert"
+               string_of_bool is_upsert
+          |> Utilities.apply_to_header_if_some "x-ms-indexing-directive"
                string_of_indexing_directive indexing_directive
           |> add_header "x-ms-documentdb-partitionkey"
                (string_of_partition_key partition_key)
@@ -460,16 +455,20 @@ struct
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
-          |> apply_to_header_if_some "x-ms-max-item-count" string_of_int
-               max_item_count
-          |> apply_to_header_if_some "x-ms-continuation" Fun.id continuation
-          |> apply_to_header_if_some "x-ms-consistency-level" Fun.id
+          |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
+               string_of_int max_item_count
+          |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
+               continuation
+          |> Utilities.apply_to_header_if_some "x-ms-consistency-level" Fun.id
                consistency_level
-          |> apply_to_header_if_some "x-ms-session-token" Fun.id session_token
+          |> Utilities.apply_to_header_if_some "x-ms-session-token" Fun.id
+               session_token
           |> apply_a_im_to_header_if_some "A-IM" a_im
-          |> apply_to_header_if_some "If-None-Match" Fun.id if_none_match
-          |> apply_to_header_if_some "x-ms-documentdb-partitionkeyrangeid"
-               Fun.id partition_key_range_id
+          |> Utilities.apply_to_header_if_some "If-None-Match" Fun.id
+               if_none_match
+          |> Utilities.apply_to_header_if_some
+               "x-ms-documentdb-partitionkeyrangeid" Fun.id
+               partition_key_range_id
         in
         let* get_action = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
         handle_response get_action (fun resp body ->
@@ -493,12 +492,14 @@ struct
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
-          |> apply_to_header_if_some "If-None-Match" Fun.id if_none_match
+          |> Utilities.apply_to_header_if_some "If-None-Match" Fun.id
+               if_none_match
           |> add_header "x-ms-documentdb-partitionkey"
                (string_of_partition_key partition_key)
-          |> apply_to_header_if_some "x-ms-consistency-level"
+          |> Utilities.apply_to_header_if_some "x-ms-consistency-level"
                string_of_consistency_level consistency_level
-          |> apply_to_header_if_some "x-ms-session-token" Fun.id session_token
+          |> Utilities.apply_to_header_if_some "x-ms-session-token" Fun.id
+               session_token
         in
         let path =
           "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
@@ -514,11 +515,11 @@ struct
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Put
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id)
-          |> apply_to_header_if_some "x-ms-indexing-directive"
+          |> Utilities.apply_to_header_if_some "x-ms-indexing-directive"
                string_of_indexing_directive indexing_directive
           |> add_header "x-ms-documentdb-partitionkey"
                (string_of_partition_key partition_key)
-          |> apply_to_header_if_some "If-Match" Fun.id if_match
+          |> Utilities.apply_to_header_if_some "If-Match" Fun.id if_match
         in
         let path =
           "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
@@ -575,16 +576,18 @@ struct
         let make_headers s =
           let h = headers Account.Docs Utilities.Verb.Post s in
           Cohttp.Header.add h "x-ms-documentdb-isquery" (string_of_bool true)
-          |> apply_to_header_if_some "x-ms-max-item-count" string_of_int
-               max_item_count
-          |> apply_to_header_if_some "x-ms-continuation" Fun.id continuation
-          |> apply_to_header_if_some "x-ms-consistency-level" Fun.id
+          |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
+               string_of_int max_item_count
+          |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
+               continuation
+          |> Utilities.apply_to_header_if_some "x-ms-consistency-level" Fun.id
                consistency_level
-          |> apply_to_header_if_some "x-ms-session-token" Fun.id session_token
-          |> apply_to_header_if_some
+          |> Utilities.apply_to_header_if_some "x-ms-session-token" Fun.id
+               session_token
+          |> Utilities.apply_to_header_if_some
                "x-ms-documentdb-query-enablecrosspartition" string_of_bool
                is_partition
-          |> apply_to_header_if_some "x-ms-documentdb-partitionkey"
+          |> Utilities.apply_to_header_if_some "x-ms-documentdb-partitionkey"
                string_of_partition_key partition_key
           |> add_header "content-type" "application/query+json"
         in

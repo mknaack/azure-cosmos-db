@@ -1,4 +1,4 @@
 (library
  (name utilities)
  (public_name azure-cosmos-db.utilities)
- (libraries unix))
+ (libraries unix cohttp))

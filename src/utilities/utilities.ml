@@ -50,3 +50,8 @@ let take_first n l =
     | x :: l -> if i < n then part (i + 1) (x :: yes) no l else (yes, x :: l)
   in
   part 0 [] [] l
+
+let apply_to_header_if_some name string_of value headers =
+  match value with
+  | None -> headers
+  | Some v -> Cohttp.Header.add headers name (string_of v)
