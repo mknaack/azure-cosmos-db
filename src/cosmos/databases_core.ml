@@ -849,30 +849,48 @@ struct
     end
 
     module Batch_builder = struct
-      type t = Batch.operation list
+      type t = { ops : Batch.operation list; count : int }
 
-      let empty = []
+      let empty = { ops = []; count = 0 }
 
       let add_create ?if_match ?if_none_match ~body t =
-        Batch.Create { if_match; if_none_match; body } :: t
+        {
+          ops = Batch.Create { if_match; if_none_match; body } :: t.ops;
+          count = t.count + 1;
+        }
 
       let add_upsert ?if_match ?if_none_match ~body t =
-        Batch.Upsert { if_match; if_none_match; body } :: t
+        {
+          ops = Batch.Upsert { if_match; if_none_match; body } :: t.ops;
+          count = t.count + 1;
+        }
 
       let add_read ?if_match ?if_none_match ~id t =
-        Batch.Read { id; if_match; if_none_match } :: t
+        {
+          ops = Batch.Read { id; if_match; if_none_match } :: t.ops;
+          count = t.count + 1;
+        }
 
       let add_delete ?if_match ?if_none_match ~id t =
-        Batch.Delete { id; if_match; if_none_match } :: t
+        {
+          ops = Batch.Delete { id; if_match; if_none_match } :: t.ops;
+          count = t.count + 1;
+        }
 
       let add_replace ?if_match ?if_none_match ~id ~body t =
-        Batch.Replace { id; if_match; if_none_match; body } :: t
+        {
+          ops = Batch.Replace { id; if_match; if_none_match; body } :: t.ops;
+          count = t.count + 1;
+        }
 
       let add_patch ?if_match ~id ~patch_op t =
-        Batch.Patch { id; if_match; patch_op } :: t
+        {
+          ops = Batch.Patch { id; if_match; patch_op } :: t.ops;
+          count = t.count + 1;
+        }
 
-      let to_operations t = List.rev t
-      let length t = List.length t
+      let to_operations t = List.rev t.ops
+      let length t = t.count
     end
   end
 
