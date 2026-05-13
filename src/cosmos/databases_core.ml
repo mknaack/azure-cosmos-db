@@ -782,21 +782,18 @@ struct
           Error Mixed_patch_operations
         else Ok ()
 
+      let string_of_validation_error = function
+        | Too_many_operations n -> Printf.sprintf "Too many operations: %d" n
+        | Mixed_patch_operations ->
+            "Cannot mix Patch with Create/Delete/Replace"
+        | Empty_batch -> "Empty batch"
+
       let execute ?timeout ?(atomic = true) ?(should_validate = true)
           ~partition_key dbname coll_name operations =
         let* () =
           if should_validate then
             match validate operations with
-            | Error e ->
-                let msg =
-                  match e with
-                  | Too_many_operations n ->
-                      Printf.sprintf "Too many operations: %d" n
-                  | Mixed_patch_operations ->
-                      "Cannot mix Patch with Create/Delete/Replace"
-                  | Empty_batch -> "Empty batch"
-                in
-                failwith msg
+            | Error e -> failwith (string_of_validation_error e)
             | Ok () -> IO.return ()
           else IO.return ()
         in
