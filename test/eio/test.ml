@@ -76,12 +76,18 @@ let batch_tests =
     wrap_async_tests `Slow Batch.tests
   else []
 
+let mock_tests =
+  List.map
+    (fun (name, _speed, test_fn) -> (name, test_fn))
+    Test_core.Mock_tests.tests
+
 let () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   with_env ~sw env (fun () ->
       Alcotest.run "Main tests (Eio)"
         [
+          ("mock tests", wrap_sync_tests `Quick mock_tests);
           ( "utility cosmos test",
             wrap_sync_tests `Quick Test_core.Test_cosmos_utility.tests );
           ("partition key test", integration_tests);
