@@ -107,10 +107,16 @@ let batch_tests =
     wrap_async_tests `Slow Batch.tests
   else []
 
+let mock_tests =
+  List.map
+    (fun (name, _speed, test_fn) -> (name, test_fn))
+    Test_core.Mock_tests.tests
+
 let () =
   Lwt_main.run
   @@ Alcotest_lwt.run "Main tests"
        [
+         ("mock tests", wrap_sync_tests `Quick mock_tests);
          ("app config test", app_config_tests);
          ( "utility cosmos test",
            wrap_sync_tests `Quick Test_core.Test_cosmos_utility.tests );
