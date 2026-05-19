@@ -17,7 +17,7 @@
  (description "Provides an interface to the Azure Cosmos db.")
  (depends
   (ocaml
-   (>= 4.08.0))
+   (>= 4.14.0))
   (atdgen
    (>= 2.0.0))
   (base64
@@ -38,7 +38,7 @@
   "Provides an Lwt-based backend for the Azure Cosmos DB interface.")
  (depends
   (ocaml
-   (>= 4.08.0))
+   (>= 4.14.0))
   (azure-cosmos-db
    (= :version))
   lwt
