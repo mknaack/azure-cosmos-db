@@ -499,7 +499,7 @@ struct
       let get ?if_none_match ~partition_key ?consistency_level ?session_token
           ?timeout dbname coll_name doc_id =
         let path = path_of_doc dbname coll_name doc_id in
-        let hdrs =
+        let headers =
           json_headers Account.Docs Utilities.Verb.Get
             (header_path_of_path path)
           |> Utilities.apply_to_header_if_some "If-None-Match" Fun.id
@@ -512,7 +512,7 @@ struct
                session_token
         in
         let uri = make_uri path in
-        let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
+        let* response = Http.get ~headers uri |> wrap_timeout timeout in
         handle_response response (fun resp body ->
             let code = get_code resp in
             IO.return (Result.ok (code, body)))
@@ -520,7 +520,7 @@ struct
       let replace ?indexing_directive ~partition_key ?if_match ?timeout dbname
           coll_name doc_id content =
         let path = path_of_doc dbname coll_name doc_id in
-        let hdrs =
+        let headers =
           json_headers Account.Docs Utilities.Verb.Put
             (header_path_of_path path)
           |> Utilities.apply_to_header_if_some "x-ms-indexing-directive"
@@ -531,7 +531,7 @@ struct
         in
         let uri = make_uri path in
         let* response =
-          Http.put ~headers:hdrs ~body:content uri |> wrap_timeout timeout
+          Http.put ~headers ~body:content uri |> wrap_timeout timeout
         in
         handle_response response (fun resp body ->
             let code = get_code resp in
@@ -598,9 +598,7 @@ struct
         let headers = make_headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
         let body = Json_converter_j.string_of_query query in
         let uri = make_uri path in
-        let* response =
-          Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
-        in
+        let* response = Http.post ~headers ~body uri |> wrap_timeout timeout in
         handle_response response (fun resp body ->
             let code = get_code resp in
             let response_header = Response_headers.get_header resp in
