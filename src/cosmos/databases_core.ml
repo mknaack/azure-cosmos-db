@@ -463,7 +463,7 @@ struct
         let uri = make_uri path in
         let hdrs =
           json_headers Account.Docs Utilities.Verb.Get
-            (header_path_of_path path)
+            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
           |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
                string_of_int max_item_count
           |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
@@ -595,7 +595,7 @@ struct
                string_of_partition_key partition_key
           |> add_header "content-type" "application/query+json"
         in
-        let hdrs = make_headers (header_path_of_path path) in
+        let headers = make_headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
         let body = Json_converter_j.string_of_query query in
         let uri = make_uri path in
         let* response =
