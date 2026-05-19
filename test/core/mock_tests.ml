@@ -222,6 +222,75 @@ let mock_list_databases_test () =
       | Error _ -> Alcotest.fail "Should not return error");
       Mock_http.verify ())
 
+let compute_expected_auth verb resource_type resource_path date_header =
+  Cosmos.Utility.authorization_token_using_master_key verb resource_type
+    resource_path date_header Mock_auth.Auth.master_key
+
+let get_recorded_auth_and_date () =
+  let req, _ = Mock_http.get_recorded () |> List.hd in
+  let get name =
+    match Cohttp.Header.get req.Mock_http.headers name with
+    | None -> Alcotest.fail ("No " ^ name ^ " header")
+    | Some v -> v
+  in
+  (get "authorization", get "x-ms-date")
+
+let mock_document_list_auth_resource_path_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      Mock_http.expect
+        {
+          method_ = `Get;
+          uri =
+            Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com"
+              ~port:443 ~path:"/dbs/mydb/colls/mycoll/docs" ();
+          expected_headers = [];
+          expected_body = None;
+          response =
+            Ok
+              (Mock_response.make_response
+                 (Mock_response.list_documents_response
+                    [ ("doc1", "rid1"); ("doc2", "rid2") ]));
+        };
+      let _ = Mock_db.Collection.Document.list "mydb" "mycoll" in
+      let auth, date = get_recorded_auth_and_date () in
+      let expected =
+        compute_expected_auth "get" "docs" "dbs/mydb/colls/mycoll" date
+      in
+      Alcotest.(check string)
+        "Document.list signs with collection path (not docs path)" expected auth)
+
+let mock_document_query_auth_resource_path_test () =
+  let query =
+    Cosmos.Json_converter_t.{ query = "SELECT * FROM c"; parameters = [] }
+  in
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      Mock_http.expect
+        {
+          method_ = `Post;
+          uri =
+            Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com"
+              ~port:443 ~path:"/dbs/mydb/colls/mycoll/docs" ();
+          expected_headers = [];
+          expected_body = None;
+          response =
+            Ok
+              (Mock_response.make_response
+                 (Mock_response.list_documents_response [ ("doc1", "rid1") ]));
+        };
+      let _ =
+        Mock_db.Collection.Document.query ~is_partition:true "mydb" "mycoll"
+          query
+      in
+      let auth, date = get_recorded_auth_and_date () in
+      let expected =
+        compute_expected_auth "post" "docs" "dbs/mydb/colls/mycoll" date
+      in
+      Alcotest.(check string)
+        "Document.query signs with collection path (not docs path)" expected
+        auth)
+
 let tests =
   [
     ("mock_io_bind", `Quick, test_mock_io_bind);
@@ -239,4 +308,10 @@ let tests =
     ("mock_error_response", `Quick, test_mock_error_response);
     ("mock_create_database", `Quick, mock_create_database_test);
     ("mock_list_databases", `Quick, mock_list_databases_test);
+    ( "mock_document_list_auth_resource_path",
+      `Quick,
+      mock_document_list_auth_resource_path_test );
+    ( "mock_document_query_auth_resource_path",
+      `Quick,
+      mock_document_query_auth_resource_path_test );
   ]
