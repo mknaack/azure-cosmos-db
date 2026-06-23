@@ -156,6 +156,8 @@ struct
     let header = Cohttp.Header.add header "content_type" "application/json" in
     header
 
+  let add_header name value header = Cohttp.Header.add header name value
+
   let get_code resp =
     resp |> Cohttp.Response.status |> Cohttp.Code.code_of_status
 
@@ -363,8 +365,6 @@ struct
       let string_of_indexing_directive = function
         | Include -> "Include"
         | Exclude -> "Exclude"
-
-      let add_header name value header = Cohttp.Header.add header name value
 
       let create ?is_upsert ?indexing_directive ~partition_key ?timeout dbname
           coll_name content =
@@ -799,17 +799,12 @@ struct
           in
           let body = construct_batch_request_body batch_ops in
           let hdrs =
-            let h =
-              json_headers Account.Docs Utilities.Verb.Post
-                ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
-            in
-            let h = Cohttp.Header.add h "x-ms-cosmos-is-batch-request" "True" in
-            let h =
-              Cohttp.Header.add h "x-ms-documentdb-partitionkey"
-                (string_of_partition_key partition_key)
-            in
-            Cohttp.Header.add h "x-ms-cosmos-batch-atomic"
-              (if atomic then "true" else "false")
+            json_headers Account.Docs Utilities.Verb.Post
+              (path_of_collection dbname coll_name)
+            |> add_header "x-ms-cosmos-is-batch-request" "True"
+            |> add_header "x-ms-documentdb-partitionkey"
+                 (string_of_partition_key partition_key)
+            |> add_header "x-ms-cosmos-batch-atomic" (string_of_bool atomic)
           in
           let* response =
             Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
