@@ -346,6 +346,35 @@ let mock_batch_patch_body_valid_json_test () =
              object"
       | _ -> Alcotest.fail "Patch 'value' has an unexpected shape")
 
+let mock_batch_empty_returns_validation_error_test () =
+  match
+    Mock_db.Collection.Batch.execute ~partition_key:"pk" "mydb" "mycoll" []
+  with
+  | Error (Cosmos.Databases_core.Batch_validation_error Empty_batch) -> ()
+  | Error _ -> Alcotest.fail "Expected Batch_validation_error Empty_batch"
+  | Ok _ -> Alcotest.fail "Empty batch should not succeed"
+
+let mock_batch_too_many_returns_validation_error_test () =
+  let ops =
+    List.init 101 (fun i ->
+        Mock_db.Collection.Batch.Create
+          {
+            if_match = None;
+            if_none_match = None;
+            body = Printf.sprintf {|{"id": "%d"}|} i;
+          })
+  in
+  match
+    Mock_db.Collection.Batch.execute ~partition_key:"pk" "mydb" "mycoll" ops
+  with
+  | Error
+      (Cosmos.Databases_core.Batch_validation_error (Too_many_operations 101))
+    ->
+      ()
+  | Error _ ->
+      Alcotest.fail "Expected Batch_validation_error (Too_many_operations 101)"
+  | Ok _ -> Alcotest.fail "Oversized batch should not succeed"
+
 let tests =
   [
     ("mock_io_bind", `Quick, test_mock_io_bind);
@@ -372,4 +401,10 @@ let tests =
     ( "mock_batch_patch_body_valid_json",
       `Quick,
       mock_batch_patch_body_valid_json_test );
+    ( "mock_batch_empty_returns_validation_error",
+      `Quick,
+      mock_batch_empty_returns_validation_error_test );
+    ( "mock_batch_too_many_returns_validation_error",
+      `Quick,
+      mock_batch_too_many_returns_validation_error_test );
   ]
