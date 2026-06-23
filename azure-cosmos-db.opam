@@ -9,7 +9,7 @@ homepage: "https://github.com/mknaack/azure-cosmos-db"
 bug-reports: "https://github.com/mknaack/azure-cosmos-db/issues"
 depends: [
   "dune" {>= "3.21"}
-  "ocaml" {>= "4.08.0"}
+  "ocaml" {>= "4.14.0"}
   "atdgen" {>= "2.0.0"}
   "base64" {>= "3.5.0"}
   "uri"

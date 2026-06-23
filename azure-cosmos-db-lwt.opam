@@ -10,7 +10,7 @@ homepage: "https://github.com/mknaack/azure-cosmos-db"
 bug-reports: "https://github.com/mknaack/azure-cosmos-db/issues"
 depends: [
   "dune" {>= "3.21"}
-  "ocaml" {>= "4.08.0"}
+  "ocaml" {>= "4.14.0"}
   "azure-cosmos-db" {= version}
   "lwt"
   "lwt_ppx" {>= "2.0.2"}
