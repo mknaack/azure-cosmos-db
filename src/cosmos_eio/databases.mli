@@ -33,10 +33,16 @@ module Response_headers : sig
   val x_ms_session_token : t -> string option
 end
 
+type batch_validation_error = Cosmos.Databases_core.batch_validation_error =
+  | Too_many_operations of int
+  | Mixed_patch_operations
+  | Empty_batch
+
 type cosmos_error = Cosmos.Databases_core.cosmos_error =
   | Timeout_error
   | Connection_error
   | Azure_error of int * Response_headers.t
+  | Batch_validation_error of batch_validation_error
 
 module Database (Auth_key : Auth_key) : sig
   val get_code : Cohttp.Response.t -> int
@@ -257,7 +263,7 @@ module Database (Auth_key : Auth_key) : sig
         total_request_charge : float;
       }
 
-      type validation_error =
+      type validation_error = batch_validation_error =
         | Too_many_operations of int
         | Mixed_patch_operations
         | Empty_batch

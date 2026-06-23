@@ -150,14 +150,13 @@ struct
   let empty_batch_test () =
     let* () = setup_collection () in
     let ops = [] in
-    try
-      let* _ =
-        D.Collection.Batch.execute ~partition_key:"pk" dbname coll_name ops
-      in
-      Alcotest.fail "Empty batch should fail"
-    with Failure msg ->
-      Alcotest.(check string) "Empty batch error message" "Empty batch" msg;
-      IO.return ()
+    let* result =
+      D.Collection.Batch.execute ~partition_key:"pk" dbname coll_name ops
+    in
+    match result with
+    | Error (Batch_validation_error Empty_batch) -> IO.return ()
+    | Error _ -> Alcotest.fail "Expected Batch_validation_error Empty_batch"
+    | Ok _ -> Alcotest.fail "Empty batch should not succeed"
 
   let max_operations_test () =
     let ops =

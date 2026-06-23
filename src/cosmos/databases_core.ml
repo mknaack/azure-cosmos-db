@@ -107,10 +107,16 @@ module Response_headers = struct
   let x_ms_session_token t = t.x_ms_session_token
 end
 
+type batch_validation_error =
+  | Too_many_operations of int
+  | Mixed_patch_operations
+  | Empty_batch
+
 type cosmos_error =
   | Timeout_error
   | Connection_error
   | Azure_error of int * Response_headers.t
+  | Batch_validation_error of batch_validation_error
 
 module Make
     (IO : Databases_intf.IO)
@@ -661,7 +667,7 @@ struct
         total_request_charge : float;
       }
 
-      type validation_error =
+      type validation_error = batch_validation_error =
         | Too_many_operations of int
         | Mixed_patch_operations
         | Empty_batch
@@ -783,70 +789,65 @@ struct
           Error Mixed_patch_operations
         else Ok ()
 
-      let string_of_validation_error = function
-        | Too_many_operations n -> Printf.sprintf "Too many operations: %d" n
-        | Mixed_patch_operations ->
-            "Cannot mix Patch with Create/Delete/Replace"
-        | Empty_batch -> "Empty batch"
-
       let execute ?timeout ?(atomic = true) ?(should_validate = true)
           ~partition_key dbname coll_name operations =
-        let* () =
-          if should_validate then
-            match validate operations with
-            | Error e -> failwith (string_of_validation_error e)
-            | Ok () -> IO.return ()
-          else IO.return ()
-        in
-        let path = path_of_docs dbname coll_name in
-        let uri = make_uri path in
-        let batch_ops =
-          List.map (operation_to_batch_op partition_key) operations
-        in
-        let body = construct_batch_request_body batch_ops in
-        let hdrs =
-          let h =
-            json_headers Account.Docs Utilities.Verb.Post
-              ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+        let do_execute () =
+          let path = path_of_docs dbname coll_name in
+          let uri = make_uri path in
+          let batch_ops =
+            List.map (operation_to_batch_op partition_key) operations
           in
-          let h = Cohttp.Header.add h "x-ms-cosmos-is-batch-request" "True" in
-          let h =
-            Cohttp.Header.add h "x-ms-documentdb-partitionkey"
-              (string_of_partition_key partition_key)
+          let body = construct_batch_request_body batch_ops in
+          let hdrs =
+            let h =
+              json_headers Account.Docs Utilities.Verb.Post
+                ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+            in
+            let h = Cohttp.Header.add h "x-ms-cosmos-is-batch-request" "True" in
+            let h =
+              Cohttp.Header.add h "x-ms-documentdb-partitionkey"
+                (string_of_partition_key partition_key)
+            in
+            Cohttp.Header.add h "x-ms-cosmos-batch-atomic"
+              (if atomic then "true" else "false")
           in
-          Cohttp.Header.add h "x-ms-cosmos-batch-atomic"
-            (if atomic then "true" else "false")
-        in
-        let* response =
-          Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
-        in
-        handle_response response (fun resp body ->
-            let code = get_code resp in
-            let response_header = Response_headers.get_header resp in
-            if code = 200 || code = 207 then
-              let outcomes =
-                let parse_result json =
-                  let open Yojson.Safe.Util in
-                  {
-                    status_code = json |> member "statusCode" |> to_int;
-                    request_charge = json |> member "requestCharge" |> to_number;
-                    etag = json |> member "eTag" |> to_string_option;
-                    resource_body =
-                      (match json |> member "resourceBody" with
-                      | `Null -> None
-                      | v -> Some (Yojson.Safe.to_string v));
-                  }
+          let* response =
+            Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
+          in
+          handle_response response (fun resp body ->
+              let code = get_code resp in
+              let response_header = Response_headers.get_header resp in
+              if code = 200 || code = 207 then
+                let outcomes =
+                  let parse_result json =
+                    let open Yojson.Safe.Util in
+                    {
+                      status_code = json |> member "statusCode" |> to_int;
+                      request_charge =
+                        json |> member "requestCharge" |> to_number;
+                      etag = json |> member "eTag" |> to_string_option;
+                      resource_body =
+                        (match json |> member "resourceBody" with
+                        | `Null -> None
+                        | v -> Some (Yojson.Safe.to_string v));
+                    }
+                  in
+                  Yojson.Safe.from_string body
+                  |> Yojson.Safe.Util.to_list |> List.map parse_result
                 in
-                Yojson.Safe.from_string body
-                |> Yojson.Safe.Util.to_list |> List.map parse_result
-              in
-              let total_charge =
-                List.fold_left
-                  (fun acc r -> acc +. r.request_charge)
-                  0.0 outcomes
-              in
-              IO.return (Ok { outcomes; total_request_charge = total_charge })
-            else IO.return (Error (Azure_error (code, response_header))))
+                let total_charge =
+                  List.fold_left
+                    (fun acc r -> acc +. r.request_charge)
+                    0.0 outcomes
+                in
+                IO.return (Ok { outcomes; total_request_charge = total_charge })
+              else IO.return (Error (Azure_error (code, response_header))))
+        in
+        if should_validate then
+          match validate operations with
+          | Error e -> IO.return (Error (Batch_validation_error e))
+          | Ok () -> do_execute ()
+        else do_execute ()
     end
 
     module Batch_builder = struct
