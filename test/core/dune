@@ -1,6 +1,6 @@
 (library
  (name test_core)
- (libraries azure-cosmos-db alcotest utilities cohttp uri str)
+ (libraries azure-cosmos-db alcotest utilities cohttp uri str yojson)
  (flags
   (:standard -annot -short-paths)))
 

@@ -694,7 +694,7 @@ struct
                 |> add_string_field "id" op.Json_converter_t.id
                 |> add_field "resourceBody" op.Json_converter_t.resourceBody
                 |> add_string_field "from" op.Json_converter_t.from
-                |> add_string_field "value" op.Json_converter_t.value
+                |> add_field "value" op.Json_converter_t.value
               in
               let all_fields = base_fields @ optional_fields in
               let field_strs =
