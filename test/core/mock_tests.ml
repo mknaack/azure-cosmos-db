@@ -291,6 +291,61 @@ let mock_document_query_auth_resource_path_test () =
         "Document.query signs with collection path (not docs path)" expected
         auth)
 
+let mock_batch_patch_body_valid_json_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      Mock_http.expect
+        {
+          method_ = `Post;
+          uri =
+            Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com"
+              ~port:443 ~path:"/dbs/mydb/colls/mycoll/docs" ();
+          expected_headers = [];
+          expected_body = None;
+          response =
+            Ok
+              (Mock_response.make_response ~status:200
+                 {|[{"statusCode":200,"requestCharge":1.0}]|});
+        };
+      let ops =
+        [
+          Mock_db.Collection.Batch.Patch
+            {
+              id = "doc1";
+              if_match = None;
+              patch_op =
+                Mock_db.Collection.Batch.Increment { path = "/age"; value = 5 };
+            };
+        ]
+      in
+      let _ =
+        Mock_db.Collection.Batch.execute ~partition_key:"pk" "mydb" "mycoll" ops
+      in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      let body =
+        match req.Mock_http.body with
+        | Some b -> b
+        | None -> Alcotest.fail "Batch request had no body"
+      in
+      let json =
+        try Yojson.Safe.from_string body
+        with _ ->
+          Alcotest.fail
+            (Printf.sprintf "Batch request body is not valid JSON: %s" body)
+      in
+      let first =
+        match json with
+        | `List (x :: _) -> x
+        | _ -> Alcotest.fail "Expected a non-empty JSON array of operations"
+      in
+      match Yojson.Safe.Util.member "value" first with
+      | `Assoc _ -> ()
+      | `String _ ->
+          Alcotest.fail
+            "Patch 'value' was encoded as a JSON string instead of a JSON \
+             object"
+      | _ -> Alcotest.fail "Patch 'value' has an unexpected shape")
+
 let tests =
   [
     ("mock_io_bind", `Quick, test_mock_io_bind);
@@ -314,4 +369,7 @@ let tests =
     ( "mock_document_query_auth_resource_path",
       `Quick,
       mock_document_query_auth_resource_path_test );
+    ( "mock_batch_patch_body_valid_json",
+      `Quick,
+      mock_batch_patch_body_valid_json_test );
   ]
