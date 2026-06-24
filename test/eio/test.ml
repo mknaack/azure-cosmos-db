@@ -30,7 +30,9 @@ struct
     ignore t;
     Some (cmd ())
 
-  let parallel_map f xs () = List.map (fun x -> (f x) ()) xs
+  let parallel_map f xs () =
+    Eio.Fiber.List.map ~max_fibers:10 (fun x -> (f x) ()) xs
+
   let run thunk = thunk ()
 end
 
