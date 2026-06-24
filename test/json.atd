@@ -1,5 +1,0 @@
-type create_document = {
-  id: string;
-  firstName: string;
-  lastName: string;
-}
