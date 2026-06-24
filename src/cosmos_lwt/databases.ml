@@ -12,12 +12,35 @@ module Lwt_io : Cosmos.Databases_intf.IO with type 'a t = 'a Lwt.t = struct
     let timeout = Lwt_unix.sleep t >|= fun () -> None in
     Lwt.pick [ timeout; (cmd >|= fun x -> Some x) ]
 
-  let parallel_map f xs = Lwt_list.map_p f xs
+  let max_parallel_requests = 10
+
+  let parallel_map f xs =
+    let pool =
+      Lwt_pool.create max_parallel_requests (fun () -> Lwt.return_unit)
+    in
+    Lwt_list.map_p (fun x -> Lwt_pool.use pool (fun () -> f x)) xs
 end
 
 module Lwt_http :
   Cosmos.Databases_intf.Http_client with type 'a io := 'a Lwt.t = struct
   type http_error = Connection_refused | Other_error of exn
+
+  module Connection = Cohttp_lwt.Connection.Make (Cohttp_lwt_unix.Net)
+
+  module Sleep = struct
+    let sleep_ns ns = Lwt_unix.sleep (Int64.to_float ns /. 1_000_000_000.)
+  end
+
+  module Connection_cache =
+    Cohttp_lwt.Connection_cache.Make (Connection) (Sleep)
+
+  let cache =
+    lazy
+      (Connection_cache.create ~keep:60_000_000_000L ~retry:2 ~parallel:16
+         ~depth:100 ())
+
+  let call ?headers ?body meth uri =
+    Connection_cache.call (Lazy.force cache) ?headers ?body meth uri
 
   let perform_request f =
     Lwt.catch
@@ -31,19 +54,18 @@ module Lwt_http :
             Lwt.return (Error Connection_refused)
         | exn -> Lwt.return (Error (Other_error exn)))
 
-  let get ~headers uri =
-    perform_request (fun () -> Cohttp_lwt_unix.Client.get ~headers uri)
+  let get ~headers uri = perform_request (fun () -> call ~headers `GET uri)
 
   let post ~headers ~body uri =
     let body = Cohttp_lwt.Body.of_string body in
-    perform_request (fun () -> Cohttp_lwt_unix.Client.post ~headers ~body uri)
+    perform_request (fun () -> call ~headers ~body `POST uri)
 
   let put ~headers ~body uri =
     let body = Cohttp_lwt.Body.of_string body in
-    perform_request (fun () -> Cohttp_lwt_unix.Client.put ~headers ~body uri)
+    perform_request (fun () -> call ~headers ~body `PUT uri)
 
   let delete ~headers uri =
-    perform_request (fun () -> Cohttp_lwt_unix.Client.delete ~headers uri)
+    perform_request (fun () -> call ~headers `DELETE uri)
 end
 
 module type Auth_key = Cosmos.Databases_intf.Auth_key

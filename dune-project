@@ -46,6 +46,7 @@
    (>= 2.0.2))
   lwt_ssl
   ssl
+  cohttp-lwt
   cohttp-lwt-unix
   (alcotest-lwt :with-test)
   (bisect_ppx :with-test)
