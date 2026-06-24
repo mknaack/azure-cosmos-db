@@ -553,7 +553,7 @@ struct
         in
         let uri = make_uri path in
         let do_delete () = Http.delete ~headers:hdrs uri in
-        let* retry_result = with_throttle_retry ~max_retries:3 do_delete in
+        let* retry_result = with_throttle_retry ~max_retries:10 do_delete in
         match retry_result with
         | Error e -> IO.return (Error e)
         | Ok (code, _resp, _body) -> (
