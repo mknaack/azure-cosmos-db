@@ -591,6 +591,59 @@ struct
     in
     IO.return ()
 
+  let create_multiple_documents_with_partition_key_test () =
+    let ids = range 200 280 in
+    let contents = List.map (fun id -> ("a Last name", create_value id)) ids in
+    let* results =
+      D.Collection.Document.create_multiple dbname_partition
+        collection_name_partition contents
+    in
+    let is_created = function Result.Ok (201, _) -> true | _ -> false in
+    let created = List.filter is_created results |> List.length in
+    let _ =
+      Alcotest.(check int)
+        "All documents created via create_multiple" (List.length ids) created
+    in
+    let doc_ids = List.map (fun id -> document_id ^ string_of_int id) ids in
+    let* delete_results =
+      D.Collection.Document.delete_multiple ~partition_key:"a Last name"
+        dbname_partition collection_name_partition doc_ids
+    in
+    let is_deleted = function Result.Ok 204 -> true | _ -> false in
+    let deleted = List.filter is_deleted delete_results |> List.length in
+    let _ =
+      Alcotest.(check int)
+        "All documents deleted via delete_multiple" (List.length ids) deleted
+    in
+    IO.return ()
+
+  let create_multiple_documents_multi_chunk_test () =
+    let ids = range 1000 1149 in
+    let contents = List.map (fun id -> ("a Last name", create_value id)) ids in
+    let* results =
+      D.Collection.Document.create_multiple ~chunk_size:40 dbname_partition
+        collection_name_partition contents
+    in
+    let is_created = function Result.Ok (201, _) -> true | _ -> false in
+    let created = List.filter is_created results |> List.length in
+    let _ =
+      Alcotest.(check int)
+        "All documents created across multiple chunks" (List.length ids) created
+    in
+    let doc_ids = List.map (fun id -> document_id ^ string_of_int id) ids in
+    let* delete_results =
+      D.Collection.Document.delete_multiple ~chunk_size:40
+        ~partition_key:"a Last name" dbname_partition collection_name_partition
+        doc_ids
+    in
+    let is_deleted = function Result.Ok 204 -> true | _ -> false in
+    let deleted = List.filter is_deleted delete_results |> List.length in
+    let _ =
+      Alcotest.(check int)
+        "All documents deleted across multiple chunks" (List.length ids) deleted
+    in
+    IO.return ()
+
   let delete_document_with_partition_key_test () =
     let* res =
       D.Collection.Document.delete ~partition_key:"a Last name" dbname_partition
@@ -708,6 +761,10 @@ struct
         upsert_document_with_partition_key_test );
       ( "create a lot document with partition key",
         create_a_lot_of_documents_with_partition_key_test );
+      ( "create multiple documents with partition key",
+        create_multiple_documents_with_partition_key_test );
+      ( "create multiple documents across multiple chunks",
+        create_multiple_documents_multi_chunk_test );
       ( "delete document with partition key",
         delete_document_with_partition_key_test );
       ( "delete collection with partition key",
