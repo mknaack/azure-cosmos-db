@@ -23,12 +23,37 @@ module Lwt_http :
      Cohttp_lwt_unix.Client opens a fresh TCP + TLS connection for every
      request, which exhausts ephemeral ports/file descriptors under
      sustained high call volumes and makes the client hang. *)
-  let cache =
-    lazy
-      (let cache = Cohttp_lwt_unix.Connection_cache.create () in
-       Cohttp_lwt_unix.Connection_cache.call cache)
+  let make_cache () =
+    let cache = Cohttp_lwt_unix.Connection_cache.create () in
+    Cohttp_lwt_unix.Connection_cache.call cache
 
-  let call ?headers ?body meth uri = (Lazy.force cache) ?headers ?body meth uri
+  let cache = ref (lazy (make_cache ()))
+
+  exception Request_timed_out
+
+  (* Safety net against pooled connections that die without failing their
+     queued requests (e.g. the server force-closes a throttled connection;
+     cohttp then leaves the promises pending forever). After this many
+     seconds the request fails, any late response body is drained in the
+     background, and the cache is replaced so dead connections are
+     discarded. *)
+  let watchdog_seconds = 60.
+
+  let call ?headers ?body meth uri =
+    let current = !cache in
+    let request = (Lazy.force current) ?headers ?body meth uri in
+    let watchdog =
+      let%lwt () = Lwt_unix.sleep watchdog_seconds in
+      let () =
+        Lwt.on_success request (fun (_, body) ->
+            Lwt.dont_wait
+              (fun () -> Cohttp_lwt.Body.drain_body body)
+              (fun _ -> ()))
+      in
+      let () = if !cache == current then cache := lazy (make_cache ()) in
+      Lwt.fail Request_timed_out
+    in
+    Lwt.pick [ request; watchdog ]
 
   let perform_request f =
     Lwt.catch
