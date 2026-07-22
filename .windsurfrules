@@ -1,0 +1,189 @@
+# Windsurf Rules — azure-cosmos-db OCaml SDK
+
+## Build & Compile
+- Always use this command to compile and format: `dune build @fmt --auto-promote @ocaml-index`
+- Always use this command to run tests: `dune runtest`
+
+## Language & Toolchain
+- OCaml with dune build system
+- Three packages: `azure-cosmos-db` (core), `azure-cosmos-db-lwt`, `azure-cosmos-db-eio`
+- ATD/atdgen for JSON types (`*.atd` → `*_t.ml`, `*_j.ml`)
+
+---
+
+## Module Structure
+
+New shared logic belongs in `src/cosmos/` as its own `.ml`/`.mli` file pair. Backend-specific code goes in `src/cosmos_lwt/` or `src/cosmos_eio/`. Never duplicate logic between backends.
+
+Every new public module must have a `.mli`. Keep `databases_intf.ml` as the canonical home for module type signatures (`IO`, `Http_client`, `Auth_key`).
+
+**Types with operations belong in a module with `type t`, not at the top level.**
+
+```ocaml
+(* WRONG — type and functions scattered at top level *)
+type indexing_directive = Include | Exclude
+let string_of_indexing_directive = function Include -> "Include" | Exclude -> "Exclude"
+
+(* RIGHT — grouped in a module *)
+module Indexing_directive = struct
+  type t = Include | Exclude
+  let string_of = function Include -> "Include" | Exclude -> "Exclude"
+end
+```
+
+Apply this when a type has more than one associated operation. The canonical type name inside a module is always `t`. Module name is `UpperCamelCase`.
+
+---
+
+## Code Style
+
+### Functor pattern
+All database operations live inside `Make(IO)(Http)(Auth_key)`. The bind operator is always aliased at the top:
+```ocaml
+module Make
+    (IO : Databases_intf.IO)
+    (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
+    (Auth_key : Databases_intf.Auth_key) =
+struct
+  let ( let* ) = IO.bind
+  ...
+end
+```
+
+### Path helpers — never inline path strings
+```ocaml
+(* WRONG *)
+let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs/" ^ doc_id
+
+(* RIGHT — use the existing helpers in Collection *)
+let path = path_of_doc dbname coll_name doc_id
+```
+Existing helpers: `path_of_doc`, `path_of_docs`, `path_of_collection`, `path_of_collections`.
+
+### Header building — always pipe with existing helpers
+```ocaml
+(* WRONG — manual conditionals *)
+let hdrs = json_headers Account.Docs Utilities.Verb.Post coll_path in
+let hdrs = match is_upsert with
+  | None -> hdrs
+  | Some v -> Cohttp.Header.add hdrs "x-ms-documentdb-is-upsert" (string_of_bool v)
+in
+
+(* RIGHT — pipe with Utilities.apply_to_header_if_some *)
+let hdrs =
+  json_headers Account.Docs Utilities.Verb.Post coll_path
+  |> Utilities.apply_to_header_if_some "x-ms-documentdb-is-upsert" string_of_bool is_upsert
+  |> Utilities.apply_to_header_if_some "x-ms-indexing-directive" string_of_indexing_directive indexing_directive
+  |> add_header "x-ms-documentdb-partitionkey" (string_of_partition_key partition_key)
+```
+
+### Option handling — use Option.fold, not match
+```ocaml
+(* WRONG *)
+let optional_fields =
+  match opt1 with Some v -> ("key", v) :: acc | None -> acc
+
+(* RIGHT *)
+let add_field name opt acc =
+  Option.fold opt ~none:acc ~some:(fun v -> (name, v) :: acc)
+```
+
+### Retry and throttle — reuse with_throttle_retry
+```ocaml
+(* WRONG — inline retry loop *)
+let rec post retry () =
+  IO.catch (fun () ->
+    let* r = Http.post ~headers ~body uri in
+    if code = 429 then ... post (retry-1) ()
+    else ...)
+
+(* RIGHT — use the shared helper *)
+let do_post () = Http.post ~headers:hdrs ~body:content uri in
+let* retry_result = with_throttle_retry ~max_retries:10 do_post in
+```
+
+### Verbatim strings for JSON
+```ocaml
+(* WRONG *)
+Printf.sprintf "{\"path\": \"%s\", \"op\": \"add\", \"value\": %s}" path value
+
+(* RIGHT *)
+Printf.sprintf {|{"path": "%s", "op": "add", "value": %s}|} path value
+```
+
+### Naming conventions
+- Conversion functions: `string_of_*` and `*_of_string`
+- Labeled args (`~name`) for all non-obvious parameters
+- Optional args (`?name`) for parameters with sensible defaults
+
+---
+
+## No Duplication
+
+Before writing any helper, check `databases_core.ml` for:
+- `Utilities.apply_to_header_if_some` — conditional header addition
+- `add_header` — unconditional header addition
+- `handle_response` — unwraps timeout/http-error/ok
+- `make_uri` — builds the HTTPS URI
+- `header_path_of_path` — strips leading `/` for auth headers
+- `with_throttle_retry` — handles 429 and connection errors with retry
+- `result_or_error_with_result` — maps expected status code to Ok, others to Error
+- `Utilities.take_first` — chunk splitting for parallel batch operations
+
+---
+
+## API Design
+
+### Argument order
+Optional args first, then positional `dbname`, `coll_name`, resource id, `?timeout` last:
+```ocaml
+(* Correct signature shape *)
+val get :
+  ?if_none_match:string ->
+  partition_key:string ->
+  ?consistency_level:consistency_level ->
+  ?timeout:float ->
+  string ->   (* dbname *)
+  string ->   (* coll_name *)
+  string ->   (* doc_id *)
+  (int * string, cosmos_error) result IO.t
+```
+
+### Return types
+```ocaml
+(* Data response *)
+(int * 'a, cosmos_error) result IO.t
+
+(* No-body response (delete, etc.) *)
+(int, cosmos_error) result IO.t
+
+(* With headers (list, query — caller may need continuation token) *)
+(int * Response_headers.t * list_result, cosmos_error) result IO.t
+```
+
+### Error variants
+Add new `cosmos_error` variants at the top of `databases_core.ml` only — never inline:
+```ocaml
+(* At top of databases_core.ml — extend here *)
+type cosmos_error =
+  | Timeout_error
+  | Connection_error
+  | Azure_error of int * Response_headers.t
+```
+
+---
+
+## ATD / JSON
+- JSON types are defined in `src/cosmos/json.atd`; regenerate with `dune build` after changes
+- Use generated `Json_converter_j` (serialisers) and `Json_converter_t` (types) — do not hand-roll JSON for types that can be expressed in ATD
+- Hand-rolled JSON (via `Printf.sprintf {|..|}`) is acceptable only for dynamic/variable-shape payloads like batch request bodies
+
+---
+
+## Testing
+- Unit tests for pure logic: `test/core/`
+- Integration tests: `test/cosmos/` or backend dirs (`test/lwt/`, `test/eio/`)
+- New test files must be added to the relevant `dune` stanza
+- Never delete or weaken existing tests
+- Use `alcotest` (Lwt: `alcotest-lwt`, Eio: `alcotest`)
+- Every operation needs at least one error path test (404, 429, timeout, connection refused)
