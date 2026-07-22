@@ -19,6 +19,17 @@ module Lwt_http :
   Cosmos.Databases_intf.Http_client with type 'a io := 'a Lwt.t = struct
   type http_error = Connection_refused | Other_error of exn
 
+  (* Reuse connections via a keep-alive cache. The default
+     Cohttp_lwt_unix.Client opens a fresh TCP + TLS connection for every
+     request, which exhausts ephemeral ports/file descriptors under
+     sustained high call volumes and makes the client hang. *)
+  let cache =
+    lazy
+      (let cache = Cohttp_lwt_unix.Connection_cache.create () in
+       Cohttp_lwt_unix.Connection_cache.call cache)
+
+  let call ?headers ?body meth uri = (Lazy.force cache) ?headers ?body meth uri
+
   let perform_request f =
     Lwt.catch
       (fun () ->
@@ -31,19 +42,18 @@ module Lwt_http :
             Lwt.return (Error Connection_refused)
         | exn -> Lwt.return (Error (Other_error exn)))
 
-  let get ~headers uri =
-    perform_request (fun () -> Cohttp_lwt_unix.Client.get ~headers uri)
+  let get ~headers uri = perform_request (fun () -> call ~headers `GET uri)
 
   let post ~headers ~body uri =
     let body = Cohttp_lwt.Body.of_string body in
-    perform_request (fun () -> Cohttp_lwt_unix.Client.post ~headers ~body uri)
+    perform_request (fun () -> call ~headers ~body `POST uri)
 
   let put ~headers ~body uri =
     let body = Cohttp_lwt.Body.of_string body in
-    perform_request (fun () -> Cohttp_lwt_unix.Client.put ~headers ~body uri)
+    perform_request (fun () -> call ~headers ~body `PUT uri)
 
   let delete ~headers uri =
-    perform_request (fun () -> Cohttp_lwt_unix.Client.delete ~headers uri)
+    perform_request (fun () -> call ~headers `DELETE uri)
 end
 
 module type Auth_key = Cosmos.Databases_intf.Auth_key
