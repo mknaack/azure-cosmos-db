@@ -1,6 +1,10 @@
 (*
 how to run:
-dune exec ./src/cosmos_runner/cosmos_runner.exe   
+dune exec ./src/cosmos_runner/cosmos_runner.exe
+
+stress test (reproduces the >200k-calls hang; verifies connection reuse):
+dune exec ./src/cosmos_runner/cosmos_runner.exe -- stress [num_calls] [parallelism]
+e.g. dune exec ./src/cosmos_runner/cosmos_runner.exe -- stress 200000 50
 *)
 
 open Cosmos_lwt
@@ -204,6 +208,77 @@ let do_with_partition partition_key partition () =
   let%lwt () = delete_database () in
   Lwt.return_unit
 
+(* Number of open file descriptors of this process. Under the old
+   connection-per-request behaviour this (together with kernel TIME_WAIT
+   sockets, see `ss -s`) grows until requests hang. With the connection
+   cache it stays flat. *)
+let fd_count () =
+  try Sys.readdir "/proc/self/fd" |> Array.length with Sys_error _ -> -1
+
+let stress_get_documents partition total parallelism () =
+  let start_time = Unix.gettimeofday () in
+  let%lwt () =
+    Lwt_io.printf "stress: %i get calls, parallelism %i\n" total parallelism
+  in
+  let doc_id = make_id 0 in
+  let report_every = max 1000 (total / 20) in
+  let rec loop remaining ok throttled fail next_report =
+    if remaining <= 0 then Lwt.return (ok, throttled, fail)
+    else
+      let batch = min parallelism remaining in
+      let%lwt results =
+        List.init batch (fun _ -> ())
+        |> Lwt_list.map_p (fun () ->
+            let%lwt r =
+              D.Collection.Document.get ~partition_key:partition dbname
+                collection_name doc_id
+            in
+            match r with
+            | Result.Ok (code, _) -> Lwt.return code
+            | Result.Error _ -> Lwt.return 0)
+      in
+      let count code = List.filter (Int.equal code) results |> List.length in
+      let succeeded = count 200 in
+      let ok = ok + succeeded in
+      let throttled = throttled + count 429 in
+      let fail = fail + (batch - succeeded - count 429) in
+      let done_count = ok + throttled + fail in
+      let%lwt next_report =
+        if done_count >= next_report then
+          let elapsed = Unix.gettimeofday () -. start_time in
+          let%lwt () =
+            Lwt_io.printf
+              "  %i/%i ok: %i 429: %i fail: %i fds: %i rate: %.0f req/s \
+               elapsed: %.1f sec\n"
+              done_count total ok throttled fail (fd_count ())
+              (float_of_int done_count /. elapsed)
+              elapsed
+          in
+          Lwt.return (next_report + report_every)
+        else Lwt.return next_report
+      in
+      loop (remaining - batch) ok throttled fail next_report
+  in
+  let%lwt ok, throttled, fail = loop total 0 0 0 report_every in
+  let elapsed = Unix.gettimeofday () -. start_time in
+  Lwt_io.printf
+    "stress done: ok: %i 429: %i fail: %i fds: %i rate: %.0f req/s time: %.1f \
+     sec\n"
+    ok throttled fail (fd_count ())
+    (float_of_int (ok + throttled + fail) /. elapsed)
+    elapsed
+
+let stress_with_partition partition_key partition total parallelism () =
+  let%lwt () = create_database () in
+  let%lwt () = create_collection partition_key () in
+  let%lwt _ =
+    D.Collection.Document.create ~partition_key:partition dbname collection_name
+      (create_value 0)
+  in
+  let%lwt () = stress_get_documents partition total parallelism () in
+  let%lwt () = delete_database () in
+  Lwt.return_unit
+
 let main () =
   let () = print_endline "start" in
   let partition_key =
@@ -211,7 +286,16 @@ let main () =
       { paths = [ "/lastName" ]; kind = "Hash"; version = None }
   in
   let partition = "a Last name" in
-  let%lwt () = do_with_partition partition_key partition () in
-  Lwt.return_unit
+  match Sys.argv with
+  | [| _; "stress" |] ->
+      stress_with_partition partition_key partition 200_000 50 ()
+  | [| _; "stress"; n |] ->
+      stress_with_partition partition_key partition (int_of_string n) 50 ()
+  | [| _; "stress"; n; p |] ->
+      stress_with_partition partition_key partition (int_of_string n)
+        (int_of_string p) ()
+  | _ ->
+      let%lwt () = do_with_partition partition_key partition () in
+      Lwt.return_unit
 
 let () = Lwt_main.run (main ())
