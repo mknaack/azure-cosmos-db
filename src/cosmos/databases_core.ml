@@ -1168,13 +1168,21 @@ struct
             IO.return (Ok (code, response_headers, result))
           else IO.return (Error (Azure_error (code, response_headers))))
 
-    let replace ?migrate ?timeout offer throughput =
-      let offer = { offer with content = Throughput.to_content throughput } in
+    let replace ?migrate ?timeout
+        (offer : Json_converter_t.offer)
+        throughput =
+      let offer =
+        {
+          offer with
+          Json_converter_t.content = Throughput.to_content throughput;
+        }
+      in
       let body = Json_converter_j.string_of_offer offer in
-      let path = path_of_offer offer.rid in
+      let path = path_of_offer offer.Json_converter_t.rid in
       let uri = make_uri path in
       let hdrs =
-        json_headers resource Utilities.Verb.Put (auth_path_of_offer offer.rid)
+        json_headers resource Utilities.Verb.Put
+          (auth_path_of_offer offer.Json_converter_t.rid)
         |> Utilities.apply_to_header_if_some
              "x-ms-cosmos-migrate-offer-to-autopilot" string_of_bool
              (match migrate with Some `To_autoscale -> Some true | _ -> None)
@@ -1183,21 +1191,21 @@ struct
              (match migrate with Some `To_manual -> Some true | _ -> None)
       in
       let do_put () = Http.put ~headers:hdrs ~body uri in
-      let* retry_result = with_throttle_retry ~max_retries:3 do_put in
+      let* retry_result =
+        match timeout with
+        | None ->
+            let* result = with_throttle_retry ~max_retries:3 do_put in
+            IO.return (Some result)
+        | Some timeout ->
+            IO.with_timeout timeout
+              (with_throttle_retry ~max_retries:3 do_put)
+      in
       match retry_result with
-      | Error error -> IO.return (Error error)
-      | Ok (_code, resp, body) -> (
-          let finish () =
-            let value body = Json_converter_j.offer_of_string body in
-            result_or_error_with_result 200 value resp body
-          in
-          match timeout with
-          | None -> finish ()
-          | Some t -> (
-              let* timed_result = IO.with_timeout t (IO.return ()) in
-              match timed_result with
-              | None -> timeout_error
-              | Some () -> finish ()))
+      | None -> timeout_error
+      | Some (Error error) -> IO.return (Error error)
+      | Some (Ok (_code, resp, body)) ->
+          let value body = Json_converter_j.offer_of_string body in
+          result_or_error_with_result 200 value resp body
 
     let query_for_resource_id ?timeout resource_id =
       let query_body =
