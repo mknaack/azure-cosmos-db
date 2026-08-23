@@ -125,6 +125,37 @@ type list_permissions = {
   count <json name="_count">: int;
 }
 
+type offer_autopilot_settings = {
+  max_throughput <json name="maxThroughput">: int;
+}
+
+type offer_content = {
+  ?offer_throughput <json name="offerThroughput">: int option;
+  ?offer_is_ru_per_minute_throughput_enabled
+    <json name="offerIsRUPerMinuteThroughputEnabled">: bool option;
+  ?offer_autopilot_settings
+    <json name="offerAutopilotSettings">: offer_autopilot_settings option;
+}
+
+type offer = {
+  id: string;
+  offer_version <json name="offerVersion">: string;
+  ?offer_type <json name="offerType">: string option;
+  content: offer_content;
+  resource: string;
+  offer_resource_id <json name="offerResourceId">: string;
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+}
+
+type list_offers = {
+  rid <json name="_rid">: string;
+  offers <json name="Offers">: offer list;
+  count <json name="_count">: int;
+}
+
 type batch_operation_type = [ Create | Upsert | Read | Delete | Replace | Patch ]
 
 type batch_operation = {
