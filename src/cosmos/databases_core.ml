@@ -1104,13 +1104,18 @@ struct
                 offer_autopilot_settings = Some { max_throughput };
               }
 
-      let of_content content =
-        Option.fold content.Json_converter_t.offer_autopilot_settings
-          ~none:
-            (Option.fold content.offer_throughput ~none:None ~some:(fun value ->
-                 Some (Manual value)))
-          ~some:(fun settings ->
-            Some (Autoscale { max_throughput = settings.max_throughput }))
+    let of_content content =
+      Option.fold content.Json_converter_t.offer_autopilot_settings
+        ~none:
+          (Option.fold content.Json_converter_t.offer_throughput ~none:None
+             ~some:(fun value -> Some (Manual value)))
+        ~some:(fun settings ->
+          Some
+            (Autoscale
+               {
+                 max_throughput =
+                   settings.Json_converter_t.max_throughput;
+               }))
 
       let string_of = function
         | Manual throughput -> Printf.sprintf "Manual %d" throughput
