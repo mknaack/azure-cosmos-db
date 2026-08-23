@@ -6,7 +6,7 @@ This document outlines suggested improvements to the Azure Cosmos DB OCaml SDK A
 
 ### Current Implementation vs Official Azure Cosmos API
 
-Based on comprehensive analysis of the codebase against official Azure Cosmos DB REST API documentation, the current implementation provides approximately **45%** of the full API functionality.
+Based on comprehensive analysis of the codebase against official Azure Cosmos DB REST API documentation, the current implementation provides approximately **55%** of the full API functionality.
 
 #### ✅ **Currently Implemented Features (100% Coverage)**
 
@@ -16,20 +16,21 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Collections** | List, Create, Get, Delete, Create if not exists | ✅ Complete |
 | **Users** | List, Create, Get, Replace, Delete | ✅ Complete |
 | **Permissions** | List, Create, Get, Replace, Delete | ✅ Complete |
+| **Transactional Batch** | Create, Upsert, Read, Replace, Delete, Patch within a partition | ✅ Complete |
 
-#### ✅ **Documents (95% Coverage)**
+#### ✅ **Documents (98% Coverage)**
 
 | Operation | Implemented | Missing |
 |------------|-------------|---------|
 | Create (with upsert, indexing) | ✅ | |
-| Create Multiple (batch) | ✅ | |
+| Create Multiple (parallel, chunked) | ✅ | |
 | List (with pagination, consistency) | ✅ | |
 | Get (with conditional requests) | ✅ | |
 | Replace (with conditional updates) | ✅ | |
 | Delete (with retry logic) | ✅ | |
 | Delete Multiple | ✅ | |
 | Query (SQL, cross-partition) | ✅ | |
-| **Patch Operations** | ❌ | Partial updates |
+| Patch (add/set/replace/remove/incr) | ✅ via `Batch` | Standalone `Document.patch` endpoint |
 
 #### ❌ **Major Missing Features (0% Coverage)**
 
@@ -47,12 +48,13 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 #### 📊 **Implementation Coverage by Category**
 
 ```
-Core CRUD Operations: ████████████████████ 100%
-Document Operations:   ████████████████████ 95%
-Server-side Logic:     ░░░░░░░░░░░░░░░░░░░░░ 0%
-Performance Mgmt:     ░░░░░░░░░░░░░░░░░░░░░ 0%
-Advanced Features:     ░░░░░░░░░░░░░░░░░░░░░ 0%
-Overall Coverage:      ████████████░░░░░░░░ 45%
+Core CRUD Operations:  ████████████████████ 100%
+Document Operations:   ████████████████████ 98%
+Transactional Batch:   ████████████████████ 100%
+Server-side Logic:     ░░░░░░░░░░░░░░░░░░░░ 0%
+Performance Mgmt:      ░░░░░░░░░░░░░░░░░░░░ 0%
+Advanced Features:     ░░░░░░░░░░░░░░░░░░░░ 0%
+Overall Coverage:      ███████████████░░░░░ 55%
 ```
 
 ### Critical Gaps Analysis
@@ -80,19 +82,20 @@ Overall Coverage:      ████████████░░░░░░░
 ### Feature Implementation Priority
 
 #### **Phase 1: Core Functionality Completion**
-1. **Document Patch Operations** - Complete document CRUD
-2. **Stored Procedure Execution** - Enable server-side logic
-3. **Offers Management** - Enable throughput control
+1. ✅ **Transactional Batch** - Implemented (`Batch`, `Batch_builder`)
+2. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
+3. **Stored Procedure Execution** - Enable server-side logic
+4. **Offers Management** - Enable throughput control
 
 #### **Phase 2: Advanced Features**
-4. **Change Feed** - Real-time capabilities
-5. **UDFs & Triggers** - Complete server-side programming
-6. **Attachments** - Media support
+5. **Change Feed** - Real-time capabilities
+6. **UDFs & Triggers** - Complete server-side programming
+7. **Attachments** - Media support
 
 #### **Phase 3: Enterprise Features**
-7. **TTL Management** - Automatic expiration
-8. **Vector Search** - AI/ML integration
-9. **Conflict Resolution** - Multi-region writes
+8. **TTL Management** - Automatic expiration
+9. **Vector Search** - AI/ML integration
+10. **Conflict Resolution** - Multi-region writes
 
 ### Comparison with Modern SDKs
 
@@ -101,9 +104,12 @@ Overall Coverage:      ████████████░░░░░░░
 The library uses a **functor-based architecture** with:
 - `Cosmos.Databases_core.Make` functor parameterized by `IO`, `Http_client`, and `Auth_key`
 - Dual backend support: `cosmos_lwt` and `cosmos_eio` for different async models
-- Hierarchical module structure: `Database` → `Collection` → `Document` → `Batch`
-- Document operations: `create`, `get`, `replace`, `delete`, `list`, `query`
-- Batch operations with `Batch` and `Batch_builder` modules
+- Hierarchical module structure: `Database` → `Collection` → `Document` / `Batch` / `Batch_builder`
+- Document operations: `create`, `create_multiple`, `get`, `replace`, `delete`, `delete_multiple`, `list`, `query`
+- Transactional batch: `Batch.execute` (`?atomic`, `?should_validate`) with `Batch_builder` for fluent construction
+- Errors are a single `cosmos_error` variant: `Timeout_error`, `Connection_error`, `Azure_error`, `Batch_validation_error`
+- Shared retry/throttle handling via `with_throttle_retry` in `databases_core.ml`
+- Test infrastructure: functor-based mocks (`Mock_io`, `Mock_http`, `Mock_response`) allowing HTTP-free unit tests
 
 ## Comparison with Modern SDKs
 
@@ -114,7 +120,8 @@ The library uses a **functor-based architecture** with:
 | Type safety | Raw JSON strings | Strongly typed generics |
 | Query building | Raw SQL strings | LINQ/fluent query builders |
 | Streaming | Pagination via continuation tokens | Iterator/stream-based results |
-| Retry policy | Hardcoded in core | Configurable policies |
+| Retry policy | Centralised in `with_throttle_retry`, fixed parameters | Configurable policies |
+| Transactional batch | `Batch` / `Batch_builder`, raw JSON bodies | `TransactionalBatch` with typed items |
 
 ## Suggested Improvements
 
@@ -158,10 +165,11 @@ module Cosmos_v3 = struct
           ?timeout 
           dbname container_name content
           
+      (* Patch is currently only available inside a transactional batch
+         via Collection.Batch.Patch; a standalone endpoint is still missing *)
       let patch_item ~partition_key ?if_match ?timeout 
           dbname container_name doc_id patch_operations =
-        (* New patch implementation *)
-        failwith "TODO: Implement patch operations"
+        failwith "TODO: Implement standalone patch operation"
     end
   end
 end
@@ -552,17 +560,21 @@ stream
 
 ### 6. Configurable Retry Policies
 
-**Problem:** Retry logic is hardcoded in `databases_core.ml` with magic numbers.
+**Status:** Partially addressed. Retry logic is now centralised in a single shared helper `with_throttle_retry ~max_retries f` instead of being duplicated per operation, but the policy itself is still hardcoded (fixed `max_retries:10`, random back-off) and not configurable by the caller.
 
-**Current (hardcoded):**
+**Current (centralised but fixed policy):**
 ```ocaml
-let rec post retry () =
-  if retry > 0 then
-    let sleep_time = Random.int 5 |> float_of_int in
-    (* ... *)
-    post (retry - 1) ()
-  else connection_error
+let with_throttle_retry ~max_retries f =
+  let rec retry_loop attempt () = (* 429 / connection errors, random back-off *) in
+  retry_loop max_retries ()
+
+let do_post () = Http.post ~headers:hdrs ~body:content uri in
+let* retry_result = with_throttle_retry ~max_retries:10 do_post in
 ```
+
+**Known issues:**
+- Retry exhaustion on HTTP 429 surfaces as `Timeout_error`, losing the throttle cause and `x-ms-retry-after-ms` header (see `BATCH_REVIEW_FINDINGS.md` #3)
+- `Batch.execute` does not route through `with_throttle_retry`, so batches are not retried on 429 (see `BATCH_REVIEW_FINDINGS.md` #7)
 
 **Suggested:**
 ```ocaml
@@ -883,7 +895,9 @@ val read_item :
 
 ### 10. Bulk Executor with Rate Limiting
 
-**Problem:** `create_multiple` lacks proper throttling and RU/s awareness.
+**Status:** Partially addressed. `Document.create_multiple` and `Document.delete_multiple` chunk work via `Utilities.take_first` (`?chunk_size`, default 100) and run each chunk in parallel, with per-request 429 retry through `with_throttle_retry`. Still missing: RU/s-aware throttling, per-item retry limits, and structured per-item results.
+
+**Problem:** `create_multiple` lacks RU/s awareness and typed per-item outcomes.
 
 **Suggested:**
 ```ocaml
@@ -917,28 +931,78 @@ end
 
 ---
 
-### 11. Transaction Support
+### 11. Transaction Support — ✅ Implemented
 
-**Problem:** No native transaction support for multi-item operations within a partition.
+**Was:** No native transaction support for multi-item operations within a partition.
 
-**Suggested:**
+**Now:** `Collection.Batch` implements Cosmos transactional batch, with `Collection.Batch_builder` as the fluent construction API.
+
 ```ocaml
-module Transaction = struct
-  type 'a t
-  
-  val insert : 'a -> 'a t
-  val upsert : 'a -> 'a t
-  val replace : id:string -> 'a -> 'a t
-  val delete : id:string -> 'a t
-  val read : id:string -> 'a t
-  
-  val execute : 
+module Batch : sig
+  type operation =
+    | Create  of { if_match : string option; if_none_match : string option; body : string }
+    | Upsert  of { if_match : string option; if_none_match : string option; body : string }
+    | Read    of { id : string; if_match : string option; if_none_match : string option }
+    | Delete  of { id : string; if_match : string option; if_none_match : string option }
+    | Replace of { id : string; if_match : string option; if_none_match : string option; body : string }
+    | Patch   of { id : string; if_match : string option; patch_op : patch_operation }
+
+  and patch_operation =
+    | Add         of { path : string; value : string }
+    | Set         of { path : string; value : string }
+    | ReplacePath of { path : string; value : string }
+    | Remove      of { path : string }
+    | Increment   of { path : string; value : int }
+
+  type operation_result = {
+    status_code : int;
+    request_charge : float;
+    etag : string option;
+    resource_body : string option;
+  }
+
+  type batch_result = {
+    outcomes : operation_result list;
+    total_request_charge : float;
+  }
+
+  type validation_error =
+    | Too_many_operations of int
+    | Mixed_patch_operations
+    | Empty_batch
+
+  val validate : operation list -> (unit, validation_error) result
+
+  val execute :
+    ?timeout:float ->
+    ?atomic:bool ->
+    ?should_validate:bool ->
     partition_key:string ->
-    'a t list ->
-    container ->
-    (transaction_result, error) result io
+    string ->            (* dbname *)
+    string ->            (* coll_name *)
+    operation list ->
+    (batch_result, cosmos_error) result io
 end
 ```
+
+Usage:
+```ocaml
+let ops =
+  Batch_builder.empty
+  |> Batch_builder.add_create ~body:doc_json
+  |> Batch_builder.add_patch ~id:"doc2" ~patch_op:(Batch.Increment { path = "/count"; value = 1 })
+  |> Batch_builder.to_operations
+
+let%lwt result = Batch.execute ~partition_key:"user123" "mydb" "users" ops
+```
+
+Validation is performed client-side before the request (max 100 operations, non-empty, no mixing of patch and non-patch operations) and returns `Error (Batch_validation_error _)` rather than raising.
+
+**Remaining gaps:**
+- No `Transaction` monad / typed item wrapper — operations carry raw JSON strings
+- `Batch.execute` is not wrapped in `with_throttle_retry` (no 429 retry)
+- Non-atomic semantics rely solely on `x-ms-cosmos-batch-atomic`; `x-ms-cosmos-batch-continue-on-error` is not sent
+- The module's primary type is `operation`, not the conventional `t`
 
 ---
 
@@ -972,6 +1036,11 @@ end
 
 ## Implementation Priority
 
+### Completed
+- **Transaction support** - `Collection.Batch` / `Collection.Batch_builder` (transactional batch, incl. patch operations)
+- **Mock-based test infrastructure** - `Mock_io`, `Mock_http`, `Mock_response` enable HTTP-free unit tests
+- **Centralised retry helper** - `with_throttle_retry` shared across write operations
+
 ### High Priority
 1. **Client abstraction** - Essential for production use with connection pooling
 2. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
@@ -980,14 +1049,14 @@ end
 
 ### Medium Priority
 5. **Request options builder** - Cleaner API, easier to maintain
-6. **Configurable retry policies** - Production reliability
-7. **Modernize terminology** - Align with Azure SDK standards
-8. **Bulk executor improvements** - Better rate limiting and throttling
+6. **Configurable retry policies** - Make the existing `with_throttle_retry` policy pluggable; fix 429 exhaustion reported as `Timeout_error`
+7. **Standalone document patch** - Patch a single document outside a batch
+8. **Modernize terminology** - Align with Azure SDK standards
+9. **Bulk executor improvements** - RU/s-aware rate limiting and per-item results
 
 ### Low Priority
-9. **Type-safe query builder** - Nice-to-have, significant implementation effort
-10. **Change feed processor** - Advanced feature, complex implementation
-11. **Transaction support** - Depends on backend Cosmos DB feature support
+10. **Type-safe query builder** - Nice-to-have, significant implementation effort
+11. **Change feed processor** - Advanced feature, complex implementation
 12. **Point operation optimizations** - Performance enhancement
 
 ## Migration Path
