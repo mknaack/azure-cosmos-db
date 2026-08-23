@@ -94,12 +94,14 @@ struct
         | Error _ -> Alcotest.fail "Collection offer lookup failed"
         | Ok (_, None) -> IO.return ()
         | Ok (_, Some offer) ->
-            let* fetched = D.Offer.get offer.rid in
+            let offer_rid = offer.Cosmos.Json_converter_t.rid in
+            let* fetched = D.Offer.get offer_rid in
             (match fetched with
             | Ok (code, fetched_offer) ->
                 Alcotest.(check int) "offer get status" 200 code;
                 Alcotest.(check string)
-                  "offer rid" offer.rid fetched_offer.rid
+                  "offer rid" offer_rid
+                  fetched_offer.Cosmos.Json_converter_t.rid
             | Error _ -> Alcotest.fail "Offer.get failed");
             let* throughput = D.Offer.get_throughput dbname coll_name in
             (match throughput with
