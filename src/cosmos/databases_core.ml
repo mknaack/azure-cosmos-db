@@ -3,7 +3,7 @@
 *)
 
 module type Account = sig
-  type resource = Dbs | Colls | Docs | Users | Permissions
+  type resource = Dbs | Colls | Docs | Users | Permissions | Offers
 
   val authorization :
     Utilities.Verb.t -> resource -> Utilities.Ms_time.t -> string -> string
@@ -12,7 +12,7 @@ module type Account = sig
 end
 
 module Auth (Keys : Databases_intf.Auth_key) : Account = struct
-  type resource = Dbs | Colls | Docs | Users | Permissions
+  type resource = Dbs | Colls | Docs | Users | Permissions | Offers
 
   let string_of_resource = function
     | Dbs -> "dbs"
@@ -20,6 +20,7 @@ module Auth (Keys : Databases_intf.Auth_key) : Account = struct
     | Docs -> "docs"
     | Users -> "users"
     | Permissions -> "permissions"
+    | Offers -> "offers"
 
   let authorization verb resource date db_name =
     Utility.authorization_token_using_master_key
@@ -304,8 +305,8 @@ struct
           let value body = Json_converter_j.list_collections_of_string body in
           result_or_error_with_result 200 value resp body)
 
-    let create ?(indexing_policy = None) ~partition_key ?timeout dbname
-        coll_name =
+    let create ?(indexing_policy = None) ?offer_throughput ~partition_key
+        ?timeout dbname coll_name =
       let body =
         ({ id = coll_name; indexing_policy; partition_key }
           : Json_converter_j.create_collection)
@@ -315,6 +316,8 @@ struct
       let uri = make_uri path in
       let hdrs =
         json_headers Account.Colls Utilities.Verb.Post ("dbs/" ^ dbname)
+        |> Utilities.apply_to_header_if_some "x-ms-offer-throughput"
+             string_of_int offer_throughput
       in
       let* response =
         Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
@@ -337,13 +340,14 @@ struct
           let value body = Some (Json_converter_j.collection_of_string body) in
           result_or_error_with_result 200 value resp body)
 
-    let create_if_not_exists ?(indexing_policy = None) ~partition_key ?timeout
-        dbname coll_name =
+    let create_if_not_exists ?(indexing_policy = None) ?offer_throughput
+        ~partition_key ?timeout dbname coll_name =
       let* exists = get ?timeout dbname coll_name in
       match exists with
       | Ok result -> IO.return (Result.ok result)
       | Error (Azure_error (404, _)) ->
-          create ?timeout ~indexing_policy ~partition_key dbname coll_name
+          create ?timeout ~indexing_policy ?offer_throughput ~partition_key
+            dbname coll_name
       | Error x -> IO.return (Error x)
 
     let delete ?timeout name coll_name =
@@ -1070,5 +1074,185 @@ struct
       in
       handle_response response (fun resp _body ->
           IO.return (result_or_error 204 resp))
+  end
+
+  let get_database = get
+
+  module Offer = struct
+    let resource = Account.Offers
+    let headers = headers resource
+    let path_of_offers = "offers"
+    let path_of_offer offer_rid = Printf.sprintf "offers/%s" offer_rid
+    let auth_path_of_offer = String.lowercase_ascii
+
+    module Throughput = struct
+      type t = Manual of int | Autoscale of { max_throughput : int }
+
+      let to_content = function
+        | Manual offer_throughput ->
+            Json_converter_t.
+              {
+                offer_throughput = Some offer_throughput;
+                offer_is_ru_per_minute_throughput_enabled = None;
+                offer_autopilot_settings = None;
+              }
+        | Autoscale { max_throughput } ->
+            Json_converter_t.
+              {
+                offer_throughput = None;
+                offer_is_ru_per_minute_throughput_enabled = None;
+                offer_autopilot_settings = Some { max_throughput };
+              }
+
+      let of_content content =
+        Option.fold content.Json_converter_t.offer_autopilot_settings
+          ~none:
+            (Option.fold content.offer_throughput ~none:None ~some:(fun value ->
+                 Some (Manual value)))
+          ~some:(fun settings ->
+            Some (Autoscale { max_throughput = settings.max_throughput }))
+
+      let string_of = function
+        | Manual throughput -> Printf.sprintf "Manual %d" throughput
+        | Autoscale { max_throughput } ->
+            Printf.sprintf "Autoscale %d" max_throughput
+    end
+
+    let list ?timeout () =
+      let uri = make_uri path_of_offers in
+      let* response =
+        Http.get ~headers:(headers Utilities.Verb.Get "") uri
+        |> wrap_timeout timeout
+      in
+      handle_response response (fun resp body ->
+          let value body = Json_converter_j.list_offers_of_string body in
+          result_or_error_with_result 200 value resp body)
+
+    let get ?timeout offer_rid =
+      let path = path_of_offer offer_rid in
+      let uri = make_uri path in
+      let* response =
+        Http.get
+          ~headers:
+            (headers Utilities.Verb.Get (auth_path_of_offer offer_rid))
+          uri
+        |> wrap_timeout timeout
+      in
+      handle_response response (fun resp body ->
+          let value body = Json_converter_j.offer_of_string body in
+          result_or_error_with_result 200 value resp body)
+
+    let query ?max_item_count ?continuation ?timeout query =
+      let hdrs =
+        headers Utilities.Verb.Post ""
+        |> add_header "x-ms-documentdb-isquery" (string_of_bool true)
+        |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
+             string_of_int max_item_count
+        |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
+             continuation
+        |> add_header "content-type" "application/query+json"
+      in
+      let body = Json_converter_j.string_of_query query in
+      let uri = make_uri path_of_offers in
+      let* response = Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout in
+      handle_response response (fun resp body ->
+          let code = get_code resp in
+          let response_headers = Response_headers.get_header resp in
+          if code = 200 then
+            let result = Json_converter_j.list_offers_of_string body in
+            IO.return (Ok (code, response_headers, result))
+          else IO.return (Error (Azure_error (code, response_headers))))
+
+    let replace ?migrate ?timeout offer throughput =
+      let offer = { offer with content = Throughput.to_content throughput } in
+      let body = Json_converter_j.string_of_offer offer in
+      let path = path_of_offer offer.rid in
+      let uri = make_uri path in
+      let hdrs =
+        json_headers resource Utilities.Verb.Put (auth_path_of_offer offer.rid)
+        |> Utilities.apply_to_header_if_some
+             "x-ms-cosmos-migrate-offer-to-autopilot" string_of_bool
+             (match migrate with Some `To_autoscale -> Some true | _ -> None)
+        |> Utilities.apply_to_header_if_some
+             "x-ms-cosmos-migrate-offer-to-manual-throughput" string_of_bool
+             (match migrate with Some `To_manual -> Some true | _ -> None)
+      in
+      let do_put () = Http.put ~headers:hdrs ~body uri in
+      let* retry_result = with_throttle_retry ~max_retries:3 do_put in
+      match retry_result with
+      | Error error -> IO.return (Error error)
+      | Ok (_code, resp, body) -> (
+          let finish () =
+            let value body = Json_converter_j.offer_of_string body in
+            result_or_error_with_result 200 value resp body
+          in
+          match timeout with
+          | None -> finish ()
+          | Some t -> (
+              let* timed_result = IO.with_timeout t (IO.return ()) in
+              match timed_result with
+              | None -> timeout_error
+              | Some () -> finish ()))
+
+    let query_for_resource_id ?timeout resource_id =
+      let query_body =
+        Json_converter_t.
+          {
+            query = "SELECT * FROM c WHERE c.offerResourceId = @rid";
+            parameters = [ { name = "@rid"; value = resource_id } ];
+          }
+      in
+      let* result = query ?timeout query_body in
+      match result with
+      | Error error -> IO.return (Error error)
+      | Ok (code, response_headers, { Json_converter_t.offers; _ }) ->
+          IO.return (Ok (code, response_headers, List.nth_opt offers 0))
+
+    let get_for_collection_with_headers ?timeout dbname coll_name =
+      let* collection = Collection.get ?timeout dbname coll_name in
+      match collection with
+      | Error error -> IO.return (Error error)
+      | Ok (code, None) ->
+          IO.return (Ok (code, Response_headers.empty, None))
+      | Ok (_, Some { Json_converter_t.rid; _ }) ->
+          query_for_resource_id ?timeout rid
+
+    let get_for_collection ?timeout dbname coll_name =
+      let* result = get_for_collection_with_headers ?timeout dbname coll_name in
+      match result with
+      | Error error -> IO.return (Error error)
+      | Ok (code, _response_headers, offer) -> IO.return (Ok (code, offer))
+
+    let get_for_database ?timeout dbname =
+      let* database = get_database ?timeout dbname in
+      match database with
+      | Error error -> IO.return (Error error)
+      | Ok (code, None) -> IO.return (Ok (code, None))
+      | Ok (_, Some { Json_converter_t._rid; _ }) ->
+          let* result = query_for_resource_id ?timeout _rid in
+          (match result with
+          | Error error -> IO.return (Error error)
+          | Ok (code, _response_headers, offer) -> IO.return (Ok (code, offer)))
+
+    let get_throughput ?timeout dbname coll_name =
+      let* result = get_for_collection ?timeout dbname coll_name in
+      match result with
+      | Error error -> IO.return (Error error)
+      | Ok (code, offer) ->
+          let throughput =
+            Option.fold offer ~none:None ~some:(fun offer ->
+                Throughput.of_content offer.Json_converter_t.content)
+          in
+          IO.return (Ok (code, throughput))
+
+    let set_throughput ?migrate ?timeout dbname coll_name throughput =
+      let* result =
+        get_for_collection_with_headers ?timeout dbname coll_name
+      in
+      match result with
+      | Error error -> IO.return (Error error)
+      | Ok (_code, response_headers, None) ->
+          IO.return (Error (Azure_error (404, response_headers)))
+      | Ok (_, _, Some offer) -> replace ?migrate ?timeout offer throughput
   end
 end

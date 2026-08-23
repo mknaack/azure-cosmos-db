@@ -73,6 +73,7 @@ module Database (Auth_key : Auth_key) : sig
 
     val create :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
+      ?offer_throughput:int ->
       partition_key:Cosmos.Json_converter_t.create_partition_key ->
       ?timeout:float ->
       string ->
@@ -82,6 +83,7 @@ module Database (Auth_key : Auth_key) : sig
 
     val create_if_not_exists :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
+      ?offer_throughput:int ->
       partition_key:Cosmos.Json_converter_t.create_partition_key ->
       ?timeout:float ->
       string ->
@@ -390,5 +392,77 @@ module Database (Auth_key : Auth_key) : sig
       permission_name:string ->
       unit ->
       (int, cosmos_error) result Lwt.t
+  end
+
+  module Offer : sig
+    module Throughput : sig
+      type t = Manual of int | Autoscale of { max_throughput : int }
+
+      val to_content : t -> Cosmos.Json_converter_t.offer_content
+      val of_content : Cosmos.Json_converter_t.offer_content -> t option
+      val string_of : t -> string
+    end
+
+    val list :
+      ?timeout:float ->
+      unit ->
+      (int * Cosmos.Json_converter_t.list_offers, cosmos_error) result Lwt.t
+    (** [list ()] returns all throughput offers in the account. Requires
+        master-key authentication. *)
+
+    val get :
+      ?timeout:float ->
+      string ->
+      (int * Cosmos.Json_converter_t.offer, cosmos_error) result Lwt.t
+    (** [get offer_rid] returns the offer identified by [offer_rid]. Requires
+        master-key authentication. *)
+
+    val query :
+      ?max_item_count:int ->
+      ?continuation:string ->
+      ?timeout:float ->
+      Cosmos.Json_converter_t.query ->
+      ( int * Response_headers.t * Cosmos.Json_converter_t.list_offers,
+        cosmos_error )
+      result
+      Lwt.t
+
+    val replace :
+      ?migrate:[ `To_autoscale | `To_manual ] ->
+      ?timeout:float ->
+      Cosmos.Json_converter_t.offer ->
+      Throughput.t ->
+      (int * Cosmos.Json_converter_t.offer, cosmos_error) result Lwt.t
+
+    val get_for_collection :
+      ?timeout:float ->
+      string ->
+      string ->
+      (int * Cosmos.Json_converter_t.offer option, cosmos_error) result Lwt.t
+
+    val get_for_database :
+      ?timeout:float ->
+      string ->
+      (int * Cosmos.Json_converter_t.offer option, cosmos_error) result Lwt.t
+
+    val get_throughput :
+      ?timeout:float ->
+      string ->
+      string ->
+      (int * Throughput.t option, cosmos_error) result Lwt.t
+    (** [get_throughput dbname coll_name] returns the collection's provisioned
+        throughput, or [None] for serverless accounts. Requires master-key
+        authentication. *)
+
+    val set_throughput :
+      ?migrate:[ `To_autoscale | `To_manual ] ->
+      ?timeout:float ->
+      string ->
+      string ->
+      Throughput.t ->
+      (int * Cosmos.Json_converter_t.offer, cosmos_error) result Lwt.t
+    (** [set_throughput dbname coll_name throughput] changes the collection's
+        provisioned throughput. Requires master-key authentication and is
+        unavailable for serverless accounts. *)
   end
 end

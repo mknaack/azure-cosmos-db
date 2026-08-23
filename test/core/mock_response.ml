@@ -86,6 +86,27 @@ let list_documents_response docs =
     (String.concat "," doc_entries)
     (List.length docs)
 
+let offer_response ?offer_throughput ?max_throughput ~id ~_rid ~resource
+    ~offer_resource_id () =
+  let content =
+    match (offer_throughput, max_throughput) with
+    | Some throughput, None ->
+        Printf.sprintf {|{"offerThroughput": %d}|} throughput
+    | None, Some throughput ->
+        Printf.sprintf
+          {|{"offerAutopilotSettings": {"maxThroughput": %d}}|}
+          throughput
+    | None, None -> "{}"
+    | Some _, Some _ -> invalid_arg "offer_response throughput mode"
+  in
+  Printf.sprintf
+    {|{"id":"%s","offerVersion":"V2","offerType":"Invalid","content":%s,"resource":"%s","offerResourceId":"%s","_rid":"%s","_ts":1234567890,"_self":"offers/%s/","_etag":"\"00000000-0000-0000-0000-000000000001\""}|}
+    id content resource offer_resource_id _rid _rid
+
+let list_offers_response offers =
+  Printf.sprintf {|{"_rid":"","Offers":[%s],"_count":%d}|}
+    (String.concat "," offers) (List.length offers)
+
 let error_response ~code ~message =
   let body = Printf.sprintf {|{"code": "%d", "message": "%s"}|} code message in
   let headers = Cohttp.Header.init () in

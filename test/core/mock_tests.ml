@@ -291,6 +291,212 @@ let mock_document_query_auth_resource_path_test () =
         "Document.query signs with collection path (not docs path)" expected
         auth)
 
+let manual_offer_response =
+  Mock_response.offer_response ~offer_throughput:400 ~id:"GpFA" ~_rid:"GpFA"
+    ~resource:"dbs/db/colls/coll/" ~offer_resource_id:"CollRid" ()
+
+let autoscale_offer_response =
+  Mock_response.offer_response ~max_throughput:4000 ~id:"GpFA" ~_rid:"GpFA"
+    ~resource:"dbs/db/colls/coll/" ~offer_resource_id:"CollRid" ()
+
+let mock_offer_get_auth_resource_path_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      Mock_http.expect
+        {
+          method_ = `Get;
+          uri =
+            Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com"
+              ~port:443 ~path:"offers/GpFA" ();
+          expected_headers = [];
+          expected_body = None;
+          response = Ok (Mock_response.make_response manual_offer_response);
+        };
+      let _ = Mock_db.Offer.get "GpFA" in
+      let auth, date = get_recorded_auth_and_date () in
+      let expected = compute_expected_auth "get" "offers" "gpfa" date in
+      Alcotest.(check string)
+        "Offer.get signs with lowercased rid" expected auth)
+
+let mock_offer_list_auth_resource_path_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      Mock_http.expect
+        {
+          method_ = `Get;
+          uri =
+            Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com"
+              ~port:443 ~path:"offers" ();
+          expected_headers = [];
+          expected_body = None;
+          response =
+            Ok
+              (Mock_response.make_response
+                 (Mock_response.list_offers_response [ manual_offer_response ]));
+        };
+      let _ = Mock_db.Offer.list () in
+      let auth, date = get_recorded_auth_and_date () in
+      let expected = compute_expected_auth "get" "offers" "" date in
+      Alcotest.(check string) "Offer.list signs with empty path" expected auth)
+
+let mock_offer_query_headers_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      Mock_http.expect
+        {
+          method_ = `Post;
+          uri =
+            Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com"
+              ~port:443 ~path:"offers" ();
+          expected_headers =
+            [
+              ("x-ms-documentdb-isquery", "true");
+              ("content-type", "application/query+json");
+              ("x-ms-max-item-count", "10");
+              ("x-ms-continuation", "next");
+            ];
+          expected_body = None;
+          response =
+            Ok
+              (Mock_response.make_response
+                 (Mock_response.list_offers_response [ manual_offer_response ]));
+        };
+      let query =
+        Cosmos.Json_converter_t.
+          {
+            query = "SELECT * FROM c WHERE c.offerResourceId = @rid";
+            parameters = [ { name = "@rid"; value = "CollRid" } ];
+          }
+      in
+      let _ =
+        Mock_db.Offer.query ~max_item_count:10 ~continuation:"next" query
+      in
+      Mock_http.verify ())
+
+let recorded_body () =
+  let req, _ = Mock_http.get_recorded () |> List.hd in
+  match req.Mock_http.body with
+  | Some body -> body
+  | None -> Alcotest.fail "Offer request had no body"
+
+let expect_offer_replace ?migrate response =
+  Mock_http.expect
+    {
+      method_ = `Put;
+      uri =
+        Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com"
+          ~port:443 ~path:"offers/GpFA" ();
+      expected_headers =
+        (match migrate with
+        | None -> []
+        | Some value ->
+            [ ("x-ms-cosmos-migrate-offer-to-autopilot", value) ]);
+      expected_body = None;
+      response = Ok (Mock_response.make_response response);
+    }
+
+let manual_offer () =
+  Cosmos.Json_converter_j.offer_of_string manual_offer_response
+
+let mock_offer_replace_body_round_trip_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_offer_replace manual_offer_response;
+      let _ =
+        Mock_db.Offer.replace (manual_offer ())
+          (Mock_db.Offer.Throughput.Manual 500)
+      in
+      let json = recorded_body () |> Yojson.Safe.from_string in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      let open Yojson.Safe.Util in
+      Alcotest.(check string)
+        "rid preserved" "GpFA" (json |> member "_rid" |> to_string);
+      Alcotest.(check string)
+        "self preserved" "offers/GpFA/" (json |> member "_self" |> to_string);
+      Alcotest.(check string)
+        "version preserved" "V2" (json |> member "offerVersion" |> to_string);
+      Alcotest.(check int)
+        "manual throughput" 500
+        (json |> member "content" |> member "offerThroughput" |> to_int);
+      Alcotest.(check (option string))
+        "migration header omitted" None
+        (Cohttp.Header.get req.Mock_http.headers
+           "x-ms-cosmos-migrate-offer-to-autopilot"))
+
+let mock_offer_replace_autoscale_body_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_offer_replace autoscale_offer_response;
+      let _ =
+        Mock_db.Offer.replace (manual_offer ())
+          (Mock_db.Offer.Throughput.Autoscale { max_throughput = 4000 })
+      in
+      let content =
+        recorded_body () |> Yojson.Safe.from_string
+        |> Yojson.Safe.Util.member "content"
+      in
+      let open Yojson.Safe.Util in
+      Alcotest.(check int)
+        "autoscale throughput" 4000
+        (content |> member "offerAutopilotSettings"
+        |> member "maxThroughput" |> to_int);
+      Alcotest.(check bool)
+        "manual throughput omitted" true
+        (content |> member "offerThroughput" = `Null))
+
+let mock_offer_migrate_header_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_offer_replace ~migrate:"true" autoscale_offer_response;
+      let _ =
+        Mock_db.Offer.replace ~migrate:`To_autoscale (manual_offer ())
+          (Mock_db.Offer.Throughput.Autoscale { max_throughput = 4000 })
+      in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      Alcotest.(check (option string))
+        "migration header set" (Some "true")
+        (Cohttp.Header.get req.Mock_http.headers
+           "x-ms-cosmos-migrate-offer-to-autopilot");
+      Alcotest.(check (option string))
+        "manual migration header omitted" None
+        (Cohttp.Header.get req.Mock_http.headers
+           "x-ms-cosmos-migrate-offer-to-manual-throughput"))
+
+let mock_offer_throughput_of_content_test () =
+  let module T = Mock_db.Offer.Throughput in
+  let manual =
+    Cosmos.Json_converter_t.
+      {
+        offer_throughput = Some 400;
+        offer_is_ru_per_minute_throughput_enabled = None;
+        offer_autopilot_settings = None;
+      }
+  in
+  let autoscale =
+    Cosmos.Json_converter_t.
+      {
+        offer_throughput = None;
+        offer_is_ru_per_minute_throughput_enabled = None;
+        offer_autopilot_settings = Some { max_throughput = 4000 };
+      }
+  in
+  let empty =
+    Cosmos.Json_converter_t.
+      {
+        offer_throughput = None;
+        offer_is_ru_per_minute_throughput_enabled = None;
+        offer_autopilot_settings = None;
+      }
+  in
+  Alcotest.(check (option string))
+    "manual content" (Some "Manual 400")
+    (Option.map T.string_of (T.of_content manual));
+  Alcotest.(check (option string))
+    "autoscale content" (Some "Autoscale 4000")
+    (Option.map T.string_of (T.of_content autoscale));
+  Alcotest.(check (option string))
+    "empty content" None (Option.map T.string_of (T.of_content empty))
+
 let mock_batch_patch_body_valid_json_test () =
   let http = Mock_http.create () in
   Mock_http.with_mock http (fun () ->
@@ -398,6 +604,23 @@ let tests =
     ( "mock_document_query_auth_resource_path",
       `Quick,
       mock_document_query_auth_resource_path_test );
+    ( "mock_offer_get_auth_resource_path",
+      `Quick,
+      mock_offer_get_auth_resource_path_test );
+    ( "mock_offer_list_auth_resource_path",
+      `Quick,
+      mock_offer_list_auth_resource_path_test );
+    ("mock_offer_query_headers", `Quick, mock_offer_query_headers_test);
+    ( "mock_offer_replace_body_round_trip",
+      `Quick,
+      mock_offer_replace_body_round_trip_test );
+    ( "mock_offer_replace_autoscale_body",
+      `Quick,
+      mock_offer_replace_autoscale_body_test );
+    ("mock_offer_migrate_header", `Quick, mock_offer_migrate_header_test);
+    ( "mock_offer_throughput_of_content",
+      `Quick,
+      mock_offer_throughput_of_content_test );
     ( "mock_batch_patch_body_valid_json",
       `Quick,
       mock_batch_patch_body_valid_json_test );

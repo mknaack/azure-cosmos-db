@@ -61,6 +61,7 @@ module type DB = sig
 
     val create :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
+      ?offer_throughput:int ->
       partition_key:Cosmos.Json_converter_t.create_partition_key ->
       ?timeout:float ->
       string ->
@@ -72,6 +73,7 @@ module type DB = sig
 
     val create_if_not_exists :
       ?indexing_policy:Cosmos.Json_converter_t.indexing_policy option ->
+      ?offer_throughput:int ->
       partition_key:Cosmos.Json_converter_t.create_partition_key ->
       ?timeout:float ->
       string ->
@@ -423,5 +425,90 @@ module type DB = sig
       permission_name:string ->
       unit ->
       (int, Cosmos.Databases_core.cosmos_error) result io
+  end
+
+  module Offer : sig
+    module Throughput : sig
+      type t = Manual of int | Autoscale of { max_throughput : int }
+
+      val to_content : t -> Cosmos.Json_converter_t.offer_content
+      val of_content : Cosmos.Json_converter_t.offer_content -> t option
+      val string_of : t -> string
+    end
+
+    val list :
+      ?timeout:float ->
+      unit ->
+      ( int * Cosmos.Json_converter_t.list_offers,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
+
+    val get :
+      ?timeout:float ->
+      string ->
+      ( int * Cosmos.Json_converter_t.offer,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
+
+    val query :
+      ?max_item_count:int ->
+      ?continuation:string ->
+      ?timeout:float ->
+      Cosmos.Json_converter_t.query ->
+      ( int
+        * Cosmos.Databases_core.Response_headers.t
+        * Cosmos.Json_converter_t.list_offers,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
+
+    val replace :
+      ?migrate:[ `To_autoscale | `To_manual ] ->
+      ?timeout:float ->
+      Cosmos.Json_converter_t.offer ->
+      Throughput.t ->
+      ( int * Cosmos.Json_converter_t.offer,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
+
+    val get_for_collection :
+      ?timeout:float ->
+      string ->
+      string ->
+      ( int * Cosmos.Json_converter_t.offer option,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
+
+    val get_for_database :
+      ?timeout:float ->
+      string ->
+      ( int * Cosmos.Json_converter_t.offer option,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
+
+    val get_throughput :
+      ?timeout:float ->
+      string ->
+      string ->
+      ( int * Throughput.t option,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
+
+    val set_throughput :
+      ?migrate:[ `To_autoscale | `To_manual ] ->
+      ?timeout:float ->
+      string ->
+      string ->
+      Throughput.t ->
+      ( int * Cosmos.Json_converter_t.offer,
+        Cosmos.Databases_core.cosmos_error )
+      result
+      io
   end
 end

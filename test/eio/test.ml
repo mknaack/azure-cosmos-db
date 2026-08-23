@@ -44,6 +44,7 @@ module Permissions =
   Test_core.Permission_tests.Make (Eio_config) (Eio_test_io) (D)
 
 module Batch = Test_core.Batch_tests.Make (Eio_config) (Eio_test_io) (D)
+module Offers = Test_core.Offer_tests.Make (Eio_config) (Eio_test_io) (D)
 
 (* Wrap async test functions for plain Alcotest *)
 let wrap_async_tests speed tests =
@@ -76,6 +77,11 @@ let batch_tests =
     wrap_async_tests `Slow Batch.tests
   else []
 
+let offer_tests =
+  if Test_core.Test_common_core.should_run () then
+    wrap_async_tests `Slow Offers.tests
+  else []
+
 let mock_tests =
   List.map
     (fun (name, _speed, test_fn) -> (name, test_fn))
@@ -94,5 +100,6 @@ let () =
           ("user test", user_tests);
           ("permission test", permission_tests);
           ("batch test", batch_tests);
+          ("offer test", offer_tests);
           ("utility test", wrap_sync_tests `Quick Test_core.Test_utilities.tests);
         ])

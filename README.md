@@ -22,3 +22,23 @@ end
 module D = Database (MyAuthKeys)
 D.list_databases ()
 ```
+
+# Throughput management
+
+Offers expose provisioned throughput for databases and collections:
+
+```ocaml
+let%lwt throughput =
+  D.Offer.get_throughput "my-database" "my-collection"
+in
+let%lwt updated =
+  D.Offer.set_throughput "my-database" "my-collection"
+    (D.Offer.Throughput.Manual 500)
+in
+match (throughput, updated) with
+| Ok (_, current), Ok (_, offer) -> Lwt.return (current, offer)
+| Error _error, _ | _, Error _error -> Lwt.fail_with "Cosmos request failed"
+```
+
+Offer operations require master-key authentication. Serverless accounts do not
+expose provisioned-throughput offers, so lookup functions return `None`.
