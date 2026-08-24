@@ -495,10 +495,7 @@ module type DB = sig
       ?timeout:float ->
       string ->
       string ->
-      ( int * Throughput.t option,
-        Cosmos.Databases_core.cosmos_error )
-      result
-      io
+      (int * Throughput.t option, Cosmos.Databases_core.cosmos_error) result io
 
     val set_throughput :
       ?migrate:[ `To_autoscale | `To_manual ] ->
