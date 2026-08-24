@@ -32,6 +32,9 @@ jobs:
       - name: Build core package
         run: opam exec -- dune build -p azure-cosmos-db
 
+      - name: Check formatting
+        run: opam exec -- dune build @fmt
+
   build-lwt:
     strategy:
       fail-fast: false

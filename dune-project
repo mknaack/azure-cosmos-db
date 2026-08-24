@@ -26,6 +26,10 @@
   cohttp
   cryptokit
   (bisect_ppx :with-test)
+  (ocamlformat
+   (and
+    :with-test
+    (= 0.28.1)))
   (odoc :with-doc))
  (conflicts
   (result
