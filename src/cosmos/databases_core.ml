@@ -1104,18 +1104,15 @@ struct
                 offer_autopilot_settings = Some { max_throughput };
               }
 
-    let of_content content =
-      Option.fold content.Json_converter_t.offer_autopilot_settings
-        ~none:
-          (Option.fold content.Json_converter_t.offer_throughput ~none:None
-             ~some:(fun value -> Some (Manual value)))
-        ~some:(fun settings ->
-          Some
-            (Autoscale
-               {
-                 max_throughput =
-                   settings.Json_converter_t.max_throughput;
-               }))
+      let of_content content =
+        Option.fold content.Json_converter_t.offer_autopilot_settings
+          ~none:
+            (Option.fold content.Json_converter_t.offer_throughput ~none:None
+               ~some:(fun value -> Some (Manual value)))
+          ~some:(fun settings ->
+            Some
+              (Autoscale
+                 { max_throughput = settings.Json_converter_t.max_throughput }))
 
       let string_of = function
         | Manual throughput -> Printf.sprintf "Manual %d" throughput
@@ -1138,8 +1135,7 @@ struct
       let uri = make_uri path in
       let* response =
         Http.get
-          ~headers:
-            (headers Utilities.Verb.Get (auth_path_of_offer offer_rid))
+          ~headers:(headers Utilities.Verb.Get (auth_path_of_offer offer_rid))
           uri
         |> wrap_timeout timeout
       in
@@ -1151,15 +1147,17 @@ struct
       let hdrs =
         headers Utilities.Verb.Post ""
         |> add_header "x-ms-documentdb-isquery" (string_of_bool true)
-        |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
-             string_of_int max_item_count
+        |> Utilities.apply_to_header_if_some "x-ms-max-item-count" string_of_int
+             max_item_count
         |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
              continuation
         |> add_header "content-type" "application/query+json"
       in
       let body = Json_converter_j.string_of_query query in
       let uri = make_uri path_of_offers in
-      let* response = Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout in
+      let* response =
+        Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
+      in
       handle_response response (fun resp body ->
           let code = get_code resp in
           let response_headers = Response_headers.get_header resp in
@@ -1168,9 +1166,7 @@ struct
             IO.return (Ok (code, response_headers, result))
           else IO.return (Error (Azure_error (code, response_headers))))
 
-    let replace ?migrate ?timeout
-        (offer : Json_converter_t.offer)
-        throughput =
+    let replace ?migrate ?timeout (offer : Json_converter_t.offer) throughput =
       let offer =
         {
           offer with
@@ -1197,8 +1193,7 @@ struct
             let* result = with_throttle_retry ~max_retries:3 do_put in
             IO.return (Some result)
         | Some timeout ->
-            IO.with_timeout timeout
-              (with_throttle_retry ~max_retries:3 do_put)
+            IO.with_timeout timeout (with_throttle_retry ~max_retries:3 do_put)
       in
       match retry_result with
       | None -> timeout_error
@@ -1225,8 +1220,7 @@ struct
       let* collection = Collection.get ?timeout dbname coll_name in
       match collection with
       | Error error -> IO.return (Error error)
-      | Ok (code, None) ->
-          IO.return (Ok (code, Response_headers.empty, None))
+      | Ok (code, None) -> IO.return (Ok (code, Response_headers.empty, None))
       | Ok (_, Some { Json_converter_t.rid; _ }) ->
           query_for_resource_id ?timeout rid
 
@@ -1241,9 +1235,9 @@ struct
       match database with
       | Error error -> IO.return (Error error)
       | Ok (code, None) -> IO.return (Ok (code, None))
-      | Ok (_, Some { Json_converter_t._rid; _ }) ->
+      | Ok (_, Some { Json_converter_t._rid; _ }) -> (
           let* result = query_for_resource_id ?timeout _rid in
-          (match result with
+          match result with
           | Error error -> IO.return (Error error)
           | Ok (code, _response_headers, offer) -> IO.return (Ok (code, offer)))
 
@@ -1259,9 +1253,7 @@ struct
           IO.return (Ok (code, throughput))
 
     let set_throughput ?migrate ?timeout dbname coll_name throughput =
-      let* result =
-        get_for_collection_with_headers ?timeout dbname coll_name
-      in
+      let* result = get_for_collection_with_headers ?timeout dbname coll_name in
       match result with
       | Error error -> IO.return (Error error)
       | Ok (_code, response_headers, None) ->

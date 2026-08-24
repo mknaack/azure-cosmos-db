@@ -389,8 +389,7 @@ let expect_offer_replace ?migrate response =
       expected_headers =
         (match migrate with
         | None -> []
-        | Some value ->
-            [ ("x-ms-cosmos-migrate-offer-to-autopilot", value) ]);
+        | Some value -> [ ("x-ms-cosmos-migrate-offer-to-autopilot", value) ]);
       expected_body = None;
       response = Ok (Mock_response.make_response response);
     }
@@ -410,11 +409,14 @@ let mock_offer_replace_body_round_trip_test () =
       let req, _ = Mock_http.get_recorded () |> List.hd in
       let open Yojson.Safe.Util in
       Alcotest.(check string)
-        "rid preserved" "GpFA" (json |> member "_rid" |> to_string);
+        "rid preserved" "GpFA"
+        (json |> member "_rid" |> to_string);
       Alcotest.(check string)
-        "self preserved" "offers/GpFA/" (json |> member "_self" |> to_string);
+        "self preserved" "offers/GpFA/"
+        (json |> member "_self" |> to_string);
       Alcotest.(check string)
-        "version preserved" "V2" (json |> member "offerVersion" |> to_string);
+        "version preserved" "V2"
+        (json |> member "offerVersion" |> to_string);
       Alcotest.(check int)
         "manual throughput" 500
         (json |> member "content" |> member "offerThroughput" |> to_int);
@@ -438,7 +440,8 @@ let mock_offer_replace_autoscale_body_test () =
       let open Yojson.Safe.Util in
       Alcotest.(check int)
         "autoscale throughput" 4000
-        (content |> member "offerAutopilotSettings"
+        (content
+        |> member "offerAutopilotSettings"
         |> member "maxThroughput" |> to_int);
       Alcotest.(check bool)
         "manual throughput omitted" true
@@ -495,7 +498,8 @@ let mock_offer_throughput_of_content_test () =
     "autoscale content" (Some "Autoscale 4000")
     (Option.map T.string_of (T.of_content autoscale));
   Alcotest.(check (option string))
-    "empty content" None (Option.map T.string_of (T.of_content empty))
+    "empty content" None
+    (Option.map T.string_of (T.of_content empty))
 
 let mock_batch_patch_body_valid_json_test () =
   let http = Mock_http.create () in

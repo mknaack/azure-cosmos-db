@@ -10,8 +10,7 @@ struct
   let coll_name = "offerCollection"
 
   let partition_key =
-    Cosmos.Json_converter_t.
-      { paths = [ "/id" ]; kind = "Hash"; version = None }
+    Cosmos.Json_converter_t.{ paths = [ "/id" ]; kind = "Hash"; version = None }
 
   let check_success name code =
     Alcotest.(check bool) name true (code = 200 || code = 201)
@@ -87,9 +86,7 @@ struct
         (match database_offer with
         | Ok _ -> ()
         | Error _ -> Alcotest.fail "Database offer lookup failed");
-        let* collection_offer =
-          D.Offer.get_for_collection dbname coll_name
-        in
+        let* collection_offer = D.Offer.get_for_collection dbname coll_name in
         match collection_offer with
         | Error _ -> Alcotest.fail "Collection offer lookup failed"
         | Ok (_, None) -> IO.return ()
@@ -118,9 +115,7 @@ struct
             | Ok (code, _) ->
                 Alcotest.(check int) "throughput update status" 200 code
             | Error _ -> Alcotest.fail "Throughput update failed");
-            let* updated_throughput =
-              D.Offer.get_throughput dbname coll_name
-            in
+            let* updated_throughput = D.Offer.get_throughput dbname coll_name in
             (match updated_throughput with
             | Ok (_, value) -> assert_manual 500 value
             | Error _ -> Alcotest.fail "Updated throughput lookup failed");

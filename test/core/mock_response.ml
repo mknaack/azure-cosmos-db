@@ -93,8 +93,7 @@ let offer_response ?offer_throughput ?max_throughput ~id ~_rid ~resource
     | Some throughput, None ->
         Printf.sprintf {|{"offerThroughput": %d}|} throughput
     | None, Some throughput ->
-        Printf.sprintf
-          {|{"offerAutopilotSettings": {"maxThroughput": %d}}|}
+        Printf.sprintf {|{"offerAutopilotSettings": {"maxThroughput": %d}}|}
           throughput
     | None, None -> "{}"
     | Some _, Some _ -> invalid_arg "offer_response throughput mode"
