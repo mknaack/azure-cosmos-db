@@ -87,6 +87,11 @@ let mock_tests =
     (fun (name, _speed, test_fn) -> (name, test_fn))
     Test_core.Mock_tests.tests
 
+let resource_token_tests =
+  List.map
+    (fun (name, _speed, test_fn) -> (name, test_fn))
+    Test_core.Resource_token_tests.tests
+
 let () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
@@ -94,6 +99,7 @@ let () =
       Alcotest.run "Main tests (Eio)"
         [
           ("mock tests", wrap_sync_tests `Quick mock_tests);
+          ("resource token tests", wrap_sync_tests `Quick resource_token_tests);
           ( "utility cosmos test",
             wrap_sync_tests `Quick Test_core.Test_cosmos_utility.tests );
           ("partition key test", integration_tests);

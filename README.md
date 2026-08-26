@@ -23,6 +23,25 @@ module D = Database (MyAuthKeys)
 D.list_databases ()
 ```
 
+# Resource tokens
+
+A resource token minted through `User`/`Permission` can be used instead of the
+master key. The token is sent as-is in the `authorization` header, so only the
+resources it was granted access to are reachable:
+
+```ocaml
+module D_token =
+  Database_as ((val credentials_of_token ~endpoint "type=resource&ver=1&sig=..."))
+
+(* Refresh the token on every request, e.g. from a token broker: *)
+module D_refreshing =
+  Database_as ((val credentials_of_token_provider ~endpoint fetch_token))
+```
+
+Permission tokens expire after about an hour by default; pass
+`?expiry_seconds` (1..18000) to `Permission.create`, `Permission.get`, or
+`Permission.replace` to choose the lifetime.
+
 # Throughput management
 
 Offers expose provisioned throughput for databases and collections:

@@ -11,7 +11,7 @@ module type Account = sig
   val endpoint : string
 end
 
-module Auth (Keys : Databases_intf.Auth_key) : Account = struct
+module Auth_credential (C : Databases_intf.Credentials) : Account = struct
   type resource = Dbs | Colls | Docs | Users | Permissions | Offers
 
   let string_of_resource = function
@@ -23,15 +23,26 @@ module Auth (Keys : Databases_intf.Auth_key) : Account = struct
     | Offers -> "offers"
 
   let authorization verb resource date db_name =
-    Utility.authorization_token_using_master_key
-      (Utilities.Verb.string_of_verb verb)
-      (string_of_resource resource)
-      db_name
-      (Utilities.Ms_time.x_ms_date date)
-      Keys.master_key
+    match C.credential with
+    | Databases_intf.Credential.Master_key key ->
+        Utility.authorization_token_using_master_key
+          (Utilities.Verb.string_of_verb verb)
+          (string_of_resource resource)
+          db_name
+          (Utilities.Ms_time.x_ms_date date)
+          key
+    | Databases_intf.Credential.Resource_token token ->
+        Utility.authorization_token_using_resource_token token
+    | Databases_intf.Credential.Resource_token_provider provider ->
+        Utility.authorization_token_using_resource_token (provider ())
 
-  let endpoint = Keys.endpoint
+  let endpoint = C.endpoint
 end
+
+module Auth (Keys : Databases_intf.Auth_key) : Account = Auth_credential (struct
+  let credential = Databases_intf.Credential.Master_key Keys.master_key
+  let endpoint = Keys.endpoint
+end)
 
 module Response_headers = struct
   type t = {
@@ -119,15 +130,12 @@ type cosmos_error =
   | Azure_error of int * Response_headers.t
   | Batch_validation_error of batch_validation_error
 
-module Make
+module Make_account
     (IO : Databases_intf.IO)
     (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
-    (Auth_key : Databases_intf.Auth_key) =
+    (Account : Account) =
 struct
   let ( let* ) = IO.bind
-
-  module Account = Auth (Auth_key)
-
   let host = Utility.adjust_host Account.endpoint
   let timeout_error = IO.return (Error Timeout_error)
   let connection_error = IO.return (Error Connection_error)
@@ -975,8 +983,8 @@ struct
 
     let string_of_permission_mode = function Read -> "Read" | All -> "All"
 
-    let create ?timeout ~dbname ~user_name ~coll_name permission_mode
-        ~permission_name =
+    let create ?timeout ?expiry_seconds ~dbname ~user_name ~coll_name
+        permission_mode ~permission_name =
       let permission_mode = string_of_permission_mode permission_mode in
       let resource_string =
         Printf.sprintf "/dbs/%s/colls/%s" dbname coll_name
@@ -993,6 +1001,8 @@ struct
       let hdrs =
         json_headers resource Utilities.Verb.Post
           (Printf.sprintf "dbs/%s/users/%s" dbname user_name)
+        |> Utilities.apply_to_header_if_some "x-ms-documentdb-expiry-seconds"
+             string_of_int expiry_seconds
       in
       let* response =
         Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
@@ -1018,7 +1028,7 @@ struct
           let value body = Json_converter_j.list_permissions_of_string body in
           result_or_error_with_result 200 value resp body)
 
-    let get ?timeout ~dbname ~user_name ~permission_name () =
+    let get ?timeout ?expiry_seconds ~dbname ~user_name ~permission_name () =
       let path =
         Printf.sprintf "/dbs/%s/users/%s/permissions/%s" dbname user_name
           permission_name
@@ -1026,7 +1036,10 @@ struct
       let uri = make_uri path in
       let* response =
         Http.get
-          ~headers:(headers Utilities.Verb.Get (header_path_of_path path))
+          ~headers:
+            (headers Utilities.Verb.Get (header_path_of_path path)
+            |> Utilities.apply_to_header_if_some
+                 "x-ms-documentdb-expiry-seconds" string_of_int expiry_seconds)
           uri
         |> wrap_timeout timeout
       in
@@ -1034,8 +1047,8 @@ struct
           let value body = Json_converter_j.permission_of_string body in
           result_or_error_with_result 200 value resp body)
 
-    let replace ?timeout ~dbname ~user_name ~coll_name permission_mode
-        ~permission_name =
+    let replace ?timeout ?expiry_seconds ~dbname ~user_name ~coll_name
+        permission_mode ~permission_name =
       let permission_mode = string_of_permission_mode permission_mode in
       let resource_string =
         Printf.sprintf "/dbs/%s/colls/%s" dbname coll_name
@@ -1052,7 +1065,10 @@ struct
       let uri = make_uri path in
       let* response =
         Http.put
-          ~headers:(headers Utilities.Verb.Put (header_path_of_path path))
+          ~headers:
+            (headers Utilities.Verb.Put (header_path_of_path path)
+            |> Utilities.apply_to_header_if_some
+                 "x-ms-documentdb-expiry-seconds" string_of_int expiry_seconds)
           ~body uri
         |> wrap_timeout timeout
       in
@@ -1261,3 +1277,15 @@ struct
       | Ok (_, _, Some offer) -> replace ?migrate ?timeout offer throughput
   end
 end
+
+module Make_credential
+    (IO : Databases_intf.IO)
+    (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
+    (C : Databases_intf.Credentials) =
+  Make_account (IO) (Http) (Auth_credential (C))
+
+module Make
+    (IO : Databases_intf.IO)
+    (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
+    (Auth_key : Databases_intf.Auth_key) =
+  Make_account (IO) (Http) (Auth (Auth_key))
