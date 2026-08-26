@@ -15,7 +15,7 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Databases** | List, Create, Get, Delete, Create if not exists | ✅ Complete |
 | **Collections** | List, Create, Get, Delete, Create if not exists | ✅ Complete |
 | **Users** | List, Create, Get, Replace, Delete | ✅ Complete |
-| **Permissions** | List, Create, Get, Replace, Delete | ✅ Complete |
+| **Permissions** | List, Create, Get, Replace, Delete | ⚠️ Tokens can be created but not used (see gap 5) |
 | **Transactional Batch** | Create, Upsert, Read, Replace, Delete, Patch within a partition | ✅ Complete |
 | **Offers (throughput)** | List, Get, Query, Replace, get/set throughput (manual + autoscale) | ✅ Complete |
 
@@ -44,6 +44,7 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Change Feed** | All operations | No real-time synchronization |
 | **TTL Management** | All operations | No automatic expiration |
 | **Vector Search** | All operations | No AI/ML features |
+| **Resource token auth** | Connecting with a permission `_token` | Master key must be shipped to every caller |
 
 #### 📊 **Implementation Coverage by Category**
 
@@ -52,6 +53,7 @@ Core CRUD Operations:  ███████████████████
 Document Operations:   ████████████████████ 98%
 Transactional Batch:   ████████████████████ 100%
 Throughput Mgmt:       ████████████████████ 100%
+Authentication:        ██████████░░░░░░░░░░ 50%  (master key only)
 Server-side Logic:     ░░░░░░░░░░░░░░░░░░░░ 0%
 Advanced Features:     ░░░░░░░░░░░░░░░░░░░░ 0%
 Overall Coverage:      ████████████████░░░░ 60%
@@ -81,23 +83,39 @@ Overall Coverage:      ████████████████░░░
 - **Impact**: Cannot work with binary/media files
 - **Use Case**: Document storage with images, videos
 
+#### **5. Authentication — Master Key Only (High Impact)**
+- **Missing**: Resource token (`type=resource`) authentication — the SDK can create users and
+  permissions, and the `_token` is exposed on `Json_converter_t.permission`, but there is no way to
+  open a connection *as that user*. `Databases_core.Make` accepts only `Auth_key` (master key) and
+  `Auth.authorization` always calls `Utility.authorization_token_using_master_key`. Passing a
+  resource token as `master_key` raises `Invalid_argument "Malformed input"` in `Base64.decode_exn`.
+- **Also missing**: `x-ms-documentdb-expiry-seconds` on `Permission` create/get/replace, so token
+  lifetime is stuck at the 1-hour default (max 5 hours).
+- **Impact**: Every caller needs the all-access account key; least-privilege and token-broker
+  architectures are impossible
+- **Use Case**: Per-user/per-tenant data access, mobile and browser clients via a token broker
+- **Plan**: [`docs/RESOURCE_TOKEN_AUTH_PLAN.md`](docs/RESOURCE_TOKEN_AUTH_PLAN.md) — see
+  improvement 13 below
+
 ### Feature Implementation Priority
 
 #### **Phase 1: Core Functionality Completion**
 1. ✅ **Transactional Batch** - Implemented (`Batch`, `Batch_builder`)
 2. ✅ **Offers Management** - Implemented (`Offer`, `Offer.Throughput`)
-3. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
-4. **Stored Procedure Execution** - Enable server-side logic
+3. **Resource Token Authentication** - Connect as a Cosmos user (backward compatible)
+4. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
+5. **Stored Procedure Execution** - Enable server-side logic
 
 #### **Phase 2: Advanced Features**
-5. **Change Feed** - Real-time capabilities
-6. **UDFs & Triggers** - Complete server-side programming
-7. **Attachments** - Media support
+6. **Change Feed** - Real-time capabilities
+7. **UDFs & Triggers** - Complete server-side programming
+8. **Attachments** - Media support
 
 #### **Phase 3: Enterprise Features**
-8. **TTL Management** - Automatic expiration
-9. **Vector Search** - AI/ML integration
-10. **Conflict Resolution** - Multi-region writes
+9. **TTL Management** - Automatic expiration
+10. **Vector Search** - AI/ML integration
+11. **Conflict Resolution** - Multi-region writes
+12. **Entra ID (AAD) Authentication** - `type=aad` bearer tokens with RBAC
 
 ## Current API Summary
 
@@ -111,6 +129,8 @@ The library uses a **functor-based architecture** with:
 - Throughput: `Offer.list` / `get` / `query` / `replace` plus `get_throughput` / `set_throughput`
   and `Offer.Throughput.t = Manual | Autoscale`; collections can be created with
   `?offer_throughput`
+- Authentication: master key only — `Make (IO) (Http) (Auth_key)` hard-wires `Auth (Auth_key)`, so
+  the `Account` module type cannot be supplied by the caller and resource tokens are unusable
 - Errors are a single `cosmos_error` variant: `Timeout_error`, `Connection_error`, `Azure_error`, `Batch_validation_error`
 - Shared retry/throttle handling via `with_throttle_retry` in `databases_core.ml`
 - Test infrastructure: functor-based mocks (`Mock_io`, `Mock_http`, `Mock_response`) allowing HTTP-free unit tests
@@ -120,6 +140,7 @@ The library uses a **functor-based architecture** with:
 | Aspect | This OCaml SDK | Modern SDKs (.NET/Python/Java) |
 |--------|---------------|-------------------------------|
 | Terminology | `Collection`, `Document` | `Container`, `Item` (v3+ SDKs) |
+| Authentication | Master key only | Master key, resource token, Entra ID (`authKeyOrResourceToken`) |
 | Entry point | Functor with Auth_key module | Client struct with connection pooling |
 | Type safety | Raw JSON strings | Strongly typed generics |
 | Query building | Raw SQL strings | LINQ/fluent query builders |
@@ -1039,6 +1060,79 @@ end
 
 ---
 
+### 13. Resource Token Authentication (Connect as a User)
+
+**Problem:** The SDK can mint resource tokens but cannot use them. `User` and `Permission` create
+permissions and the `_token` is exposed on `Json_converter_t.permission`, yet there is no way to open
+a connection that acts as that user — so every caller needs the all-access master key.
+
+**Root cause (three hard-wired layers):**
+- `Databases_intf.Auth_key` exposes only `master_key` / `endpoint`
+- `Databases_core.Make` builds `Auth (Auth_key)` internally — the `Account` module type exists but
+  cannot be supplied by the caller
+- `Auth.authorization` always calls `Utility.authorization_token_using_master_key`, which hard-codes
+  `type=master` and HMAC-signs the request
+
+Passing a resource token as `master_key` fails at runtime: `Base64.decode_exn` raises
+`Invalid_argument "Malformed input"` on a `type=resource&ver=1&sig=...` string.
+
+**Key insight:** a resource token is pre-signed by the service, so the header is just the
+percent-encoded `_token` — verb, resource type and date are irrelevant. The `Account` module type
+therefore needs no change; only a new implementation of it plus a seam to inject it.
+
+**Suggested (backward compatible — `Auth_key`, `Make`, `Auth` and `Database` all keep their
+signatures):**
+```ocaml
+(* databases_intf.ml - additive *)
+module Credential = struct
+  type t =
+    | Master_key of string
+    | Resource_token of string
+    | Resource_token_provider of (unit -> string)  (* tokens expire in 1-5h *)
+end
+
+module type Credentials = sig
+  val credential : Credential.t
+  val endpoint : string
+end
+
+(* databases_core.ml - new implementation + seam; old names become shims *)
+module Auth_credential (C : Credentials) : Account
+module Make_account (IO) (Http) (Account : Account)          (* existing body *)
+module Make_credential (IO) (Http) (C : Credentials)
+module Make (IO) (Http) (Auth_key)  = Make_account (IO) (Http) (Auth (Auth_key))
+
+(* backends - sibling functor, plus a first-class-module helper *)
+module Database_as (C : Credentials) : S
+val credentials_of_token : endpoint:string -> string -> (module Credentials)
+```
+
+**Usage:**
+```ocaml
+module Admin = Database (MyMasterKey)
+
+let%lwt Ok (_, perm) =
+  Admin.Permission.get ~dbname ~user_name ~permission_name () in
+let (module C) = credentials_of_token ~endpoint perm.token in
+let module As_user = Database_as (C) in
+As_user.Collection.Document.get ~partition_key dbname coll_name doc_id
+```
+
+**Related gap:** `Permission.create` / `get` / `replace` do not send
+`x-ms-documentdb-expiry-seconds`, so token validity is stuck at the 1-hour default (max 5 hours).
+Adding `?expiry_seconds:int` via `Utilities.apply_to_header_if_some` is purely additive.
+
+**Caveat to document, not enforce:** master-key-only operations (`list_databases`, `User.*`,
+`Permission.*`, `Offer.*`) return 401/403 under a resource token. Making that a compile-time
+restriction would require splitting the module signature and is not backward compatible.
+
+**Bonus:** `Make_account` is also the seam needed for Entra ID (`type=aad`) auth later, though that
+additionally requires async token acquisition.
+
+**Full plan:** [`docs/RESOURCE_TOKEN_AUTH_PLAN.md`](docs/RESOURCE_TOKEN_AUTH_PLAN.md)
+
+---
+
 ## Implementation Priority
 
 ### Completed
@@ -1048,22 +1142,25 @@ end
 - **Centralised retry helper** - `with_throttle_retry` shared across write operations
 
 ### High Priority
-1. **Client abstraction** - Essential for production use with connection pooling
-2. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
-3. **Unified response type** - Consistent, informative response handling
-4. **Streaming query results** - Critical for large dataset handling
+1. **Resource token authentication** - Closes a correctness/security gap: permissions are currently
+   write-only. Small, backward-compatible change (see `docs/RESOURCE_TOKEN_AUTH_PLAN.md`)
+2. **Client abstraction** - Essential for production use with connection pooling
+3. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
+4. **Unified response type** - Consistent, informative response handling
+5. **Streaming query results** - Critical for large dataset handling
 
 ### Medium Priority
-5. **Request options builder** - Cleaner API, easier to maintain
-6. **Configurable retry policies** - Make the existing `with_throttle_retry` policy pluggable; fix 429 exhaustion reported as `Timeout_error`
-7. **Standalone document patch** - Patch a single document outside a batch
-8. **Modernize terminology** - Align with Azure SDK standards
-9. **Bulk executor improvements** - RU/s-aware rate limiting and per-item results
+6. **Request options builder** - Cleaner API, easier to maintain
+7. **Configurable retry policies** - Make the existing `with_throttle_retry` policy pluggable; fix 429 exhaustion reported as `Timeout_error`
+8. **Standalone document patch** - Patch a single document outside a batch
+9. **Modernize terminology** - Align with Azure SDK standards
+10. **Bulk executor improvements** - RU/s-aware rate limiting and per-item results
 
 ### Low Priority
-10. **Type-safe query builder** - Nice-to-have, significant implementation effort
-11. **Change feed processor** - Advanced feature, complex implementation
-12. **Point operation optimizations** - Performance enhancement
+11. **Type-safe query builder** - Nice-to-have, significant implementation effort
+12. **Change feed processor** - Advanced feature, complex implementation
+13. **Point operation optimizations** - Performance enhancement
+14. **Entra ID (AAD) authentication** - Enabled by the `Make_account` seam from improvement 13
 
 ## Migration Path
 
@@ -1093,6 +1190,12 @@ end
   - `UriFactory` → Fluent client builder pattern
 
 - **[Azure SDK Design Guidelines](https://azure.github.io/azure-sdk/general_introduction.html)** - General design principles for Azure SDK client libraries
+
+### Authentication
+
+- [Access control on Cosmos DB resources](https://learn.microsoft.com/en-us/rest/api/cosmos-db/access-control-on-cosmosdb-resources) - Master key vs resource token authorization header
+- [Operations on Cosmos DB Permissions](https://learn.microsoft.com/en-us/rest/api/cosmos-db/permissions) - Resource token lifetime and `x-ms-documentdb-expiry-seconds`
+- [Secure access to data in Azure Cosmos DB](https://learn.microsoft.com/en-us/azure/cosmos-db/secure-access-to-data) - Resource token / token broker model
 
 ### SDK API Documentation
 
