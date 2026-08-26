@@ -6,7 +6,7 @@ This document outlines suggested improvements to the Azure Cosmos DB OCaml SDK A
 
 ### Current Implementation vs Official Azure Cosmos API
 
-Based on comprehensive analysis of the codebase against official Azure Cosmos DB REST API documentation, the current implementation provides approximately **55%** of the full API functionality.
+Based on comprehensive analysis of the codebase against official Azure Cosmos DB REST API documentation, the current implementation provides approximately **60%** of the full API functionality.
 
 #### ✅ **Currently Implemented Features (100% Coverage)**
 
@@ -17,6 +17,7 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Users** | List, Create, Get, Replace, Delete | ✅ Complete |
 | **Permissions** | List, Create, Get, Replace, Delete | ✅ Complete |
 | **Transactional Batch** | Create, Upsert, Read, Replace, Delete, Patch within a partition | ✅ Complete |
+| **Offers (throughput)** | List, Get, Query, Replace, get/set throughput (manual + autoscale) | ✅ Complete |
 
 #### ✅ **Documents (98% Coverage)**
 
@@ -40,7 +41,6 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Stored Procedures** | Create, Replace, List, Delete, **Execute** | No server-side processing |
 | **User Defined Functions** | Create, Replace, List, Delete | No custom query functions |
 | **Triggers** | Create, Replace, List, Delete | No pre/post processing |
-| **Offers** | Get, List, Replace, Query | No throughput management |
 | **Change Feed** | All operations | No real-time synchronization |
 | **TTL Management** | All operations | No automatic expiration |
 | **Vector Search** | All operations | No AI/ML features |
@@ -51,10 +51,10 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 Core CRUD Operations:  ████████████████████ 100%
 Document Operations:   ████████████████████ 98%
 Transactional Batch:   ████████████████████ 100%
+Throughput Mgmt:       ████████████████████ 100%
 Server-side Logic:     ░░░░░░░░░░░░░░░░░░░░ 0%
-Performance Mgmt:      ░░░░░░░░░░░░░░░░░░░░ 0%
 Advanced Features:     ░░░░░░░░░░░░░░░░░░░░ 0%
-Overall Coverage:      ███████████████░░░░░ 55%
+Overall Coverage:      ████████████████░░░░ 60%
 ```
 
 ### Critical Gaps Analysis
@@ -64,10 +64,12 @@ Overall Coverage:      ███████████████░░░░
 - **Impact**: Cannot execute complex business logic server-side
 - **Use Case**: Data validation, complex calculations, multi-document transactions
 
-#### **2. Throughput Management (High Impact)**
-- **Missing**: Offers management (RU/s scaling)
-- **Impact**: Cannot programmatically optimize cost and performance
-- **Use Case**: Auto-scaling applications, cost monitoring
+#### **2. Throughput Management — ✅ Closed**
+- **Implemented**: `Offer` module (list/get/query/replace, `get_throughput` / `set_throughput`,
+  manual and autoscale, autoscale↔manual migration) plus `?offer_throughput` on
+  `Collection.create` / `create_if_not_exists`
+- **Remaining**: no offer support for shared-throughput databases created by this SDK
+  (`Database.create` cannot provision database-level throughput yet)
 
 #### **3. Real-Time Features (Medium Impact)**
 - **Missing**: Change feed, conflict resolution
@@ -83,9 +85,9 @@ Overall Coverage:      ███████████████░░░░
 
 #### **Phase 1: Core Functionality Completion**
 1. ✅ **Transactional Batch** - Implemented (`Batch`, `Batch_builder`)
-2. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
-3. **Stored Procedure Execution** - Enable server-side logic
-4. **Offers Management** - Enable throughput control
+2. ✅ **Offers Management** - Implemented (`Offer`, `Offer.Throughput`)
+3. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
+4. **Stored Procedure Execution** - Enable server-side logic
 
 #### **Phase 2: Advanced Features**
 5. **Change Feed** - Real-time capabilities
@@ -97,16 +99,18 @@ Overall Coverage:      ███████████████░░░░
 9. **Vector Search** - AI/ML integration
 10. **Conflict Resolution** - Multi-region writes
 
-### Comparison with Modern SDKs
-
 ## Current API Summary
 
 The library uses a **functor-based architecture** with:
 - `Cosmos.Databases_core.Make` functor parameterized by `IO`, `Http_client`, and `Auth_key`
 - Dual backend support: `cosmos_lwt` and `cosmos_eio` for different async models
-- Hierarchical module structure: `Database` → `Collection` → `Document` / `Batch` / `Batch_builder`
+- Hierarchical module structure: `Database` → `Collection` → `Document` / `Batch` / `Batch_builder`,
+  with account-scoped `User`, `Permission` and `Offer` modules alongside `Collection`
 - Document operations: `create`, `create_multiple`, `get`, `replace`, `delete`, `delete_multiple`, `list`, `query`
 - Transactional batch: `Batch.execute` (`?atomic`, `?should_validate`) with `Batch_builder` for fluent construction
+- Throughput: `Offer.list` / `get` / `query` / `replace` plus `get_throughput` / `set_throughput`
+  and `Offer.Throughput.t = Manual | Autoscale`; collections can be created with
+  `?offer_throughput`
 - Errors are a single `cosmos_error` variant: `Timeout_error`, `Connection_error`, `Azure_error`, `Batch_validation_error`
 - Shared retry/throttle handling via `with_throttle_retry` in `databases_core.ml`
 - Test infrastructure: functor-based mocks (`Mock_io`, `Mock_http`, `Mock_response`) allowing HTTP-free unit tests
@@ -122,6 +126,7 @@ The library uses a **functor-based architecture** with:
 | Streaming | Pagination via continuation tokens | Iterator/stream-based results |
 | Retry policy | Centralised in `with_throttle_retry`, fixed parameters | Configurable policies |
 | Transactional batch | `Batch` / `Batch_builder`, raw JSON bodies | `TransactionalBatch` with typed items |
+| Throughput | `Offer` module, typed `Throughput.t` | `ThroughputProperties` on database/container objects |
 
 ## Suggested Improvements
 
@@ -1038,6 +1043,7 @@ end
 
 ### Completed
 - **Transaction support** - `Collection.Batch` / `Collection.Batch_builder` (transactional batch, incl. patch operations)
+- **Throughput management** - `Offer` module with manual/autoscale `Throughput.t`, migration headers, and `?offer_throughput` at collection creation
 - **Mock-based test infrastructure** - `Mock_io`, `Mock_http`, `Mock_response` enable HTTP-free unit tests
 - **Centralised retry helper** - `with_throttle_retry` shared across write operations
 
