@@ -109,7 +109,7 @@ struct
         IO.return ()
     | Result.Error e -> fail_error "Should return an azure error" e
     | Result.Ok (code, _) ->
-        (* [Document.create] reports the raw status instead of an error. *)
+        (* [Document.create] passes the raw status through. *)
         Alcotest.(check int) "Read permission forbids writes" 403 code;
         IO.return ()
 

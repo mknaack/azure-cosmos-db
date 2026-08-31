@@ -253,8 +253,25 @@ let permission_create_omits_expiry_header () =
         "Expiry header is absent" None
         (Cohttp.Header.get headers "x-ms-documentdb-expiry-seconds"))
 
+let permission_create_uses_relative_resource_link () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_permission_create ();
+      let _ = create_permission () in
+      match Mock_http.get_recorded () with
+      | [ ({ body = Some body; _ }, _) ] ->
+          Alcotest.(check bool)
+            "Resource link is relative" true
+            (Str.string_match
+               (Str.regexp ".*\"resource\":\"dbs/mydb/colls/mycoll\"")
+               body 0)
+      | _ -> Alcotest.fail "Expected one recorded request with a body")
+
 let tests =
   [
+    ( "permission_create_uses_relative_resource_link",
+      `Quick,
+      permission_create_uses_relative_resource_link );
     ( "resource_token_header_is_pct_encoded_token",
       `Quick,
       resource_token_header_is_pct_encoded_token );

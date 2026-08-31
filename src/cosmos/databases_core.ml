@@ -986,9 +986,7 @@ struct
     let create ?timeout ?expiry_seconds ~dbname ~user_name ~coll_name
         permission_mode ~permission_name =
       let permission_mode = string_of_permission_mode permission_mode in
-      let resource_string =
-        Printf.sprintf "/dbs/%s/colls/%s" dbname coll_name
-      in
+      let resource_string = Printf.sprintf "dbs/%s/colls/%s" dbname coll_name in
       let body =
         ({ id = permission_name; permission_mode; resource = resource_string }
           : Json_converter_j.create_permission)
@@ -1050,9 +1048,7 @@ struct
     let replace ?timeout ?expiry_seconds ~dbname ~user_name ~coll_name
         permission_mode ~permission_name =
       let permission_mode = string_of_permission_mode permission_mode in
-      let resource_string =
-        Printf.sprintf "/dbs/%s/colls/%s" dbname coll_name
-      in
+      let resource_string = Printf.sprintf "dbs/%s/colls/%s" dbname coll_name in
       let body =
         ({ id = permission_name; permission_mode; resource = resource_string }
           : Json_converter_j.create_permission)
