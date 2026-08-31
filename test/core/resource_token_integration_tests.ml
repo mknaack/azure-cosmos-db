@@ -90,12 +90,13 @@ struct
     in
     match res with
     | Result.Error e -> fail_error "Should read with the resource token" e
-    | Result.Ok (code, body) ->
-        Alcotest.(check int) "Status same int" 200 code;
+    | Result.Ok (200, body) ->
         Alcotest.(check bool)
           "Document is returned" true
           (Str.string_match (Str.regexp (".*" ^ Str.quote document_id)) body 0);
         IO.return ()
+    | Result.Ok (code, body) ->
+        Alcotest.failf "Expected status 200 but got %d: %s" code body
 
   let create_document_with_read_token_test () =
     let* res =
@@ -107,19 +108,23 @@ struct
         Alcotest.(check int) "Read permission forbids writes" 403 code;
         IO.return ()
     | Result.Error e -> fail_error "Should return an azure error" e
-    | Result.Ok _ -> Alcotest.fail "A read permission must not allow writes"
+    | Result.Ok (code, _) ->
+        (* [Document.create] reports the raw status instead of an error. *)
+        Alcotest.(check int) "Read permission forbids writes" 403 code;
+        IO.return ()
 
-  let list_databases_with_resource_token_test () =
-    let* res = Dt.list_databases () in
+  let read_database_with_resource_token_test () =
+    let* res = Dt.get dbname in
     match res with
     | Result.Error (Azure_error (code, _)) ->
         Alcotest.(check bool)
-          "Account level operations are rejected" true
+          "Reading outside the permission is rejected" true
           (code = 401 || code = 403);
         IO.return ()
     | Result.Error e -> fail_error "Should return an azure error" e
-    | Result.Ok _ ->
-        Alcotest.fail "A resource token must not list the account databases"
+    | Result.Ok (code, _) ->
+        Alcotest.failf
+          "A collection token must not read the database, got status %d" code
 
   let replace_permission_test () =
     let* res =
@@ -163,8 +168,8 @@ struct
       ("create read permission", create_read_permission_test);
       ("get document with resource token", get_document_with_resource_token_test);
       ("create document with read token", create_document_with_read_token_test);
-      ( "list databases with resource token",
-        list_databases_with_resource_token_test );
+      ( "read database with resource token",
+        read_database_with_resource_token_test );
       ("replace permission with all", replace_permission_test);
       ( "create document with rotated token",
         create_document_with_rotated_token_test );
