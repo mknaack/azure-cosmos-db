@@ -135,7 +135,10 @@ end
 type 'a io = 'a Eio_io.t
 
 module type Auth_key = Cosmos.Databases_intf.Auth_key
+module type Credentials = Cosmos.Databases_intf.Credentials
+module type S = Database_intf.S
 
+module Credential = Cosmos.Databases_intf.Credential
 module Response_headers = Cosmos.Databases_core.Response_headers
 
 type batch_validation_error = Cosmos.Databases_core.batch_validation_error =
@@ -151,3 +154,18 @@ type cosmos_error = Cosmos.Databases_core.cosmos_error =
 
 module Database (Auth : Auth_key) =
   Cosmos.Databases_core.Make (Eio_io) (Eio_http) (Auth)
+
+module Database_as (C : Credentials) =
+  Cosmos.Databases_core.Make_credential (Eio_io) (Eio_http) (C)
+
+let credentials_of_token ~endpoint token =
+  (module struct
+    let credential = Credential.Resource_token token
+    let endpoint = endpoint
+  end : Credentials)
+
+let credentials_of_token_provider ~endpoint provider =
+  (module struct
+    let credential = Credential.Resource_token_provider provider
+    let endpoint = endpoint
+  end : Credentials)

@@ -9,6 +9,11 @@ end
 
 module D = Database (MyAuthKeys)
 
+module D_token =
+  Database_as
+    ((val credentials_of_token_provider ~endpoint:MyAuthKeys.endpoint
+            Test_core.Resource_token_integration_tests.current_resource_token))
+
 module Lwt_config : Test_core.Test_io_intf.Config = struct
   let prefix = "lwt"
 end
@@ -39,6 +44,10 @@ module Users = Test_core.Users_tests.Make (Lwt_config) (Lwt_test_io) (D)
 
 module Permissions =
   Test_core.Permission_tests.Make (Lwt_config) (Lwt_test_io) (D)
+
+module Resource_tokens =
+  Test_core.Resource_token_integration_tests.Make (Lwt_config) (Lwt_test_io) (D)
+    (D_token)
 
 module Batch = Test_core.Batch_tests.Make (Lwt_config) (Lwt_test_io) (D)
 module Offers = Test_core.Offer_tests.Make (Lwt_config) (Lwt_test_io) (D)
@@ -113,22 +122,34 @@ let offer_tests =
     wrap_async_tests `Slow Offers.tests
   else []
 
+let resource_token_integration_tests =
+  if Test_core.Test_common_core.should_run () then
+    wrap_async_tests `Slow Resource_tokens.tests
+  else []
+
 let mock_tests =
   List.map
     (fun (name, _speed, test_fn) -> (name, test_fn))
     Test_core.Mock_tests.tests
+
+let resource_token_tests =
+  List.map
+    (fun (name, _speed, test_fn) -> (name, test_fn))
+    Test_core.Resource_token_tests.tests
 
 let () =
   Lwt_main.run
   @@ Alcotest_lwt.run "Main tests"
        [
          ("mock tests", wrap_sync_tests `Quick mock_tests);
+         ("resource token tests", wrap_sync_tests `Quick resource_token_tests);
          ("app config test", app_config_tests);
          ( "utility cosmos test",
            wrap_sync_tests `Quick Test_core.Test_cosmos_utility.tests );
          ("partition key test", integration_tests);
          ("user test", user_tests);
          ("permission test", permission_tests);
+         ("resource token test", resource_token_integration_tests);
          ("batch test", batch_tests);
          ("offer test", offer_tests);
          ("utility test", wrap_sync_tests `Quick Test_core.Test_utilities.tests);

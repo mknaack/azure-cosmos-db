@@ -37,3 +37,8 @@ let authorization_token_using_master_key verb resource_type resource_id date
   in
   result |> string_replace "%3D" "%3d" |> string_replace "%2B" "%2b"
   |> string_replace "%2F" "%2f"
+
+let authorization_token_using_resource_token token =
+  Uri.pct_encode ~component:`Userinfo token
+  |> string_replace "%3D" "%3d" |> string_replace "%2B" "%2b"
+  |> string_replace "%2F" "%2f"

@@ -1,5 +1,17 @@
+module Credential = struct
+  type t =
+    | Master_key of string
+    | Resource_token of string
+    | Resource_token_provider of (unit -> string)
+end
+
 module type Auth_key = sig
   val master_key : string
+  val endpoint : string
+end
+
+module type Credentials = sig
+  val credential : Credential.t
   val endpoint : string
 end
 
