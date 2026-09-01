@@ -63,15 +63,24 @@ struct
     | Ok (304, _, _) -> Alcotest.fail "change never appeared in the feed"
     | result -> IO.return result
 
+  let document_id value =
+    try
+      Yojson.Basic.from_string value
+      |> Yojson.Basic.Util.member "id"
+      |> Yojson.Basic.Util.to_string
+    with Yojson.Basic.Util.Type_error _ | Yojson.Json_error _ -> value
+
   let ids (page : D.Collection.Change_feed.page) =
-    List.map fst page.documents |> List.sort String.compare
+    List.map (fun (value, _) -> document_id value) page.documents
+    |> List.sort String.compare
 
   let page_count (page : D.Collection.Change_feed.page) = page.count
 
   let page_continuation (page : D.Collection.Change_feed.page) =
     page.continuation
 
-  let page_documents (page : D.Collection.Change_feed.page) = page.documents
+  let page_documents (page : D.Collection.Change_feed.page) =
+    List.map (fun (value, _) -> document_id value) page.documents
 
   let page_has_more_pages (page : D.Collection.Change_feed.page) =
     page.has_more_pages
@@ -180,7 +189,7 @@ struct
         | Ok (200, _, Some page) ->
             Alcotest.(check bool)
               "replaced document present" true
-              (List.mem_assoc "doc1" (page_documents page))
+              (List.mem "doc1" (page_documents page))
         | _ -> Alcotest.fail "replacement did not reach the feed");
         let* deleted =
           D.Collection.Document.delete ~partition_key dbname coll_name "doc2"
@@ -206,10 +215,10 @@ struct
         | Ok (200, _, Some page) ->
             Alcotest.(check bool)
               "sentinel present" true
-              (List.mem_assoc "doc3" (page_documents page));
+              (List.mem "doc3" (page_documents page));
             Alcotest.(check bool)
               "delete absent in latest-version feed" false
-              (List.mem_assoc "doc2" (page_documents page))
+              (List.mem "doc2" (page_documents page))
         | _ -> Alcotest.fail "delete/replacement changes did not reach the feed");
         let* ranges = D.Collection.Partition_key_range.ids dbname coll_name in
         let range_ids =
@@ -277,8 +286,27 @@ struct
         in
         check_success "paging collection created" collection;
         let* () =
-          create_documents "paging create" paging_coll_name
-            [ "page1"; "page2"; "page3" ]
+          let operations =
+            List.map
+              (fun id ->
+                D.Collection.Batch.Create
+                  { if_match = None; if_none_match = None; body = document id })
+              [ "page1"; "page2"; "page3" ]
+          in
+          let* result =
+            D.Collection.Batch.execute ~partition_key dbname paging_coll_name
+              operations
+          in
+          match result with
+          | Ok { outcomes; _ } ->
+              List.iteri
+                (fun index (outcome : D.Collection.Batch.operation_result) ->
+                  Alcotest.(check int)
+                    (Printf.sprintf "paging create %d" (index + 1))
+                    201 outcome.status_code)
+                outcomes;
+              IO.return ()
+          | Error _ -> Alcotest.fail "paging batch create failed"
         in
         let* first =
           D.Collection.Change_feed.read
