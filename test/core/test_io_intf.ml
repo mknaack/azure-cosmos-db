@@ -218,6 +218,108 @@ module type DB = sig
         io
     end
 
+    module Partition_key_range : sig
+      val list :
+        ?max_item_count:int ->
+        ?continuation:string ->
+        ?timeout:float ->
+        string ->
+        string ->
+        ( int
+          * Cosmos.Databases_core.Response_headers.t
+          * Cosmos.Json_converter_t.list_partition_key_ranges,
+          Cosmos.Databases_core.cosmos_error )
+        result
+        io
+
+      val ids :
+        ?timeout:float ->
+        string ->
+        string ->
+        (int * string list, Cosmos.Databases_core.cosmos_error) result io
+    end
+
+    module Change_feed : sig
+      module Mode : sig
+        type t = Latest_version
+
+        val string_of : t -> string
+      end
+
+      module Start_from : sig
+        type t =
+          | Beginning
+          | Now
+          | Point_in_time of float
+          | Continuation of string
+
+        val string_of : t -> string
+      end
+
+      module Scope : sig
+        type t =
+          | Container
+          | Partition_key of string
+          | Partition_key_range of string
+
+        val string_of : t -> string
+      end
+
+      type page = {
+        rid : string;
+        documents : (string * Document.list_result_meta_data option) list;
+        count : int;
+        continuation : string;
+        has_more_pages : bool;
+        session_token : string option;
+      }
+
+      type drain_result = {
+        pages : page list;
+        checkpoint : string;
+        caught_up : bool;
+      }
+
+      val read :
+        ?mode:Mode.t ->
+        ?start_from:Start_from.t ->
+        ?scope:Scope.t ->
+        ?max_item_count:int ->
+        ?session_token:string ->
+        ?timeout:float ->
+        string ->
+        string ->
+        ( int * Cosmos.Databases_core.Response_headers.t * page option,
+          Cosmos.Databases_core.cosmos_error )
+        result
+        io
+
+      val drain :
+        ?mode:Mode.t ->
+        ?start_from:Start_from.t ->
+        ?scope:Scope.t ->
+        ?max_item_count:int ->
+        ?max_pages:int ->
+        ?timeout:float ->
+        string ->
+        string ->
+        (drain_result, Cosmos.Databases_core.cosmos_error) result io
+
+      val fold :
+        ?mode:Mode.t ->
+        ?start_from:Start_from.t ->
+        ?scope:Scope.t ->
+        ?max_item_count:int ->
+        ?poll_interval:float ->
+        ?max_polls:int ->
+        ?timeout:float ->
+        string ->
+        string ->
+        init:'acc ->
+        f:('acc -> page -> ('acc, string) result io) ->
+        ('acc * string, Cosmos.Databases_core.cosmos_error) result io
+    end
+
     module Batch : sig
       type operation =
         | Create of {
