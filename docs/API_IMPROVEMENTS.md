@@ -6,7 +6,7 @@ This document outlines suggested improvements to the Azure Cosmos DB OCaml SDK A
 
 ### Current Implementation vs Official Azure Cosmos API
 
-Based on comprehensive analysis of the codebase against official Azure Cosmos DB REST API documentation, the current implementation provides approximately **60%** of the full API functionality.
+Based on comprehensive analysis of the codebase against official Azure Cosmos DB REST API documentation, the current implementation provides approximately **65%** of the full API functionality.
 
 #### ✅ **Currently Implemented Features (100% Coverage)**
 
@@ -15,9 +15,10 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Databases** | List, Create, Get, Delete, Create if not exists | ✅ Complete |
 | **Collections** | List, Create, Get, Delete, Create if not exists | ✅ Complete |
 | **Users** | List, Create, Get, Replace, Delete | ✅ Complete |
-| **Permissions** | List, Create, Get, Replace, Delete | ⚠️ Tokens can be created but not used (see gap 5) |
+| **Permissions** | List, Create, Get, Replace, Delete (with `?expiry_seconds`) | ✅ Complete — tokens are usable via `Database_as` |
 | **Transactional Batch** | Create, Upsert, Read, Replace, Delete, Patch within a partition | ✅ Complete |
 | **Offers (throughput)** | List, Get, Query, Replace, get/set throughput (manual + autoscale) | ✅ Complete |
+| **Authentication** | Master key, resource token, resource token provider | ✅ Complete (no Entra ID) |
 
 #### ✅ **Documents (98% Coverage)**
 
@@ -41,10 +42,10 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Stored Procedures** | Create, Replace, List, Delete, **Execute** | No server-side processing |
 | **User Defined Functions** | Create, Replace, List, Delete | No custom query functions |
 | **Triggers** | Create, Replace, List, Delete | No pre/post processing |
-| **Change Feed** | All operations | No real-time synchronization |
+| **Change Feed** | First-class pull model, `pkranges`, checkpointing | Only raw `?a_im` on `Document.list`; `304` surfaces as an error (plan: [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md)) |
 | **TTL Management** | All operations | No automatic expiration |
 | **Vector Search** | All operations | No AI/ML features |
-| **Resource token auth** | Connecting with a permission `_token` | Master key must be shipped to every caller |
+| **Entra ID (AAD) auth** | `type=aad` bearer tokens with RBAC | Requires async token acquisition |
 
 #### 📊 **Implementation Coverage by Category**
 
@@ -53,10 +54,10 @@ Core CRUD Operations:  ███████████████████
 Document Operations:   ████████████████████ 98%
 Transactional Batch:   ████████████████████ 100%
 Throughput Mgmt:       ████████████████████ 100%
-Authentication:        ██████████░░░░░░░░░░ 50%  (master key only)
+Authentication:        ████████████████░░░░ 80%  (master key + resource token; no Entra ID)
 Server-side Logic:     ░░░░░░░░░░░░░░░░░░░░ 0%
 Advanced Features:     ░░░░░░░░░░░░░░░░░░░░ 0%
-Overall Coverage:      ████████████████░░░░ 60%
+Overall Coverage:      █████████████████░░░ 65%
 ```
 
 ### Critical Gaps Analysis
@@ -74,27 +75,30 @@ Overall Coverage:      ████████████████░░░
   (`Database.create` cannot provision database-level throughput yet)
 
 #### **3. Real-Time Features (Medium Impact)**
-- **Missing**: Change feed, conflict resolution
-- **Impact**: No real-time data synchronization capabilities
+- **Missing**: First-class change feed, conflict resolution
+- **Current**: `Document.list ?a_im ?if_none_match` only; `304 Not Modified` (the "no changes"
+  answer) is returned as `Error (Azure_error (304, _))`, and there is no `pkranges` support,
+  start-position variant or checkpoint loop
+- **Impact**: No practical real-time data synchronization capabilities
 - **Use Case**: Event-driven architectures, CDC pipelines
+- **Plan**: [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md) — see improvement 8 below
 
 #### **4. Media Handling (Low Impact)**
 - **Missing**: Attachments
 - **Impact**: Cannot work with binary/media files
 - **Use Case**: Document storage with images, videos
 
-#### **5. Authentication — Master Key Only (High Impact)**
-- **Missing**: Resource token (`type=resource`) authentication — the SDK can create users and
-  permissions, and the `_token` is exposed on `Json_converter_t.permission`, but there is no way to
-  open a connection *as that user*. `Databases_core.Make` accepts only `Auth_key` (master key) and
-  `Auth.authorization` always calls `Utility.authorization_token_using_master_key`. Passing a
-  resource token as `master_key` raises `Invalid_argument "Malformed input"` in `Base64.decode_exn`.
-- **Also missing**: `x-ms-documentdb-expiry-seconds` on `Permission` create/get/replace, so token
-  lifetime is stuck at the 1-hour default (max 5 hours).
-- **Impact**: Every caller needs the all-access account key; least-privilege and token-broker
-  architectures are impossible
-- **Use Case**: Per-user/per-tenant data access, mobile and browser clients via a token broker
-- **Plan**: [`docs/RESOURCE_TOKEN_AUTH_PLAN.md`](docs/RESOURCE_TOKEN_AUTH_PLAN.md) — see
+#### **5. Authentication — ✅ Resource Tokens Closed**
+- **Implemented**: `Databases_intf.Credential.t` (`Master_key` | `Resource_token` |
+  `Resource_token_provider`), `Databases_intf.Credentials`, `Databases_core.Auth_credential`,
+  `Make_account` / `Make_credential`, and `Database_as (C : Credentials)` plus
+  `credentials_of_token` / `credentials_of_token_provider` in both backends.
+  `Permission.create` / `get` / `replace` accept `?expiry_seconds`
+  (`x-ms-documentdb-expiry-seconds`, 1..18000).
+- **Remaining**: Entra ID (`type=aad`) bearer tokens with RBAC, which additionally require async
+  token acquisition. Master-key-only operations (`list_databases`, `User.*`, `Permission.*`,
+  `Offer.*`) still fail with 401/403 under a resource token — documented, not enforced by types.
+- **Plan (delivered)**: [`RESOURCE_TOKEN_AUTH_PLAN.md`](RESOURCE_TOKEN_AUTH_PLAN.md) — see
   improvement 13 below
 
 ### Feature Implementation Priority
@@ -102,12 +106,12 @@ Overall Coverage:      ████████████████░░░
 #### **Phase 1: Core Functionality Completion**
 1. ✅ **Transactional Batch** - Implemented (`Batch`, `Batch_builder`)
 2. ✅ **Offers Management** - Implemented (`Offer`, `Offer.Throughput`)
-3. **Resource Token Authentication** - Connect as a Cosmos user (backward compatible)
+3. ✅ **Resource Token Authentication** - Implemented (`Database_as`, `Credential.t`)
 4. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
 5. **Stored Procedure Execution** - Enable server-side logic
 
 #### **Phase 2: Advanced Features**
-6. **Change Feed** - Real-time capabilities
+6. **Change Feed** - Real-time capabilities ([`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md))
 7. **UDFs & Triggers** - Complete server-side programming
 8. **Attachments** - Media support
 
@@ -129,8 +133,9 @@ The library uses a **functor-based architecture** with:
 - Throughput: `Offer.list` / `get` / `query` / `replace` plus `get_throughput` / `set_throughput`
   and `Offer.Throughput.t = Manual | Autoscale`; collections can be created with
   `?offer_throughput`
-- Authentication: master key only — `Make (IO) (Http) (Auth_key)` hard-wires `Auth (Auth_key)`, so
-  the `Account` module type cannot be supplied by the caller and resource tokens are unusable
+- Authentication: master key or resource token — `Make (IO) (Http) (Auth_key)` remains the
+  master-key entry point, while `Make_credential` / `Database_as (C : Credentials)` accept a
+  `Credential.t`; `Make_account` exposes the `Account` seam for future schemes (e.g. Entra ID)
 - Errors are a single `cosmos_error` variant: `Timeout_error`, `Connection_error`, `Azure_error`, `Batch_validation_error`
 - Shared retry/throttle handling via `with_throttle_retry` in `databases_core.ml`
 - Test infrastructure: functor-based mocks (`Mock_io`, `Mock_http`, `Mock_response`) allowing HTTP-free unit tests
@@ -140,7 +145,7 @@ The library uses a **functor-based architecture** with:
 | Aspect | This OCaml SDK | Modern SDKs (.NET/Python/Java) |
 |--------|---------------|-------------------------------|
 | Terminology | `Collection`, `Document` | `Container`, `Item` (v3+ SDKs) |
-| Authentication | Master key only | Master key, resource token, Entra ID (`authKeyOrResourceToken`) |
+| Authentication | Master key, resource token (incl. refreshable provider) | Master key, resource token, Entra ID (`authKeyOrResourceToken`) |
 | Entry point | Functor with Auth_key module | Client struct with connection pooling |
 | Type safety | Raw JSON strings | Strongly typed generics |
 | Query building | Raw SQL strings | LINQ/fluent query builders |
@@ -846,7 +851,12 @@ let%lwt result = Document.query ~partition_key "mydb" "users" q
 
 **Problem:** Current `a_im` parameter provides basic change feed access. Modern SDKs have robust processors.
 
-**Suggested:**
+**Status:** Planned in detail — see [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md), which specifies a
+pull-model `Change_feed` module (closed start-position variant, `etag` checkpoints, `304` as
+`Ok`, `pkranges` enumeration, bounded polling helper). The lease-based push processor sketched
+below remains a later step.
+
+**Suggested (push model, later):**
 ```ocaml
 type change = {
   id : string;
@@ -1060,30 +1070,17 @@ end
 
 ---
 
-### 13. Resource Token Authentication (Connect as a User)
+### 13. Resource Token Authentication (Connect as a User) — ✅ Implemented
 
-**Problem:** The SDK can mint resource tokens but cannot use them. `User` and `Permission` create
-permissions and the `_token` is exposed on `Json_converter_t.permission`, yet there is no way to open
-a connection that acts as that user — so every caller needs the all-access master key.
+**Was:** The SDK could mint resource tokens but not use them — every caller needed the all-access
+master key.
 
-**Root cause (three hard-wired layers):**
-- `Databases_intf.Auth_key` exposes only `master_key` / `endpoint`
-- `Databases_core.Make` builds `Auth (Auth_key)` internally — the `Account` module type exists but
-  cannot be supplied by the caller
-- `Auth.authorization` always calls `Utility.authorization_token_using_master_key`, which hard-codes
-  `type=master` and HMAC-signs the request
+**Now:** A resource token is pre-signed by the service, so the authorization header is just the
+percent-encoded `_token`. `Account` was kept unchanged; a new implementation plus an injection seam
+was added, so `Auth_key`, `Make`, `Auth` and `Database` all keep their signatures.
 
-Passing a resource token as `master_key` fails at runtime: `Base64.decode_exn` raises
-`Invalid_argument "Malformed input"` on a `type=resource&ver=1&sig=...` string.
-
-**Key insight:** a resource token is pre-signed by the service, so the header is just the
-percent-encoded `_token` — verb, resource type and date are irrelevant. The `Account` module type
-therefore needs no change; only a new implementation of it plus a seam to inject it.
-
-**Suggested (backward compatible — `Auth_key`, `Make`, `Auth` and `Database` all keep their
-signatures):**
 ```ocaml
-(* databases_intf.ml - additive *)
+(* databases_intf.ml *)
 module Credential = struct
   type t =
     | Master_key of string
@@ -1096,16 +1093,20 @@ module type Credentials = sig
   val endpoint : string
 end
 
-(* databases_core.ml - new implementation + seam; old names become shims *)
-module Auth_credential (C : Credentials) : Account
-module Make_account (IO) (Http) (Account : Account)          (* existing body *)
-module Make_credential (IO) (Http) (C : Credentials)
-module Make (IO) (Http) (Auth_key)  = Make_account (IO) (Http) (Auth (Auth_key))
+(* databases_core.ml *)
+module Auth_credential (C : Databases_intf.Credentials) : Account
+module Make_account (IO) (Http) (Account : Account)
+module Make_credential (IO) (Http) (C : Credentials) = Make_account (IO) (Http) (Auth_credential (C))
+module Make (IO) (Http) (Auth_key) = Make_account (IO) (Http) (Auth (Auth_key))
 
-(* backends - sibling functor, plus a first-class-module helper *)
+(* cosmos_lwt / cosmos_eio *)
 module Database_as (C : Credentials) : S
 val credentials_of_token : endpoint:string -> string -> (module Credentials)
+val credentials_of_token_provider : endpoint:string -> (unit -> string) -> (module Credentials)
 ```
+
+Signing lives in `Utility.authorization_token_using_resource_token`; tests cover it in
+`test/core/resource_token_tests.ml` and `test/core/resource_token_integration_tests.ml`.
 
 **Usage:**
 ```ocaml
@@ -1118,18 +1119,18 @@ let module As_user = Database_as (C) in
 As_user.Collection.Document.get ~partition_key dbname coll_name doc_id
 ```
 
-**Related gap:** `Permission.create` / `get` / `replace` do not send
-`x-ms-documentdb-expiry-seconds`, so token validity is stuck at the 1-hour default (max 5 hours).
-Adding `?expiry_seconds:int` via `Utilities.apply_to_header_if_some` is purely additive.
+**Related gap — closed:** `Permission.create` / `get` / `replace` now take `?expiry_seconds:int`,
+sent as `x-ms-documentdb-expiry-seconds` (1..18000, default 3600) via
+`Utilities.apply_to_header_if_some`.
 
-**Caveat to document, not enforce:** master-key-only operations (`list_databases`, `User.*`,
+**Caveat, documented but not enforced:** master-key-only operations (`list_databases`, `User.*`,
 `Permission.*`, `Offer.*`) return 401/403 under a resource token. Making that a compile-time
 restriction would require splitting the module signature and is not backward compatible.
 
 **Bonus:** `Make_account` is also the seam needed for Entra ID (`type=aad`) auth later, though that
 additionally requires async token acquisition.
 
-**Full plan:** [`docs/RESOURCE_TOKEN_AUTH_PLAN.md`](docs/RESOURCE_TOKEN_AUTH_PLAN.md)
+**Full plan (delivered):** [`RESOURCE_TOKEN_AUTH_PLAN.md`](RESOURCE_TOKEN_AUTH_PLAN.md)
 
 ---
 
@@ -1140,14 +1141,16 @@ additionally requires async token acquisition.
 - **Throughput management** - `Offer` module with manual/autoscale `Throughput.t`, migration headers, and `?offer_throughput` at collection creation
 - **Mock-based test infrastructure** - `Mock_io`, `Mock_http`, `Mock_response` enable HTTP-free unit tests
 - **Centralised retry helper** - `with_throttle_retry` shared across write operations
+- **Resource token authentication** - `Credential.t`, `Make_credential`, `Database_as`,
+  `credentials_of_token(_provider)`, and `?expiry_seconds` on `Permission`
 
 ### High Priority
-1. **Resource token authentication** - Closes a correctness/security gap: permissions are currently
-   write-only. Small, backward-compatible change (see `docs/RESOURCE_TOKEN_AUTH_PLAN.md`)
-2. **Client abstraction** - Essential for production use with connection pooling
-3. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
-4. **Unified response type** - Consistent, informative response handling
-5. **Streaming query results** - Critical for large dataset handling
+1. **Client abstraction** - Essential for production use with connection pooling
+2. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
+3. **Unified response type** - Consistent, informative response handling
+4. **Streaming query results** - Critical for large dataset handling
+5. **Change feed (pull model)** - Plan ready in [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md); also
+   fixes `304 Not Modified` being reported as an error
 
 ### Medium Priority
 6. **Request options builder** - Cleaner API, easier to maintain
@@ -1158,7 +1161,7 @@ additionally requires async token acquisition.
 
 ### Low Priority
 11. **Type-safe query builder** - Nice-to-have, significant implementation effort
-12. **Change feed processor** - Advanced feature, complex implementation
+12. **Change feed processor (lease/push model)** - Builds on the pull model, complex implementation
 13. **Point operation optimizations** - Performance enhancement
 14. **Entra ID (AAD) authentication** - Enabled by the `Make_account` seam from improvement 13
 
