@@ -235,6 +235,9 @@ module type S = sig
         documents : (string * Document.list_result_meta_data option) list;
         count : int;
         continuation : string;
+            (** Presence of [x-ms-continuation]; Azure may omit it for change
+                feed. Continue with [Continuation continuation] until 304, as
+                [drain] does. *)
         has_more_pages : bool;
         session_token : string option;
       }

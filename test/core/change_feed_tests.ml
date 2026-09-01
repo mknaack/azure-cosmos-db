@@ -82,9 +82,6 @@ struct
   let page_documents (page : D.Collection.Change_feed.page) =
     List.map (fun (value, _) -> document_id value) page.documents
 
-  let page_has_more_pages (page : D.Collection.Change_feed.page) =
-    page.has_more_pages
-
   let check_page_ids expected page =
     Alcotest.(check (list string))
       "document ids"
@@ -286,27 +283,8 @@ struct
         in
         check_success "paging collection created" collection;
         let* () =
-          let operations =
-            List.map
-              (fun id ->
-                D.Collection.Batch.Create
-                  { if_match = None; if_none_match = None; body = document id })
-              [ "page1"; "page2"; "page3" ]
-          in
-          let* result =
-            D.Collection.Batch.execute ~partition_key dbname paging_coll_name
-              operations
-          in
-          match result with
-          | Ok { outcomes; _ } ->
-              List.iteri
-                (fun index (outcome : D.Collection.Batch.operation_result) ->
-                  Alcotest.(check int)
-                    (Printf.sprintf "paging create %d" (index + 1))
-                    201 outcome.status_code)
-                outcomes;
-              IO.return ()
-          | Error _ -> Alcotest.fail "paging batch create failed"
+          create_documents "paging create" paging_coll_name
+            [ "page1"; "page2"; "page3" ]
         in
         let* first =
           D.Collection.Change_feed.read
@@ -320,8 +298,8 @@ struct
         in
         Alcotest.(check int) "first page count" 1 (page_count first_page);
         Alcotest.(check bool)
-          "first page has continuation" true
-          (page_has_more_pages first_page);
+          "first page checkpoint" true
+          (String.length (page_continuation first_page) > 0);
         let* drained =
           D.Collection.Change_feed.drain
             ~start_from:D.Collection.Change_feed.Start_from.Beginning
