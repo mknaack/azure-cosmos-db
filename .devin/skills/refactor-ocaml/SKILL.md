@@ -1,6 +1,6 @@
 ---
+name: refactor-ocaml
 description: Refactor OCaml code patterns for better elegance and maintainability
-auto_execution_mode: 3
 ---
 
 # OCaml Refactoring Patterns
