@@ -830,7 +830,8 @@ struct
                 loop (page :: pages) page.continuation
                   (Some (Start_from.Continuation page.continuation))
                   (remaining - 1)
-            | Ok _ -> IO.return (Error Connection_error)
+            | Ok (code, headers, _) ->
+                IO.return (Error (Azure_error (code, headers)))
         in
         loop [] "" start_from max_pages
 

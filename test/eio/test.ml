@@ -106,18 +106,37 @@ let change_feed_tests =
     wrap_async_tests `Slow Change_feed.tests
   else []
 
-let live_wiring_tests =
-  wrap_sync_tests `Quick
-    [
-      ( "change feed live tests registered",
-        Test_core.Test_common_core.live_wiring_test ~suite:"change feed"
-          ~registered:(List.length change_feed_tests) );
-    ]
-
 let resource_token_integration_tests =
   if Test_core.Test_common_core.should_run () then
     wrap_async_tests `Slow Resource_tokens.tests
   else []
+
+let live_wiring_tests =
+  wrap_sync_tests `Quick
+    [
+      ( "partition key live tests registered",
+        Test_core.Test_common_core.live_wiring_test ~suite:"partition key test"
+          ~registered:(List.length integration_tests) );
+      ( "user live tests registered",
+        Test_core.Test_common_core.live_wiring_test ~suite:"user test"
+          ~registered:(List.length user_tests) );
+      ( "permission live tests registered",
+        Test_core.Test_common_core.live_wiring_test ~suite:"permission test"
+          ~registered:(List.length permission_tests) );
+      ( "resource token live tests registered",
+        Test_core.Test_common_core.live_wiring_test ~suite:"resource token test"
+          ~registered:(List.length resource_token_integration_tests) );
+      ( "batch live tests registered",
+        Test_core.Test_common_core.live_wiring_test ~suite:"batch test"
+          ~registered:(List.length batch_tests) );
+      ( "offer live tests registered",
+        Test_core.Test_common_core.live_wiring_test ~suite:"offer test"
+          ~registered:(List.length offer_tests) );
+      ( "change feed live tests registered",
+        Test_core.Test_common_core.live_wiring_test
+          ~suite:"change feed test (live)"
+          ~registered:(List.length change_feed_tests) );
+    ]
 
 let mock_tests =
   List.map

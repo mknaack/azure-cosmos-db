@@ -87,11 +87,9 @@ struct
       (fun () ->
         let* result = f () in
         let* _ = D.Collection.delete dbname coll_name in
-        let* _ = D.delete dbname in
         IO.return result)
       (fun exn ->
         let* _ = D.Collection.delete dbname coll_name in
-        let* _ = D.delete dbname in
         raise exn)
 
   let with_paging_teardown f =
@@ -99,9 +97,11 @@ struct
       (fun () ->
         let* result = f () in
         let* _ = D.Collection.delete dbname paging_coll_name in
+        let* _ = D.delete dbname in
         IO.return result)
       (fun exn ->
         let* _ = D.Collection.delete dbname paging_coll_name in
+        let* _ = D.delete dbname in
         raise exn)
 
   let create_documents name coll ids =
@@ -269,6 +269,8 @@ struct
 
   let paging_test () =
     with_paging_teardown (fun () ->
+        let* database = D.create_if_not_exists dbname in
+        check_success "paging database created or found" database;
         let* collection =
           D.Collection.create_if_not_exists ~offer_throughput:400
             ~partition_key:partition_key_definition dbname paging_coll_name
