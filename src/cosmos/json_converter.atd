@@ -156,6 +156,22 @@ type list_offers = {
   count <json name="_count">: int;
 }
 
+type partition_key_range = {
+  id: string;
+  min_inclusive <json name="minInclusive">: string;
+  max_exclusive <json name="maxExclusive">: string;
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+}
+
+type list_partition_key_ranges = {
+  rid <json name="_rid">: string;
+  partition_key_ranges <json name="PartitionKeyRanges">: partition_key_range list;
+  count <json name="_count">: int;
+}
+
 type batch_operation_type = [ Create | Upsert | Read | Delete | Replace | Patch ]
 
 type batch_operation = {

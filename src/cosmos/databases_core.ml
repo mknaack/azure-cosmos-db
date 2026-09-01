@@ -3,7 +3,7 @@
 *)
 
 module type Account = sig
-  type resource = Dbs | Colls | Docs | Users | Permissions | Offers
+  type resource = Dbs | Colls | Docs | Users | Permissions | Offers | Pkranges
 
   val authorization :
     Utilities.Verb.t -> resource -> Utilities.Ms_time.t -> string -> string
@@ -12,7 +12,7 @@ module type Account = sig
 end
 
 module Auth_credential (C : Databases_intf.Credentials) : Account = struct
-  type resource = Dbs | Colls | Docs | Users | Permissions | Offers
+  type resource = Dbs | Colls | Docs | Users | Permissions | Offers | Pkranges
 
   let string_of_resource = function
     | Dbs -> "dbs"
@@ -21,6 +21,7 @@ module Auth_credential (C : Databases_intf.Credentials) : Account = struct
     | Users -> "users"
     | Permissions -> "permissions"
     | Offers -> "offers"
+    | Pkranges -> "pkranges"
 
   let authorization verb resource date db_name =
     match C.credential with
@@ -60,6 +61,7 @@ module Response_headers = struct
     x_ms_schemaversion : string option;
     x_ms_serviceversion : string option;
     x_ms_session_token : string option;
+    x_ms_substatus : string option;
   }
 
   let empty =
@@ -78,6 +80,7 @@ module Response_headers = struct
       x_ms_schemaversion = None;
       x_ms_serviceversion = None;
       x_ms_session_token = None;
+      x_ms_substatus = None;
     }
 
   let update t value_tuple =
@@ -97,6 +100,7 @@ module Response_headers = struct
     | "x-ms-schemaversion" -> { t with x_ms_schemaversion = Some value }
     | "x-ms-serviceversion" -> { t with x_ms_serviceversion = Some value }
     | "x-ms-session-token" -> { t with x_ms_session_token = Some value }
+    | "x-ms-substatus" -> { t with x_ms_substatus = Some value }
     | _ -> t
 
   let get_header resp =
@@ -117,6 +121,7 @@ module Response_headers = struct
   let x_ms_schemaversion t = t.x_ms_schemaversion
   let x_ms_serviceversion t = t.x_ms_serviceversion
   let x_ms_session_token t = t.x_ms_session_token
+  let x_ms_substatus t = t.x_ms_substatus
 end
 
 type batch_validation_error =
@@ -202,32 +207,35 @@ struct
     | Some (Error e) -> handle_http_error e
     | Some (Ok (resp, body)) -> f resp body
 
-  let with_throttle_retry ~max_retries f =
+  let with_throttle_retry ?timeout ~max_retries f =
     let rec retry_loop attempt () =
       IO.catch
         (fun () ->
-          let* result = f () in
+          let* result = f () |> wrap_timeout timeout in
           match result with
-          | Ok (resp, body) ->
-              let code = get_code resp in
-              if code = 429 then
-                let response_header = Response_headers.get_header resp in
-                let milliseconds =
-                  Response_headers.x_ms_retry_after_ms response_header
-                  |> Option.value ~default:"0" |> int_of_string_opt
-                  |> Option.value ~default:0 |> Int.to_float
-                in
-                let* () = IO.sleep (milliseconds /. 1000.) in
-                if attempt > 0 then retry_loop (attempt - 1) ()
-                else timeout_error
-              else IO.return (Ok (code, resp, body))
-          | Error Http.Connection_refused ->
-              if attempt > 0 then
-                let sleep_time = Random.int 5 |> float_of_int in
-                let* () = IO.sleep sleep_time in
-                retry_loop (attempt - 1) ()
-              else connection_error
-          | Error (Http.Other_error exn) -> raise exn)
+          | None -> timeout_error
+          | Some result -> (
+              match result with
+              | Ok (resp, body) ->
+                  let code = get_code resp in
+                  if code = 429 then
+                    let response_header = Response_headers.get_header resp in
+                    let milliseconds =
+                      Response_headers.x_ms_retry_after_ms response_header
+                      |> Option.value ~default:"0" |> int_of_string_opt
+                      |> Option.value ~default:0 |> Int.to_float
+                    in
+                    let* () = IO.sleep (milliseconds /. 1000.) in
+                    if attempt > 0 then retry_loop (attempt - 1) ()
+                    else timeout_error
+                  else IO.return (Ok (code, resp, body))
+              | Error Http.Connection_refused ->
+                  if attempt > 0 then
+                    let sleep_time = Random.int 5 |> float_of_int in
+                    let* () = IO.sleep sleep_time in
+                    retry_loop (attempt - 1) ()
+                  else connection_error
+              | Error (Http.Other_error exn) -> raise exn))
         (fun _exn ->
           if attempt > 0 then
             let sleep_time = Random.int 5 |> float_of_int in
@@ -296,6 +304,9 @@ struct
 
     let path_of_docs dbname coll_name =
       Printf.sprintf "/dbs/%s/colls/%s/docs" dbname coll_name
+
+    let path_of_pkranges dbname coll_name =
+      Printf.sprintf "/dbs/%s/colls/%s/pkranges" dbname coll_name
 
     let path_of_doc dbname coll_name doc_id =
       Printf.sprintf "/dbs/%s/colls/%s/docs/%s" dbname coll_name doc_id
@@ -370,6 +381,46 @@ struct
         |> wrap_timeout timeout
       in
       handle_response response (fun resp _body -> IO.return (with_204_do resp))
+
+    module Partition_key_range = struct
+      let list ?max_item_count ?continuation ?timeout dbname coll_name =
+        let path = path_of_pkranges dbname coll_name in
+        let uri = make_uri path in
+        let hdrs =
+          headers Account.Pkranges Utilities.Verb.Get
+            (path_of_collection dbname coll_name)
+          |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
+               string_of_int max_item_count
+          |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
+               continuation
+        in
+        let do_get () = Http.get ~headers:hdrs uri in
+        let* response = with_throttle_retry ?timeout ~max_retries:10 do_get in
+        match response with
+        | Error e -> IO.return (Error e)
+        | Ok (code, resp, body) ->
+            if code = 200 then
+              IO.return
+                (Ok
+                   ( code,
+                     Response_headers.get_header resp,
+                     Json_converter_j.list_partition_key_ranges_of_string body
+                   ))
+            else IO.return (Error (azure_error resp))
+
+      let ids ?timeout dbname coll_name =
+        let* result = list ?timeout dbname coll_name in
+        match result with
+        | Error e -> IO.return (Error e)
+        | Ok (code, _, ranges) ->
+            IO.return
+              (Ok
+                 ( code,
+                   List.map
+                     (fun (range : Json_converter_t.partition_key_range) ->
+                       range.id)
+                     ranges.partition_key_ranges ))
+    end
 
     module Document = struct
       type indexing_directive = Include | Exclude
@@ -624,6 +675,201 @@ struct
               let result = convert_to_list_result body in
               IO.return (Ok (200, response_header, result))
             else IO.return (Error (Azure_error (code, response_header))))
+    end
+
+    module Change_feed = struct
+      module Mode = struct
+        type t = Latest_version
+
+        let string_of = function Latest_version -> "Incremental feed"
+      end
+
+      module Start_from = struct
+        type t =
+          | Beginning
+          | Now
+          | Point_in_time of float
+          | Continuation of string
+
+        let string_of = function
+          | Beginning -> "Beginning"
+          | Now -> "Now"
+          | Point_in_time time ->
+              Utilities.Ms_time.x_ms_date (Utilities.Ms_time.create time)
+          | Continuation etag -> etag
+      end
+
+      module Scope = struct
+        type t =
+          | Container
+          | Partition_key of string
+          | Partition_key_range of string
+
+        let string_of = function
+          | Container -> "Container"
+          | Partition_key key -> Printf.sprintf "Partition_key(%s)" key
+          | Partition_key_range id ->
+              Printf.sprintf "Partition_key_range(%s)" id
+      end
+
+      type page = {
+        rid : string;
+        documents : (string * Document.list_result_meta_data option) list;
+        count : int;
+        continuation : string;
+        has_more_pages : bool;
+        session_token : string option;
+      }
+
+      type drain_result = {
+        pages : page list;
+        checkpoint : string;
+        caught_up : bool;
+      }
+
+      let apply_start_from start_from headers =
+        match start_from with
+        | Start_from.Beginning -> headers
+        | Start_from.Now -> add_header "If-None-Match" "*" headers
+        | Start_from.Continuation etag ->
+            add_header "If-None-Match" etag headers
+        | Start_from.Point_in_time time ->
+            add_header "If-Modified-Since"
+              (Utilities.Ms_time.x_ms_date (Utilities.Ms_time.create time))
+              headers
+
+      let apply_scope scope headers =
+        match scope with
+        | Scope.Container -> headers
+        | Scope.Partition_key key ->
+            add_header "x-ms-documentdb-partitionkey"
+              (string_of_partition_key key)
+              headers
+        | Scope.Partition_key_range id ->
+            add_header "x-ms-documentdb-partitionkeyrangeid" id headers
+
+      let read ?(mode = Mode.Latest_version)
+          ?(start_from = Start_from.Beginning) ?(scope = Scope.Container)
+          ?max_item_count ?session_token ?timeout dbname coll_name =
+        let path = path_of_docs dbname coll_name in
+        let hdrs =
+          headers Account.Docs Utilities.Verb.Get
+            (path_of_collection dbname coll_name)
+          |> add_header "A-IM" (Mode.string_of mode)
+          |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
+               string_of_int max_item_count
+          |> Utilities.apply_to_header_if_some "x-ms-session-token" Fun.id
+               session_token
+          |> apply_start_from start_from
+          |> apply_scope scope
+        in
+        let uri = make_uri path in
+        let do_get () = Http.get ~headers:hdrs uri in
+        let* result = with_throttle_retry ?timeout ~max_retries:10 do_get in
+        match result with
+        | Error e -> IO.return (Error e)
+        | Ok (code, resp, body) -> (
+            let response_headers = Response_headers.get_header resp in
+            if code <> 200 && code <> 304 then
+              IO.return (Error (Azure_error (code, response_headers)))
+            else
+              match Response_headers.etag response_headers with
+              | None -> IO.return (Error (Azure_error (code, response_headers)))
+              | Some continuation ->
+                  if code = 304 then
+                    IO.return (Ok (304, response_headers, None))
+                  else
+                    let result = Document.convert_to_list_result body in
+                    let page =
+                      {
+                        rid = result.rid;
+                        documents = result.documents;
+                        count = result.count;
+                        continuation;
+                        has_more_pages =
+                          Option.is_some
+                            (Response_headers.x_ms_continuation response_headers);
+                        session_token =
+                          Response_headers.x_ms_session_token response_headers;
+                      }
+                    in
+                    IO.return (Ok (200, response_headers, Some page)))
+
+      let is_partition_split = function
+        | Azure_error (410, headers) -> (
+            match Response_headers.x_ms_substatus headers with
+            | Some ("1002" | "1007") -> true
+            | _ -> false)
+        | _ -> false
+
+      let drain ?mode ?start_from ?scope ?max_item_count ?(max_pages = 100)
+          ?timeout dbname coll_name =
+        let rec loop pages checkpoint start_from remaining =
+          if remaining = 0 then
+            IO.return
+              (Ok { pages = List.rev pages; checkpoint; caught_up = false })
+          else
+            let* result =
+              read ?mode ?start_from ?scope ?max_item_count ?timeout dbname
+                coll_name
+            in
+            match result with
+            | Error e -> IO.return (Error e)
+            | Ok (304, headers, None) -> (
+                match Response_headers.etag headers with
+                | Some checkpoint ->
+                    IO.return
+                      (Ok
+                         {
+                           pages = List.rev pages;
+                           checkpoint;
+                           caught_up = true;
+                         })
+                | None -> IO.return (Error (Azure_error (304, headers))))
+            | Ok (200, _, Some page) ->
+                loop (page :: pages) page.continuation
+                  (Some (Start_from.Continuation page.continuation))
+                  (remaining - 1)
+            | Ok _ -> IO.return (Error Connection_error)
+        in
+        loop [] "" start_from max_pages
+
+      let fold ?mode ?start_from ?scope ?max_item_count ?(poll_interval = 1.0)
+          ?(max_polls = 1) ?timeout dbname coll_name ~init ~f =
+        let rec poll acc checkpoint start_from remaining =
+          if remaining = 0 then IO.return (Ok (acc, checkpoint))
+          else
+            let* result =
+              drain ?mode ?start_from ?scope ?max_item_count ?timeout dbname
+                coll_name
+            in
+            match result with
+            | Error e -> IO.return (Error e)
+            | Ok drained -> (
+                let rec apply_pages acc checkpoint = function
+                  | [] -> IO.return (Ok (acc, checkpoint))
+                  | page :: pages -> (
+                      let* result = f acc page in
+                      match result with
+                      | Error _ -> IO.return (Error (acc, checkpoint))
+                      | Ok acc -> apply_pages acc page.continuation pages)
+                in
+                let* applied = apply_pages acc checkpoint drained.pages in
+                match applied with
+                | Error (acc, checkpoint) -> IO.return (Ok (acc, checkpoint))
+                | Ok (acc, _) ->
+                    if remaining = 1 then
+                      IO.return (Ok (acc, drained.checkpoint))
+                    else
+                      let* () =
+                        if drained.caught_up then IO.sleep poll_interval
+                        else IO.return ()
+                      in
+                      poll acc drained.checkpoint
+                        (Some (Start_from.Continuation drained.checkpoint))
+                        (remaining - 1))
+        in
+        poll init "" start_from max_polls
     end
 
     module Batch = struct

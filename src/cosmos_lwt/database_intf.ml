@@ -130,6 +130,8 @@ module type S = sig
         string ->
         string ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+      (** [list] is the legacy document-feed operation. For change-feed
+          consumers, use [Change_feed.read], whose [304] result is explicit. *)
 
       type consistency_level = Strong | Bounded | Session | Eventual
 
@@ -186,6 +188,114 @@ module type S = sig
         string ->
         Cosmos.Json_converter_t.query ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+    end
+
+    module Partition_key_range : sig
+      val list :
+        ?max_item_count:int ->
+        ?continuation:string ->
+        ?timeout:float ->
+        string ->
+        string ->
+        ( int
+          * Response_headers.t
+          * Cosmos.Json_converter_t.list_partition_key_ranges,
+          cosmos_error )
+        result
+        Lwt.t
+      (** Partition-key ranges can be enumerated for caller-managed fan-out. *)
+
+      val ids :
+        ?timeout:float ->
+        string ->
+        string ->
+        (int * string list, cosmos_error) result Lwt.t
+    end
+
+    module Change_feed : sig
+      (** Pull-model latest-version change feed operations. *)
+      module Mode : sig
+        type t = Latest_version
+
+        val string_of : t -> string
+      end
+
+      module Start_from : sig
+        type t =
+          | Beginning
+          | Now
+          | Point_in_time of float
+          | Continuation of string
+
+        val string_of : t -> string
+      end
+
+      module Scope : sig
+        type t =
+          | Container
+          | Partition_key of string
+          | Partition_key_range of string
+
+        val string_of : t -> string
+      end
+
+      type page = {
+        rid : string;
+        documents : (string * Document.list_result_meta_data option) list;
+        count : int;
+        continuation : string;
+        has_more_pages : bool;
+        session_token : string option;
+      }
+
+      type drain_result = {
+        pages : page list;
+        checkpoint : string;
+        caught_up : bool;
+      }
+
+      val read :
+        ?mode:Mode.t ->
+        ?start_from:Start_from.t ->
+        ?scope:Scope.t ->
+        ?max_item_count:int ->
+        ?session_token:string ->
+        ?timeout:float ->
+        string ->
+        string ->
+        (int * Response_headers.t * page option, cosmos_error) result Lwt.t
+      (** [read db coll] reads one page. [Ok (304, _, None)] means the feed is
+          idle, not that the request failed. Persist [page.continuation] and
+          resume with [Start_from.Continuation]. A supplied timeout applies
+          independently to each request attempt; exhausted 429 retries are
+          reported as [Timeout_error]. *)
+
+      val is_partition_split : cosmos_error -> bool
+
+      val drain :
+        ?mode:Mode.t ->
+        ?start_from:Start_from.t ->
+        ?scope:Scope.t ->
+        ?max_item_count:int ->
+        ?max_pages:int ->
+        ?timeout:float ->
+        string ->
+        string ->
+        (drain_result, cosmos_error) result Lwt.t
+
+      val fold :
+        ?mode:Mode.t ->
+        ?start_from:Start_from.t ->
+        ?scope:Scope.t ->
+        ?max_item_count:int ->
+        ?poll_interval:float ->
+        ?max_polls:int ->
+        ?timeout:float ->
+        string ->
+        string ->
+        init:'acc ->
+        f:('acc -> page -> ('acc, string) result Lwt.t) ->
+        ('acc * string, cosmos_error) result Lwt.t
     end
 
     module Batch : sig
