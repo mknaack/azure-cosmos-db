@@ -52,6 +52,9 @@ module Resource_tokens =
 module Batch = Test_core.Batch_tests.Make (Lwt_config) (Lwt_test_io) (D)
 module Offers = Test_core.Offer_tests.Make (Lwt_config) (Lwt_test_io) (D)
 
+module Change_feed =
+  Test_core.Change_feed_tests.Make (Lwt_config) (Lwt_test_io) (D)
+
 (* Wrap async test functions for Alcotest_lwt *)
 let wrap_async_tests speed tests =
   List.map
@@ -122,6 +125,19 @@ let offer_tests =
     wrap_async_tests `Slow Offers.tests
   else []
 
+let change_feed_tests =
+  if Test_core.Test_common_core.should_run () then
+    wrap_async_tests `Slow Change_feed.tests
+  else []
+
+let live_wiring_tests =
+  wrap_sync_tests `Quick
+    [
+      ( "change feed live tests registered",
+        Test_core.Test_common_core.live_wiring_test ~suite:"change feed"
+          ~registered:(List.length change_feed_tests) );
+    ]
+
 let resource_token_integration_tests =
   if Test_core.Test_common_core.should_run () then
     wrap_async_tests `Slow Resource_tokens.tests
@@ -152,5 +168,7 @@ let () =
          ("resource token test", resource_token_integration_tests);
          ("batch test", batch_tests);
          ("offer test", offer_tests);
+         ("change feed test (live)", change_feed_tests);
+         ("live wiring", live_wiring_tests);
          ("utility test", wrap_sync_tests `Quick Test_core.Test_utilities.tests);
        ]
