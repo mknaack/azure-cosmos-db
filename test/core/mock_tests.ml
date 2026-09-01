@@ -585,6 +585,334 @@ let mock_batch_too_many_returns_validation_error_test () =
       Alcotest.fail "Expected Batch_validation_error (Too_many_operations 101)"
   | Ok _ -> Alcotest.fail "Oversized batch should not succeed"
 
+let feed_uri =
+  Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com" ~port:443
+    ~path:"/dbs/mydb/colls/mycoll/docs" ()
+
+let expect_feed response =
+  Mock_http.expect
+    {
+      method_ = `Get;
+      uri = feed_uri;
+      expected_headers = [];
+      expected_body = None;
+      response = Ok response;
+    }
+
+let expect_pkranges response =
+  Mock_http.expect
+    {
+      method_ = `Get;
+      uri =
+        Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com"
+          ~port:443 ~path:"/dbs/mydb/colls/mycoll/pkranges" ();
+      expected_headers = [];
+      expected_body = None;
+      response = Ok response;
+    }
+
+let mock_change_feed_auth_resource_path_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      let _ = Mock_db.Collection.Change_feed.read "mydb" "mycoll" in
+      let auth, date = get_recorded_auth_and_date () in
+      let expected =
+        compute_expected_auth "get" "docs" "dbs/mydb/colls/mycoll" date
+      in
+      Alcotest.(check string) "change feed auth path" expected auth)
+
+let mock_change_feed_a_im_header_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      let _ = Mock_db.Collection.Change_feed.read "mydb" "mycoll" in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      Alcotest.(check (option string))
+        "A-IM" (Some "Incremental feed")
+        (Cohttp.Header.get req.Mock_http.headers "A-IM"))
+
+let mock_change_feed_start_beginning_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      let _ = Mock_db.Collection.Change_feed.read "mydb" "mycoll" in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      Alcotest.(check (option string))
+        "no If-None-Match" None
+        (Cohttp.Header.get req.Mock_http.headers "If-None-Match");
+      Alcotest.(check (option string))
+        "no If-Modified-Since" None
+        (Cohttp.Header.get req.Mock_http.headers "If-Modified-Since"))
+
+let mock_change_feed_start_now_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      let _ =
+        Mock_db.Collection.Change_feed.read
+          ~start_from:Mock_db.Collection.Change_feed.Start_from.Now "mydb"
+          "mycoll"
+      in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      Alcotest.(check (option string))
+        "If-None-Match star" (Some "*")
+        (Cohttp.Header.get req.Mock_http.headers "If-None-Match"))
+
+let mock_change_feed_start_point_in_time_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      let _ =
+        Mock_db.Collection.Change_feed.read
+          ~start_from:
+            (Mock_db.Collection.Change_feed.Start_from.Point_in_time 0.0) "mydb"
+          "mycoll"
+      in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      let date = Cohttp.Header.get req.Mock_http.headers "If-Modified-Since" in
+      Alcotest.(check bool)
+        "RFC 1123 date" true
+        (Option.fold ~none:false
+           ~some:(fun value -> string_contains value "GMT")
+           date);
+      Alcotest.(check (option string))
+        "no If-None-Match" None
+        (Cohttp.Header.get req.Mock_http.headers "If-None-Match"))
+
+let mock_change_feed_start_continuation_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      let _ =
+        Mock_db.Collection.Change_feed.read
+          ~start_from:
+            (Mock_db.Collection.Change_feed.Start_from.Continuation
+               "\"checkpoint\"") "mydb" "mycoll"
+      in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      Alcotest.(check (option string))
+        "etag is verbatim" (Some "\"checkpoint\"")
+        (Cohttp.Header.get req.Mock_http.headers "If-None-Match"))
+
+let mock_change_feed_scope_partition_key_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      let _ =
+        Mock_db.Collection.Change_feed.read
+          ~scope:(Mock_db.Collection.Change_feed.Scope.Partition_key "pk")
+          "mydb" "mycoll"
+      in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      Alcotest.(check (option string))
+        "partition key" (Some "[\"pk\"]")
+        (Cohttp.Header.get req.Mock_http.headers "x-ms-documentdb-partitionkey");
+      Alcotest.(check (option string))
+        "no range" None
+        (Cohttp.Header.get req.Mock_http.headers
+           "x-ms-documentdb-partitionkeyrangeid"))
+
+let mock_change_feed_scope_range_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      let _ =
+        Mock_db.Collection.Change_feed.read
+          ~scope:(Mock_db.Collection.Change_feed.Scope.Partition_key_range "0")
+          "mydb" "mycoll"
+      in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      Alcotest.(check (option string))
+        "range id" (Some "0")
+        (Cohttp.Header.get req.Mock_http.headers
+           "x-ms-documentdb-partitionkeyrangeid");
+      Alcotest.(check (option string))
+        "no partition key" None
+        (Cohttp.Header.get req.Mock_http.headers "x-ms-documentdb-partitionkey"))
+
+let mock_change_feed_304_is_ok_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.not_modified_response ~etag:"e304");
+      match Mock_db.Collection.Change_feed.read "mydb" "mycoll" with
+      | Ok (304, _, None) -> ()
+      | _ -> Alcotest.fail "304 should be a successful empty feed result")
+
+let mock_change_feed_page_continuation_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed
+        (Mock_response.change_feed_response ~etag:"etag-page"
+           ~continuation:"more"
+           [ ("doc", "rid") ]);
+      match Mock_db.Collection.Change_feed.read "mydb" "mycoll" with
+      | Ok (200, _, Some page) ->
+          Alcotest.(check string)
+            "etag continuation" "etag-page" page.continuation
+      | _ -> Alcotest.fail "Expected a feed page")
+
+let mock_change_feed_has_more_pages_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed
+        (Mock_response.change_feed_response ~etag:"e" ~continuation:"more" []);
+      match Mock_db.Collection.Change_feed.read "mydb" "mycoll" with
+      | Ok (_, _, Some page) ->
+          Alcotest.(check bool) "has more pages" true page.has_more_pages
+      | _ -> Alcotest.fail "Expected a feed page")
+
+let mock_change_feed_drain_stops_on_304_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed
+        (Mock_response.change_feed_response ~etag:"e1" ~continuation:"more"
+           [ ("one", "r1") ]);
+      expect_feed
+        (Mock_response.change_feed_response ~etag:"e2" [ ("two", "r2") ]);
+      expect_feed (Mock_response.not_modified_response ~etag:"e3");
+      let result = Mock_db.Collection.Change_feed.drain "mydb" "mycoll" in
+      match result with
+      | Ok { pages; checkpoint; caught_up } ->
+          Alcotest.(check int) "page count" 2 (List.length pages);
+          Alcotest.(check bool) "caught up" true caught_up;
+          Alcotest.(check string) "terminal checkpoint" "e3" checkpoint;
+          let reqs = Mock_http.get_recorded () in
+          let second, _ = List.nth reqs 1 in
+          Alcotest.(check (option string))
+            "resume etag" (Some "e1")
+            (Cohttp.Header.get second.Mock_http.headers "If-None-Match")
+      | Error _ -> Alcotest.fail "Drain failed")
+
+let mock_change_feed_drain_respects_max_pages_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed
+        (Mock_response.change_feed_response ~etag:"e1" ~continuation:"more"
+           [ ("one", "r1") ]);
+      match
+        Mock_db.Collection.Change_feed.drain ~max_pages:1 "mydb" "mycoll"
+      with
+      | Ok { pages; caught_up; _ } ->
+          Alcotest.(check int) "one request" 1 (List.length pages);
+          Alcotest.(check bool) "not caught up" false caught_up
+      | Error _ -> Alcotest.fail "Drain failed")
+
+let mock_change_feed_drain_immediate_304_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.not_modified_response ~etag:"e304");
+      match Mock_db.Collection.Change_feed.drain "mydb" "mycoll" with
+      | Ok { pages = []; checkpoint; caught_up } ->
+          Alcotest.(check bool) "caught up" true caught_up;
+          Alcotest.(check bool)
+            "checkpoint is non-empty" true
+            (String.length checkpoint > 0)
+      | _ -> Alcotest.fail "Expected immediate 304 drain")
+
+let mock_change_feed_timeout_not_retried_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      Mock_io.with_timeouts_enabled (fun () ->
+          match
+            Mock_db.Collection.Change_feed.read ~timeout:0.0 "mydb" "mycoll"
+          with
+          | Error Timeout_error ->
+              Alcotest.(check int)
+                "one request" 1
+                (List.length (Mock_http.get_recorded ()))
+          | _ -> Alcotest.fail "Expected a non-retried timeout"))
+
+let mock_change_feed_fold_checkpoint_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed
+        (Mock_response.change_feed_response ~etag:"e1" [ ("one", "r1") ]);
+      expect_feed (Mock_response.not_modified_response ~etag:"e2");
+      let seen = ref [] in
+      let result =
+        Mock_db.Collection.Change_feed.fold ~max_polls:1 ~init:0
+          ~f:(fun count page ->
+            seen := page.continuation :: !seen;
+            Ok (count + page.count))
+          "mydb" "mycoll"
+      in
+      match result with
+      | Ok (count, checkpoint) ->
+          Alcotest.(check int) "fold count" 1 count;
+          Alcotest.(check (list string)) "pages in order" [ "e1" ] !seen;
+          Alcotest.(check string) "fold checkpoint" "e2" checkpoint
+      | Error _ -> Alcotest.fail "Fold failed")
+
+let mock_change_feed_fold_callback_error_keeps_checkpoint_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed
+        (Mock_response.change_feed_response ~etag:"e1" [ ("one", "r1") ]);
+      expect_feed
+        (Mock_response.change_feed_response ~etag:"e2" [ ("two", "r2") ]);
+      expect_feed (Mock_response.not_modified_response ~etag:"e3");
+      let result =
+        Mock_db.Collection.Change_feed.fold ~max_polls:1 ~init:0
+          ~f:(fun count page ->
+            if page.continuation = "e2" then Error "stop"
+            else Ok (count + page.count))
+          "mydb" "mycoll"
+      in
+      match result with
+      | Ok (count, checkpoint) ->
+          Alcotest.(check int) "last good accumulator" 1 count;
+          Alcotest.(check string) "last good checkpoint" "e1" checkpoint
+      | Error _ -> Alcotest.fail "Fold callback error should stop cleanly")
+
+let mock_change_feed_throttle_retry_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.throttled_response ~retry_after_ms:0);
+      expect_feed (Mock_response.change_feed_response ~etag:"e" []);
+      match Mock_db.Collection.Change_feed.read "mydb" "mycoll" with
+      | Ok (200, _, Some _) -> ()
+      | _ -> Alcotest.fail "Expected retry to succeed")
+
+let mock_change_feed_split_detection_test () =
+  let split = Mock_response.partition_split_response () in
+  let response, _ = split in
+  let headers = Cosmos.Databases_core.Response_headers.get_header response in
+  Alcotest.(check bool)
+    "1002 is partition split" true
+    (Mock_db.Collection.Change_feed.is_partition_split
+       (Azure_error (410, headers)));
+  Alcotest.(check bool)
+    "410 without substatus is not split" false
+    (Mock_db.Collection.Change_feed.is_partition_split
+       (Azure_error (410, Cosmos.Databases_core.Response_headers.empty)))
+
+let mock_pkranges_auth_resource_path_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_pkranges
+        (Mock_response.make_response
+           (Mock_response.list_partition_key_ranges_response [ ("0", "", "A") ]));
+      let _ = Mock_db.Collection.Partition_key_range.list "mydb" "mycoll" in
+      let auth, date = get_recorded_auth_and_date () in
+      let expected =
+        compute_expected_auth "get" "pkranges" "dbs/mydb/colls/mycoll" date
+      in
+      Alcotest.(check string) "pkranges auth path" expected auth)
+
+let mock_pkranges_parses_ids_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_pkranges
+        (Mock_response.make_response
+           (Mock_response.list_partition_key_ranges_response
+              [ ("0", "", "A"); ("1", "A", "FF") ]));
+      match Mock_db.Collection.Partition_key_range.ids "mydb" "mycoll" with
+      | Ok (200, ids) ->
+          Alcotest.(check (list string)) "range ids" [ "0"; "1" ] ids
+      | _ -> Alcotest.fail "Expected parsed partition range ids")
+
 let tests =
   [
     ("mock_io_bind", `Quick, test_mock_io_bind);
@@ -634,4 +962,57 @@ let tests =
     ( "mock_batch_too_many_returns_validation_error",
       `Quick,
       mock_batch_too_many_returns_validation_error_test );
+    ( "mock_change_feed_auth_resource_path",
+      `Quick,
+      mock_change_feed_auth_resource_path_test );
+    ("mock_change_feed_a_im_header", `Quick, mock_change_feed_a_im_header_test);
+    ( "mock_change_feed_start_beginning",
+      `Quick,
+      mock_change_feed_start_beginning_test );
+    ("mock_change_feed_start_now", `Quick, mock_change_feed_start_now_test);
+    ( "mock_change_feed_start_point_in_time",
+      `Quick,
+      mock_change_feed_start_point_in_time_test );
+    ( "mock_change_feed_start_continuation",
+      `Quick,
+      mock_change_feed_start_continuation_test );
+    ( "mock_change_feed_scope_partition_key",
+      `Quick,
+      mock_change_feed_scope_partition_key_test );
+    ("mock_change_feed_scope_range", `Quick, mock_change_feed_scope_range_test);
+    ("mock_change_feed_304_is_ok", `Quick, mock_change_feed_304_is_ok_test);
+    ( "mock_change_feed_page_continuation",
+      `Quick,
+      mock_change_feed_page_continuation_test );
+    ( "mock_change_feed_has_more_pages",
+      `Quick,
+      mock_change_feed_has_more_pages_test );
+    ( "mock_change_feed_drain_stops_on_304",
+      `Quick,
+      mock_change_feed_drain_stops_on_304_test );
+    ( "mock_change_feed_drain_respects_max_pages",
+      `Quick,
+      mock_change_feed_drain_respects_max_pages_test );
+    ( "mock_change_feed_drain_immediate_304",
+      `Quick,
+      mock_change_feed_drain_immediate_304_test );
+    ( "mock_change_feed_timeout_not_retried",
+      `Quick,
+      mock_change_feed_timeout_not_retried_test );
+    ( "mock_change_feed_fold_checkpoint",
+      `Quick,
+      mock_change_feed_fold_checkpoint_test );
+    ( "mock_change_feed_fold_callback_error_keeps_checkpoint",
+      `Quick,
+      mock_change_feed_fold_callback_error_keeps_checkpoint_test );
+    ( "mock_change_feed_throttle_retry",
+      `Quick,
+      mock_change_feed_throttle_retry_test );
+    ( "mock_change_feed_split_detection",
+      `Quick,
+      mock_change_feed_split_detection_test );
+    ( "mock_pkranges_auth_resource_path",
+      `Quick,
+      mock_pkranges_auth_resource_path_test );
+    ("mock_pkranges_parses_ids", `Quick, mock_pkranges_parses_ids_test);
   ]

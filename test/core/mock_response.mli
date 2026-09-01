@@ -16,6 +16,18 @@ val list_databases_response : (string * string) list -> string
 val list_collections_response : (string * string * string) list -> string
 val list_documents_response : (string * string) list -> string
 
+val change_feed_response :
+  ?etag:string ->
+  ?continuation:string ->
+  (string * string) list ->
+  Cohttp.Response.t * string
+
+val not_modified_response : etag:string -> Cohttp.Response.t * string
+val partition_split_response : unit -> Cohttp.Response.t * string
+
+val list_partition_key_ranges_response :
+  (string * string * string) list -> string
+
 val offer_response :
   ?offer_throughput:int ->
   ?max_throughput:int ->
