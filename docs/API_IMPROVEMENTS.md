@@ -18,6 +18,8 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Permissions** | List, Create, Get, Replace, Delete (with `?expiry_seconds`) | ✅ Complete — tokens are usable via `Database_as` |
 | **Transactional Batch** | Create, Upsert, Read, Replace, Delete, Patch within a partition | ✅ Complete |
 | **Offers (throughput)** | List, Get, Query, Replace, get/set throughput (manual + autoscale) | ✅ Complete |
+| **Partition key ranges** | List, ids (for caller-managed fan-out) | ✅ Complete |
+| **Change Feed (pull model)** | Read, drain, fold — start positions, scopes, `etag` checkpoints, split detection | ✅ Complete for latest-version mode |
 | **Authentication** | Master key, resource token, resource token provider | ✅ Complete (no Entra ID) |
 
 #### ✅ **Documents (98% Coverage)**
@@ -42,7 +44,7 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Stored Procedures** | Create, Replace, List, Delete, **Execute** | No server-side processing |
 | **User Defined Functions** | Create, Replace, List, Delete | No custom query functions |
 | **Triggers** | Create, Replace, List, Delete | No pre/post processing |
-| **Change Feed** | First-class pull model, `pkranges`, checkpointing | Only raw `?a_im` on `Document.list`; `304` surfaces as an error (plan: [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md)) |
+| **Conflicts** | List, Get, Delete (`/conflicts`) | No conflict resolution for multi-region writes |
 | **TTL Management** | All operations | No automatic expiration |
 | **Vector Search** | All operations | No AI/ML features |
 | **Entra ID (AAD) auth** | `type=aad` bearer tokens with RBAC | Requires async token acquisition |
@@ -54,10 +56,11 @@ Core CRUD Operations:  ███████████████████
 Document Operations:   ████████████████████ 98%
 Transactional Batch:   ████████████████████ 100%
 Throughput Mgmt:       ████████████████████ 100%
+Change Feed:           ███████████████░░░░░ 75%  (pull model; no full-fidelity mode or lease processor)
 Authentication:        ████████████████░░░░ 80%  (master key + resource token; no Entra ID)
 Server-side Logic:     ░░░░░░░░░░░░░░░░░░░░ 0%
 Advanced Features:     ░░░░░░░░░░░░░░░░░░░░ 0%
-Overall Coverage:      █████████████████░░░ 65%
+Overall Coverage:      ██████████████████░░ 70%
 ```
 
 ### Critical Gaps Analysis
@@ -74,14 +77,20 @@ Overall Coverage:      █████████████████░░
 - **Remaining**: no offer support for shared-throughput databases created by this SDK
   (`Database.create` cannot provision database-level throughput yet)
 
-#### **3. Real-Time Features (Medium Impact)**
-- **Missing**: First-class change feed, conflict resolution
-- **Current**: `Document.list ?a_im ?if_none_match` only; `304 Not Modified` (the "no changes"
-  answer) is returned as `Error (Azure_error (304, _))`, and there is no `pkranges` support,
-  start-position variant or checkpoint loop
-- **Impact**: No practical real-time data synchronization capabilities
+#### **3. Real-Time Features — ✅ Pull-Model Change Feed Closed**
+- **Implemented**: `Collection.Change_feed` (`read` / `drain` / `fold`) with
+  `Mode.t = Latest_version`, `Start_from.t = Beginning | Now | Point_in_time | Continuation`,
+  `Scope.t = Container | Partition_key | Partition_key_range`, `etag` checkpoints,
+  `304 Not Modified` returned as `Ok (304, _, None)`, `is_partition_split` (410 +
+  `x-ms-substatus` 1002/1007), and `Collection.Partition_key_range.list` / `ids` for fan-out.
+  Supporting changes: `Account.Pkranges` resource type, `Response_headers.x_ms_substatus`,
+  per-attempt `?timeout` in `with_throttle_retry`. Covered by mock tests
+  (`test/core/mock_tests.ml`) and live tests (`test/core/change_feed_tests.ml`).
+- **Remaining**: all-versions-and-deletes (full-fidelity) mode, lease-based push processor,
+  automatic split recovery, typed change envelopes, and the conflict feed (`/conflicts`)
 - **Use Case**: Event-driven architectures, CDC pipelines
-- **Plan**: [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md) — see improvement 8 below
+- **Plan (delivered)**: [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md) — see improvement 8 below.
+  `Document.list ?a_im ?if_none_match` remains as the legacy surface.
 
 #### **4. Media Handling (Low Impact)**
 - **Missing**: Attachments
@@ -111,7 +120,8 @@ Overall Coverage:      █████████████████░░
 5. **Stored Procedure Execution** - Enable server-side logic
 
 #### **Phase 2: Advanced Features**
-6. **Change Feed** - Real-time capabilities ([`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md))
+6. ✅ **Change Feed** - Implemented, pull model (`Change_feed`, `Partition_key_range`) —
+   [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md)
 7. **UDFs & Triggers** - Complete server-side programming
 8. **Attachments** - Media support
 
@@ -126,10 +136,13 @@ Overall Coverage:      █████████████████░░
 The library uses a **functor-based architecture** with:
 - `Cosmos.Databases_core.Make` functor parameterized by `IO`, `Http_client`, and `Auth_key`
 - Dual backend support: `cosmos_lwt` and `cosmos_eio` for different async models
-- Hierarchical module structure: `Database` → `Collection` → `Document` / `Batch` / `Batch_builder`,
-  with account-scoped `User`, `Permission` and `Offer` modules alongside `Collection`
+- Hierarchical module structure: `Database` → `Collection` → `Document` / `Partition_key_range` /
+  `Change_feed` / `Batch` / `Batch_builder`, with account-scoped `User`, `Permission` and `Offer`
+  modules alongside `Collection`
 - Document operations: `create`, `create_multiple`, `get`, `replace`, `delete`, `delete_multiple`, `list`, `query`
 - Transactional batch: `Batch.execute` (`?atomic`, `?should_validate`) with `Batch_builder` for fluent construction
+- Change feed: `Change_feed.read` / `drain` / `fold` with `Mode.t`, `Start_from.t`, `Scope.t`,
+  `etag` checkpoints and `is_partition_split`; `Partition_key_range.list` / `ids` for fan-out
 - Throughput: `Offer.list` / `get` / `query` / `replace` plus `get_throughput` / `set_throughput`
   and `Offer.Throughput.t = Manual | Autoscale`; collections can be created with
   `?offer_throughput`
@@ -153,6 +166,7 @@ The library uses a **functor-based architecture** with:
 | Retry policy | Centralised in `with_throttle_retry`, fixed parameters | Configurable policies |
 | Transactional batch | `Batch` / `Batch_builder`, raw JSON bodies | `TransactionalBatch` with typed items |
 | Throughput | `Offer` module, typed `Throughput.t` | `ThroughputProperties` on database/container objects |
+| Change feed | Pull model only (`Change_feed`), caller-managed checkpoints and fan-out | Pull model plus lease-based processor with automatic load balancing |
 
 ## Suggested Improvements
 
@@ -849,12 +863,70 @@ let%lwt result = Document.query ~partition_key "mydb" "users" q
 
 ### 8. Change Feed Processor
 
-**Problem:** Current `a_im` parameter provides basic change feed access. Modern SDKs have robust processors.
+**Problem:** The `a_im` parameter provided only basic change feed access. Modern SDKs have robust processors.
 
-**Status:** Planned in detail — see [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md), which specifies a
-pull-model `Change_feed` module (closed start-position variant, `etag` checkpoints, `304` as
-`Ok`, `pkranges` enumeration, bounded polling helper). The lease-based push processor sketched
-below remains a later step.
+**Status:** ✅ **Pull model implemented** — see [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md).
+`Collection.Change_feed` is a sibling of `Document` and `Batch` in both backends:
+
+```ocaml
+module Mode : sig type t = Latest_version val string_of : t -> string end
+
+module Start_from : sig
+  type t = Beginning | Now | Point_in_time of float | Continuation of string
+end
+
+module Scope : sig
+  type t = Container | Partition_key of string | Partition_key_range of string
+end
+
+type page = {
+  rid : string;
+  documents : (string * Document.list_result_meta_data option) list;
+  count : int;
+  continuation : string;          (* the response etag — the checkpoint *)
+  has_more_pages : bool;          (* presence of x-ms-continuation *)
+  session_token : string option;
+}
+
+type drain_result = { pages : page list; checkpoint : string; caught_up : bool }
+
+val read :
+  ?mode:Mode.t -> ?start_from:Start_from.t -> ?scope:Scope.t ->
+  ?max_item_count:int -> ?session_token:string -> ?timeout:float ->
+  string -> string ->
+  (int * Response_headers.t * page option, cosmos_error) result io
+
+val is_partition_split : cosmos_error -> bool
+
+val drain :
+  ?mode:Mode.t -> ?start_from:Start_from.t -> ?scope:Scope.t ->
+  ?max_item_count:int -> ?max_pages:int -> ?timeout:float ->
+  string -> string -> (drain_result, cosmos_error) result io
+
+val fold :
+  ?mode:Mode.t -> ?start_from:Start_from.t -> ?scope:Scope.t ->
+  ?max_item_count:int -> ?poll_interval:float -> ?max_polls:int -> ?timeout:float ->
+  string -> string ->
+  init:'acc -> f:('acc -> page -> ('acc, string) result io) ->
+  ('acc * string, cosmos_error) result io
+```
+
+Key behavioural decisions, as delivered:
+
+- `304 Not Modified` is success: `Ok (304, headers, None)`, never `Error (Azure_error (304, _))`
+- the checkpoint is the response `etag` (`page.continuation`), distinct from `x-ms-continuation`,
+  which only signals that the current drain has more pages
+- start positions are a single closed variant, because `If-Modified-Since` is ignored when
+  `If-None-Match` is present
+- `410 Gone` with `x-ms-substatus` `1002` / `1007` is exposed through `is_partition_split`;
+  recovery (re-reading `pkranges`, resuming children) stays the caller's decision
+- fan-out uses `Collection.Partition_key_range.list` / `ids`; ordering is promised only within a
+  partition key
+
+**Still deferred:** all-versions-and-deletes (`A-IM: Full-Fidelity Feed`) mode, `FeedRange`/EPK
+scoping, automatic split recovery inside `drain` / `fold`, typed change envelopes (blocked on
+improvement 3), the conflict feed, and the lease-based push processor below — the latter needs a
+cancellation primitive that `Databases_intf.IO` does not expose.
 
 **Suggested (push model, later):**
 ```ocaml
@@ -1143,25 +1215,30 @@ additionally requires async token acquisition.
 - **Centralised retry helper** - `with_throttle_retry` shared across write operations
 - **Resource token authentication** - `Credential.t`, `Make_credential`, `Database_as`,
   `credentials_of_token(_provider)`, and `?expiry_seconds` on `Permission`
+- **Change feed (pull model)** - `Collection.Change_feed` (`read` / `drain` / `fold`,
+  `Start_from`, `Scope`, `etag` checkpoints, `304` as `Ok`, `is_partition_split`) and
+  `Collection.Partition_key_range`, plus `Response_headers.x_ms_substatus` and per-attempt
+  `?timeout` in `with_throttle_retry`
 
 ### High Priority
 1. **Client abstraction** - Essential for production use with connection pooling
 2. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
 3. **Unified response type** - Consistent, informative response handling
 4. **Streaming query results** - Critical for large dataset handling
-5. **Change feed (pull model)** - Plan ready in [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md); also
-   fixes `304 Not Modified` being reported as an error
 
 ### Medium Priority
-6. **Request options builder** - Cleaner API, easier to maintain
-7. **Configurable retry policies** - Make the existing `with_throttle_retry` policy pluggable; fix 429 exhaustion reported as `Timeout_error`
-8. **Standalone document patch** - Patch a single document outside a batch
-9. **Modernize terminology** - Align with Azure SDK standards
-10. **Bulk executor improvements** - RU/s-aware rate limiting and per-item results
+5. **Request options builder** - Cleaner API, easier to maintain
+6. **Configurable retry policies** - Make the existing `with_throttle_retry` policy pluggable; fix 429 exhaustion reported as `Timeout_error`
+7. **Standalone document patch** - Patch a single document outside a batch
+8. **Modernize terminology** - Align with Azure SDK standards
+9. **Bulk executor improvements** - RU/s-aware rate limiting and per-item results
 
 ### Low Priority
-11. **Type-safe query builder** - Nice-to-have, significant implementation effort
-12. **Change feed processor (lease/push model)** - Builds on the pull model, complex implementation
+10. **Type-safe query builder** - Nice-to-have, significant implementation effort
+11. **Change feed processor (lease/push model)** - Builds on the pull model; needs durable leases
+    and an `IO` cancellation primitive
+12. **All-versions-and-deletes change feed** - Needs continuous backups, a `changeFeedPolicy` on
+    collection creation, and its own ATD envelope types
 13. **Point operation optimizations** - Performance enhancement
 14. **Entra ID (AAD) authentication** - Enabled by the `Make_account` seam from improvement 13
 

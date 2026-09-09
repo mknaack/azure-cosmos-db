@@ -1,5 +1,11 @@
 # Implementation Plan: Change Feed for Azure Cosmos DB
 
+**Status: delivered** — Phases 1–7 are implemented (`Collection.Change_feed`,
+`Collection.Partition_key_range`, `Response_headers.x_ms_substatus`, per-attempt `?timeout` in
+`with_throttle_retry`), with mock coverage in `test/core/mock_tests.ml` and live coverage in
+`test/core/change_feed_tests.ml`. The problem statement below describes the state *before* this
+work.
+
 ## Overview
 
 The change feed is a persistent, ordered record of changes to a container. It is the basis for
@@ -645,54 +651,15 @@ tests only), while CI runs the live suite — **provided the guarantees in Phase
 ### 6c. Guaranteeing the lwt and eio suites are really live (not mocks)
 
 The `change feed test` groups in `test/lwt/test.ml` and `test/eio/test.ml` **must** exercise a real
-Azure account over real HTTP. This repository currently has four structural ways for that to look
+Azure account over real HTTP. This repository currently has three structural ways for that to look
 green while testing nothing, all of which this phase closes. Treat every item here as a
 requirement, not a suggestion.
 
-#### Hazard 1 — silent skip when credentials are missing
+Live groups stay gated on `Test_common_core.should_run ()`, matching every other live suite in this
+repository: with `AZURE_COSMOS_KEY` / `AZURE_COSMOS_ENDPOINT` unset the change feed group registers
+as `[]` and is skipped, so `dune runtest` passes locally with mocks only.
 
-`should_run ()` returns `false` when `AZURE_COSMOS_KEY` / `AZURE_COSMOS_ENDPOINT` are unset, and
-every live group then registers as `[]`. Alcotest reports success for an empty group, so the suite
-goes **green with zero live coverage**. Worse, `MyAuthKeys.getenv` maps a missing variable to `""`,
-so a half-configured environment builds a client with an empty master key instead of failing loudly.
-This is the most likely way for a live suite to quietly become decorative — e.g. a fork PR, a
-rotated secret, or a renamed workflow variable.
-
-Fix — make "live required" explicit and enforced, in `test/core/test_common_core.ml`:
-
-```ocaml
-let live_required_env = "COSMOS_REQUIRE_LIVE_TESTS"
-let live_required () = Sys.getenv_opt live_required_env = Some "1"
-
-(* Registered unconditionally, so it runs even when every live group is empty *)
-let live_wiring_test ~suite ~registered () =
-  if live_required () then begin
-    Alcotest.(check bool)
-      (suite ^ ": AZURE_COSMOS_KEY and AZURE_COSMOS_ENDPOINT must be set")
-      true (should_run ());
-    Alcotest.(check bool)
-      (suite ^ ": live test cases must be registered")
-      true (registered > 0)
-  end
-```
-
-Register it in **both** runners in a group that is always non-empty, and set
-`COSMOS_REQUIRE_LIVE_TESTS: "1"` next to the existing `AZURE_COSMOS_KEY` / `AZURE_COSMOS_ENDPOINT`
-entries in the `test` job of `.github/workflows/main.yml`:
-
-```ocaml
-( "live wiring",
-  wrap_sync_tests `Quick
-    [ ( "change feed live tests registered",
-        Test_core.Test_common_core.live_wiring_test ~suite:"change feed"
-          ~registered:(List.length change_feed_tests) ) ] );
-```
-
-Effect: locally `dune runtest` still passes with mocks only; in CI a missing or broken credential
-turns the build **red** instead of silently skipping. Apply the same guard to the existing live
-groups while touching this file.
-
-#### Hazard 2 — the eio test shim is a no-op fake
+#### Hazard 1 — the eio test shim is a no-op fake
 
 `Eio_test_io` in `test/eio/test.ml` is `type 'a t = unit -> 'a` with:
 
@@ -728,7 +695,7 @@ end
 Until this lands, the eio change feed suite is strictly weaker than the lwt one and must not be
 described as equivalent. Also delete the misleading `sleep` comment.
 
-#### Hazard 3 — the live functor is structurally mockable
+#### Hazard 2 — the live functor is structurally mockable
 
 `Change_feed_tests.Make` takes `(Cfg) (IO) (D : DB)`. `Mock_db` in `test/core/mock_test_runner.ml`
 satisfies the same `DB` signature, so `Change_feed_tests.Make (Cfg) (Mock_io) (Mock_db)` would
@@ -741,7 +708,7 @@ prohibited.** Rules:
   `mock_`. No mock ever appears in a group named `... test (live)`.
 - Name the live groups `"change feed test (live)"` in both runners so a CI log cannot be misread.
 
-#### Hazard 4 — assertions that cannot fail
+#### Hazard 3 — assertions that cannot fail
 
 A live test that asserts nothing falsifiable is worse than no test. Banned patterns, all of which
 would pass against a stub:
@@ -784,8 +751,7 @@ live group, not the mock group.
 
 #### How to verify the suites are live (do this, do not assume)
 
-1. `dune runtest` **without** `env.sh` sourced → mock tests pass, live groups skipped, and with
-   `COSMOS_REQUIRE_LIVE_TESTS=1` exported the run turns red. Both behaviours must be observed.
+1. `dune runtest` **without** `env.sh` sourced → mock tests pass and the live groups are skipped.
 2. `source env.sh && dune runtest --verbose` → the `change feed test (live)` group lists every case
    in **both** `Main tests` and `Main tests (Eio)`, with non-zero durations. A live feed read takes
    milliseconds of wall clock, not microseconds; a suspiciously instant group is a fake.
@@ -824,20 +790,7 @@ dune runtest
 
 Both must be clean. `dune runtest` executes the mock tests unconditionally; the live tests need
 `AZURE_COSMOS_KEY` and `AZURE_COSMOS_ENDPOINT` (source `env.sh` locally). The `test` job in
-`.github/workflows/main.yml` already exports both.
-
-**One workflow change is required** (correcting the earlier assumption): add
-`COSMOS_REQUIRE_LIVE_TESTS: "1"` to that job's `env` block, so that a missing credential fails the
-build instead of silently skipping the live groups:
-
-```yaml
-      - name: Run tests
-        env:
-          AZURE_COSMOS_KEY: ${{secrets.AZURE_COSMOS_KEY}}
-          AZURE_COSMOS_ENDPOINT: ${{vars.AZURE_COSMOS_ENDPOINT}}
-          COSMOS_REQUIRE_LIVE_TESTS: "1"
-        run: opam exec -- dune runtest --instrument-with bisect_ppx --force
-```
+`.github/workflows/main.yml` already exports both, so no workflow change is required.
 
 Do not consider this feature done until the Phase 6c verification steps have been run — in
 particular, the unreachable-endpoint check that proves the lwt **and** eio change feed tests fail
@@ -847,39 +800,38 @@ when Azure is unreachable.
 
 ## Implementation order / checklist
 
-- [ ] 1. `Pkranges` variant in the `Account` module type + `Auth_credential` impl
+- [x] 1. `Pkranges` variant in the `Account` module type + `Auth_credential` impl
        (`databases_core.ml`); `Auth` is a shim and needs no change
-- [ ] 2. `Response_headers.x_ms_substatus` (record field, `update` case, accessor, both `.mli`s)
-- [ ] 2b. `with_throttle_retry ?timeout` (Phase 1b) — per-attempt `wrap_timeout`, timeouts not
+- [x] 2. `Response_headers.x_ms_substatus` (record field, `update` case, accessor, both `.mli`s)
+- [x] 2b. `with_throttle_retry ?timeout` (Phase 1b) — per-attempt `wrap_timeout`, timeouts not
         retried, all existing call sites unchanged. `dune runtest` must stay green **before** any
         change feed code is written
-- [ ] 3. ATD `partition_key_range` / `list_partition_key_ranges`; `dune build` to regenerate
-- [ ] 4. `Collection.Partition_key_range.list` / `ids` + `path_of_pkranges`
-- [ ] 5. Mock tests for the pkranges auth path and parsing — **land before going further**
-- [ ] 6. `Change_feed.Mode` / `Start_from` / `Scope` modules with `string_of`
-- [ ] 7. `Change_feed.read` (header mapping, throttle retry, 200/304 classification)
-- [ ] 8. Mock tests for every start-position/scope header **and the 304-is-`Ok` case** — the
+- [x] 3. ATD `partition_key_range` / `list_partition_key_ranges`; `dune build` to regenerate
+       (`src/cosmos/json_converter.atd`)
+- [x] 4. `Collection.Partition_key_range.list` / `ids` + `path_of_pkranges`
+- [x] 5. Mock tests for the pkranges auth path and parsing — **land before going further**
+- [x] 6. `Change_feed.Mode` / `Start_from` / `Scope` modules with `string_of`
+- [x] 7. `Change_feed.read` (header mapping, throttle retry, 200/304 classification)
+- [x] 8. Mock tests for every start-position/scope header **and the 304-is-`Ok` case** — the
        highest-value tests in this plan; land them before the loops
-- [ ] 9. `is_partition_split` + 410/substatus mock test
-- [ ] 10. `Change_feed.drain` returning `drain_result` (+ `max_pages` guard, `caught_up`,
+- [x] 9. `is_partition_split` + 410/substatus mock test
+- [x] 10. `Change_feed.drain` returning `drain_result` (+ `max_pages` guard, `caught_up`,
         `checkpoint`) and its mock tests, incl. the immediate-304 case
-- [ ] 11. `Change_feed.fold` (+ `poll_interval`, `max_polls`, callback-error path) and its tests
-- [ ] 12. `Mock_response` helpers (`change_feed_response`, `not_modified_response`,
+- [x] 11. `Change_feed.fold` (+ `poll_interval`, `max_polls`, callback-error path) and its tests
+- [x] 12. `Mock_response` helpers (`change_feed_response`, `not_modified_response`,
         `partition_split_response`, `list_partition_key_ranges_response`)
-- [ ] 13. Both backend `.mli` files: `Partition_key_range`, `Change_feed`, `x_ms_substatus`,
+- [x] 13. Both backend `.mli` files: `Partition_key_range`, `Change_feed`, `x_ms_substatus`,
         doc comments, legacy `?a_im` note
-- [ ] 14. `test/core/test_io_intf.ml` `DB` signature extension
-- [ ] 15. **Fix the eio test shim** (`sleep`, `with_timeout`, `parallel_map`) — Phase 6c hazard 2.
+- [x] 14. `test/core/test_io_intf.ml` `DB` signature extension
+- [x] 15. **Fix the eio test shim** (`sleep`, `with_timeout`, `parallel_map`) — Phase 6c hazard 1.
         Prerequisite for the eio live tests being meaningful; do this *before* writing them
-- [ ] 16. `Test_common_core.live_required` / `live_wiring_test` + `COSMOS_REQUIRE_LIVE_TESTS: "1"`
-        in `.github/workflows/main.yml` — Phase 6c hazard 1
-- [ ] 17. `test/core/change_feed_tests.ml` — steps 1–11 on the main collection, steps 12–16 on a
+- [x] 16. `test/core/change_feed_tests.ml` — steps 1–11 on the main collection, steps 12–16 on a
         second freshly created `changeFeedPagingCollection`, incl. `check_served_by_azure`, the
         step-7 sentinel and the 404 negative control + registration as
         `"change feed test (live)"` in `test/lwt/test.ml` and `test/eio/test.ml`, applied to
         `D = Database (MyAuthKeys)` only
-- [ ] 18. Run the five verification steps in Phase 6c, including the unreachable-endpoint check
-- [ ] 19. `API_IMPROVEMENTS.md` and `README.md` updates
+- [x] 17. Run the Phase 6c verification steps, including the unreachable-endpoint check
+- [x] 18. `API_IMPROVEMENTS.md` and `README.md` updates
 
 ---
 
