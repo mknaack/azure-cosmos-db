@@ -86,6 +86,40 @@ let list_documents_response docs =
     (String.concat "," doc_entries)
     (List.length docs)
 
+let change_feed_response ?etag ?continuation docs =
+  let headers =
+    let headers =
+      match etag with
+      | None -> Cohttp.Header.init ()
+      | Some value -> Cohttp.Header.of_list [ ("etag", value) ]
+    in
+    match continuation with
+    | None -> headers
+    | Some value -> Cohttp.Header.add headers "x-ms-continuation" value
+  in
+  make_response ~headers (list_documents_response docs)
+
+let not_modified_response ~etag =
+  let headers = Cohttp.Header.of_list [ ("etag", etag) ] in
+  make_response ~status:304 ~headers ""
+
+let partition_split_response () =
+  let headers = Cohttp.Header.of_list [ ("x-ms-substatus", "1002") ] in
+  make_response ~status:410 ~headers ""
+
+let list_partition_key_ranges_response ranges =
+  let entries =
+    List.map
+      (fun (id, min_inclusive, max_exclusive) ->
+        Printf.sprintf
+          {|{"id":"%s","minInclusive":"%s","maxExclusive":"%s","_rid":"rid%s","_ts":1234567890,"_self":"pkranges/%s/","_etag":"\"etag-%s\""}|}
+          id min_inclusive max_exclusive id id id)
+      ranges
+  in
+  Printf.sprintf {|{"_rid":"coll","PartitionKeyRanges":[%s],"_count":%d}|}
+    (String.concat "," entries)
+    (List.length ranges)
+
 let offer_response ?offer_throughput ?max_throughput ~id ~_rid ~resource
     ~offer_resource_id () =
   let content =

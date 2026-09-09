@@ -40,6 +40,7 @@ module Response_headers : sig
   val x_ms_schemaversion : t -> string option
   val x_ms_serviceversion : t -> string option
   val x_ms_session_token : t -> string option
+  val x_ms_substatus : t -> string option
 end
 
 type batch_validation_error = Cosmos.Databases_core.batch_validation_error =

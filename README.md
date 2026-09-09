@@ -42,6 +42,45 @@ Permission tokens expire after about an hour by default; pass
 `?expiry_seconds` (1..18000) to `Permission.create`, `Permission.get`, or
 `Permission.replace` to choose the lifetime.
 
+# Change feed
+
+The pull-model change feed returns the latest version of changed documents.
+Treat `304 Not Modified` as the normal idle result, and persist the returned
+ETag checkpoint in the application:
+
+```ocaml
+let%lwt first = D.Collection.Change_feed.read
+  ~start_from:D.Collection.Change_feed.Start_from.Now
+  "my-database" "my-collection"
+in
+match first with
+| Ok (304, _headers, None) -> Lwt.return_unit
+| Ok (200, _headers, Some page) ->
+    (* Process [page.documents], then persist [page.continuation]. *)
+    let%lwt next = D.Collection.Change_feed.read
+      ~start_from:
+        (D.Collection.Change_feed.Start_from.Continuation page.continuation)
+      "my-database" "my-collection"
+    in
+    ignore next;
+    Lwt.return_unit
+| Error _error -> Lwt.fail_with "Change feed request failed"
+```
+
+The checkpoint is the caller's responsibility. Ordering is guaranteed only
+within a partition key. For independent partition-range checkpoints, enumerate
+the ranges and fan out explicitly with the backend's `IO.parallel_map`:
+
+```ocaml
+let%lwt ranges = D.Collection.Partition_key_range.ids
+  "my-database" "my-collection"
+in
+(* Keep one checkpoint per range while polling each range independently. *)
+```
+
+Latest-version mode does not surface deletes. If deletions must be represented
+in the feed, use a soft-delete flag and TTL instead.
+
 # Throughput management
 
 Offers expose provisioned throughput for databases and collections:
