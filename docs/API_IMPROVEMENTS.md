@@ -40,7 +40,6 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 
 | Resource | Missing Operations | Impact |
 |----------|-------------------|--------|
-| **Attachments** | Create, Replace, List, Delete | No media/binary support |
 | **Stored Procedures** | Create, Replace, List, Delete, **Execute** | No server-side processing |
 | **User Defined Functions** | Create, Replace, List, Delete | No custom query functions |
 | **Triggers** | Create, Replace, List, Delete | No pre/post processing |
@@ -48,6 +47,14 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **TTL Management** | All operations | No automatic expiration |
 | **Vector Search** | All operations | No AI/ML features |
 | **Entra ID (AAD) auth** | `type=aad` bearer tokens with RBAC | Requires async token acquisition |
+
+#### 🚫 **Deliberately Not Implemented**
+
+| Resource | Why not |
+|----------|---------|
+| **Attachments** (`/attachments`, media/`mediaLink`) | Legacy feature. Microsoft's [documentation page is archived](https://learn.microsoft.com/en-us/azure/cosmos-db/attachments) and states support "is scoped only to offer continued functionality for existing users"; no modern SDK exposes them (.NET v3+, Java v4, Python, JS all dropped them, with [no plans to reintroduce](https://github.com/Azure/azure-cosmos-dotnet-v3/issues/293)). Managed attachments are capped at **2 GB per account**, are **not replicated across regions** and are **not globally distributed**. The supported pattern is Azure Blob Storage with the blob URI and metadata stored as ordinary item properties — which needs no SDK feature, since it is just a document field. Unmanaged attachments were never more than that with extra indirection. |
+| **Offer V1** (`offerVersion: "V1"`, `offerType: S1 \| S2 \| S3`) | The [S1/S2/S3 performance levels are retired](https://learn.microsoft.com/en-us/azure/cosmos-db/performance-levels) and unavailable on new accounts; `V2` (user-defined RU/s) is the only current form. `Offer` reads `offer_version` / `offer_type` as plain strings (`json_converter.atd`) so V1 offers on legacy accounts still parse, but `Offer.Throughput.t` must never grow a V1 variant and `replace` only ever writes V2 content. |
+| **Non-partitioned ("fixed") collections** | [Legacy](https://learn.microsoft.com/en-us/azure/cosmos-db/migrate-containers-partitioned-to-nonpartitioned): fixed 20 GB storage / 10K RU/s, no elasticity, and auto-migrated by the service to a system `/_partitionKey`. Modern SDKs cannot create them. `Collection.create` / `create_if_not_exists` take `~partition_key` as a **required** labelled argument, which is deliberate — do not make it optional to "support" fixed collections. |
 
 #### 📊 **Implementation Coverage by Category**
 
@@ -92,10 +99,12 @@ Overall Coverage:      ██████████████████░
 - **Plan (delivered)**: [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md) — see improvement 8 below.
   `Document.list ?a_im ?if_none_match` remains as the legacy surface.
 
-#### **4. Media Handling (Low Impact)**
-- **Missing**: Attachments
-- **Impact**: Cannot work with binary/media files
-- **Use Case**: Document storage with images, videos
+#### **4. Media Handling — Not a Gap**
+- **Not implemented, by decision**: attachments — see "Deliberately Not Implemented" above
+- **Supported pattern**: store binary content in Azure Blob Storage and keep the blob URI plus any
+  metadata as ordinary item properties, so the metadata stays queryable. This needs no SDK
+  feature — it is just a document field
+- **Use Case**: items referencing images, videos, or payloads above the 2 MB item limit
 
 #### **5. Authentication — ✅ Resource Tokens Closed**
 - **Implemented**: `Databases_intf.Credential.t` (`Master_key` | `Resource_token` |
@@ -107,6 +116,11 @@ Overall Coverage:      ██████████████████░
 - **Remaining**: Entra ID (`type=aad`) bearer tokens with RBAC, which additionally require async
   token acquisition. Master-key-only operations (`list_databases`, `User.*`, `Permission.*`,
   `Offer.*`) still fail with 401/403 under a resource token — documented, not enforced by types.
+- **Why this is no longer low priority**: both `Master_key` and `Resource_token` derive from the
+  account key, so on an account created with
+  [`disableLocalAuth = true`](https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-disable-key-based-authentication)
+  — the configuration Microsoft now recommends for new secure workloads — this SDK **cannot connect
+  at all**. Resource tokens are not deprecated, but they are not an answer for key-less accounts.
 - **Plan (delivered)**: [`RESOURCE_TOKEN_AUTH_PLAN.md`](RESOURCE_TOKEN_AUTH_PLAN.md) — see
   improvement 13 below
 
@@ -116,20 +130,20 @@ Overall Coverage:      ██████████████████░
 1. ✅ **Transactional Batch** - Implemented (`Batch`, `Batch_builder`)
 2. ✅ **Offers Management** - Implemented (`Offer`, `Offer.Throughput`)
 3. ✅ **Resource Token Authentication** - Implemented (`Database_as`, `Credential.t`)
-4. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
-5. **Stored Procedure Execution** - Enable server-side logic
+4. **Entra ID (AAD) Authentication** - `type=aad` bearer tokens with RBAC; the only way to reach an
+   account with key-based auth disabled
+5. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
+6. **Stored Procedure Execution** - Enable server-side logic
 
 #### **Phase 2: Advanced Features**
-6. ✅ **Change Feed** - Implemented, pull model (`Change_feed`, `Partition_key_range`) —
+7. ✅ **Change Feed** - Implemented, pull model (`Change_feed`, `Partition_key_range`) —
    [`CHANGE_FEED_PLAN.md`](CHANGE_FEED_PLAN.md)
-7. **UDFs & Triggers** - Complete server-side programming
-8. **Attachments** - Media support
+8. **UDFs & Triggers** - Complete server-side programming
 
 #### **Phase 3: Enterprise Features**
 9. **TTL Management** - Automatic expiration
 10. **Vector Search** - AI/ML integration
 11. **Conflict Resolution** - Multi-region writes
-12. **Entra ID (AAD) Authentication** - `type=aad` bearer tokens with RBAC
 
 ## Current API Summary
 
@@ -1221,26 +1235,28 @@ additionally requires async token acquisition.
   `?timeout` in `with_throttle_retry`
 
 ### High Priority
-1. **Client abstraction** - Essential for production use with connection pooling
-2. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
-3. **Unified response type** - Consistent, informative response handling
-4. **Streaming query results** - Critical for large dataset handling
+1. **Entra ID (AAD) authentication** - Enabled by the `Make_account` seam from improvement 13.
+   Raised from low priority: accounts with `disableLocalAuth = true` are unreachable by this SDK,
+   since both existing credential kinds derive from the account key
+2. **Client abstraction** - Essential for production use with connection pooling
+3. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
+4. **Unified response type** - Consistent, informative response handling
+5. **Streaming query results** - Critical for large dataset handling
 
 ### Medium Priority
-5. **Request options builder** - Cleaner API, easier to maintain
-6. **Configurable retry policies** - Make the existing `with_throttle_retry` policy pluggable; fix 429 exhaustion reported as `Timeout_error`
-7. **Standalone document patch** - Patch a single document outside a batch
-8. **Modernize terminology** - Align with Azure SDK standards
-9. **Bulk executor improvements** - RU/s-aware rate limiting and per-item results
+6. **Request options builder** - Cleaner API, easier to maintain
+7. **Configurable retry policies** - Make the existing `with_throttle_retry` policy pluggable; fix 429 exhaustion reported as `Timeout_error`
+8. **Standalone document patch** - Patch a single document outside a batch
+9. **Modernize terminology** - Align with Azure SDK standards
+10. **Bulk executor improvements** - RU/s-aware rate limiting and per-item results
 
 ### Low Priority
-10. **Type-safe query builder** - Nice-to-have, significant implementation effort
-11. **Change feed processor (lease/push model)** - Builds on the pull model; needs durable leases
+11. **Type-safe query builder** - Nice-to-have, significant implementation effort
+12. **Change feed processor (lease/push model)** - Builds on the pull model; needs durable leases
     and an `IO` cancellation primitive
-12. **All-versions-and-deletes change feed** - Needs continuous backups, a `changeFeedPolicy` on
+13. **All-versions-and-deletes change feed** - Needs continuous backups, a `changeFeedPolicy` on
     collection creation, and its own ATD envelope types
-13. **Point operation optimizations** - Performance enhancement
-14. **Entra ID (AAD) authentication** - Enabled by the `Make_account` seam from improvement 13
+14. **Point operation optimizations** - Performance enhancement
 
 ## Migration Path
 
