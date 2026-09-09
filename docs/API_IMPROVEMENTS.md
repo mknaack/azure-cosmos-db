@@ -116,6 +116,7 @@ Overall Coverage:      ██████████████████░
 - **Remaining**: Entra ID (`type=aad`) bearer tokens with RBAC, which additionally require async
   token acquisition. Master-key-only operations (`list_databases`, `User.*`, `Permission.*`,
   `Offer.*`) still fail with 401/403 under a resource token — documented, not enforced by types.
+- **Plan (drafted)**: [`ENTRA_ID_AUTH_PLAN.md`](ENTRA_ID_AUTH_PLAN.md)
 - **Why this is no longer low priority**: both `Master_key` and `Resource_token` derive from the
   account key, so on an account created with
   [`disableLocalAuth = true`](https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-disable-key-based-authentication)
@@ -131,7 +132,7 @@ Overall Coverage:      ██████████████████░
 2. ✅ **Offers Management** - Implemented (`Offer`, `Offer.Throughput`)
 3. ✅ **Resource Token Authentication** - Implemented (`Database_as`, `Credential.t`)
 4. **Entra ID (AAD) Authentication** - `type=aad` bearer tokens with RBAC; the only way to reach an
-   account with key-based auth disabled
+   account with key-based auth disabled — [`ENTRA_ID_AUTH_PLAN.md`](ENTRA_ID_AUTH_PLAN.md)
 5. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
 6. **Stored Procedure Execution** - Enable server-side logic
 
@@ -1237,7 +1238,8 @@ additionally requires async token acquisition.
 ### High Priority
 1. **Entra ID (AAD) authentication** - Enabled by the `Make_account` seam from improvement 13.
    Raised from low priority: accounts with `disableLocalAuth = true` are unreachable by this SDK,
-   since both existing credential kinds derive from the account key
+   since both existing credential kinds derive from the account key.
+   [`ENTRA_ID_AUTH_PLAN.md`](ENTRA_ID_AUTH_PLAN.md)
 2. **Client abstraction** - Essential for production use with connection pooling
 3. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
 4. **Unified response type** - Consistent, informative response handling
