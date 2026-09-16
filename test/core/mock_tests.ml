@@ -557,12 +557,10 @@ let mock_batch_patch_body_valid_json_test () =
       | _ -> Alcotest.fail "Patch 'value' has an unexpected shape")
 
 let mock_batch_empty_returns_validation_error_test () =
-  match
-    Mock_db.Collection.Batch.execute ~partition_key:"pk" "mydb" "mycoll" []
-  with
-  | Error (Cosmos.Databases_core.Batch_validation_error Empty_batch) -> ()
-  | Error _ -> Alcotest.fail "Expected Batch_validation_error Empty_batch"
-  | Ok _ -> Alcotest.fail "Empty batch should not succeed"
+  match Mock_db.Collection.Batch.validate [] with
+  | Error Empty_batch -> ()
+  | Error _ -> Alcotest.fail "Expected Empty_batch"
+  | Ok _ -> Alcotest.fail "Empty batch should not validate"
 
 let mock_batch_too_many_returns_validation_error_test () =
   let ops =
@@ -574,16 +572,10 @@ let mock_batch_too_many_returns_validation_error_test () =
             body = Printf.sprintf {|{"id": "%d"}|} i;
           })
   in
-  match
-    Mock_db.Collection.Batch.execute ~partition_key:"pk" "mydb" "mycoll" ops
-  with
-  | Error
-      (Cosmos.Databases_core.Batch_validation_error (Too_many_operations 101))
-    ->
-      ()
-  | Error _ ->
-      Alcotest.fail "Expected Batch_validation_error (Too_many_operations 101)"
-  | Ok _ -> Alcotest.fail "Oversized batch should not succeed"
+  match Mock_db.Collection.Batch.validate ops with
+  | Error (Too_many_operations 101) -> ()
+  | Error _ -> Alcotest.fail "Expected Too_many_operations 101"
+  | Ok _ -> Alcotest.fail "Oversized batch should not validate"
 
 let feed_uri =
   Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com" ~port:443

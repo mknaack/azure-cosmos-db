@@ -52,7 +52,6 @@ type cosmos_error = Cosmos.Databases_core.cosmos_error =
   | Timeout_error
   | Connection_error
   | Azure_error of int * Response_headers.t
-  | Batch_validation_error of batch_validation_error
 
 module type S = Database_intf.S
 

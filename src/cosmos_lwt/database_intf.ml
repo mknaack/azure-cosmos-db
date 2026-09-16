@@ -364,7 +364,6 @@ module type S = sig
       val execute :
         ?timeout:float ->
         ?atomic:bool ->
-        ?should_validate:bool ->
         partition_key:string ->
         string ->
         string ->
@@ -404,6 +403,7 @@ module type S = sig
         t ->
         t
 
+      val build : t -> (Batch.operation list, Batch.validation_error) result
       val to_operations : t -> Batch.operation list
       val length : t -> int
     end

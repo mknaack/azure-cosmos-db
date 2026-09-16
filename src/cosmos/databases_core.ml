@@ -133,7 +133,6 @@ type cosmos_error =
   | Timeout_error
   | Connection_error
   | Azure_error of int * Response_headers.t
-  | Batch_validation_error of batch_validation_error
 
 module Make_account
     (IO : Databases_intf.IO)
@@ -1048,8 +1047,8 @@ struct
           Error Mixed_patch_operations
         else Ok ()
 
-      let execute ?timeout ?(atomic = true) ?(should_validate = true)
-          ~partition_key dbname coll_name operations =
+      let execute ?timeout ?(atomic = true) ~partition_key dbname coll_name
+          operations =
         let do_execute () =
           let path = path_of_docs dbname coll_name in
           let uri = make_uri path in
@@ -1097,11 +1096,7 @@ struct
                 IO.return (Ok { outcomes; total_request_charge = total_charge })
               else IO.return (Error (Azure_error (code, response_header))))
         in
-        if should_validate then
-          match validate operations with
-          | Error e -> IO.return (Error (Batch_validation_error e))
-          | Ok () -> do_execute ()
-        else do_execute ()
+        do_execute ()
     end
 
     module Batch_builder = struct
@@ -1146,6 +1141,11 @@ struct
         }
 
       let to_operations t = List.rev t.ops
+
+      let build t =
+        let ops = to_operations t in
+        Batch.validate ops |> Result.map (fun () -> ops)
+
       let length t = t.count
     end
   end
