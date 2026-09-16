@@ -168,3 +168,52 @@ let credentials_of_token_provider ~endpoint provider =
     let credential = Credential.Resource_token_provider provider
     let endpoint = endpoint
   end : Credentials)
+
+let credentials_of_aad_token ~endpoint token =
+  (module struct
+    let credential = Credential.Aad_token token
+    let endpoint = endpoint
+  end : Credentials)
+
+let credentials_of_aad_token_provider ~endpoint provider =
+  (module struct
+    let credential = Credential.Aad_token_provider provider
+    let endpoint = endpoint
+  end : Credentials)
+
+module type Aad = sig
+  val endpoint : string
+  val tenant_id : string
+  val client_id : string
+  val client_secret : string
+end
+
+module type Aad_client = Cosmos.Databases_intf.Aad_client
+
+module Database_aad (A : Aad) = struct
+  module Aad_config = struct
+    let endpoint = A.endpoint
+    let tenant_id = A.tenant_id
+    let client_id = A.client_id
+    let client_secret = A.client_secret
+    let scope = "https://cosmos.azure.com/.default"
+    let authority_host = "https://login.microsoftonline.com"
+    let now = Unix.gettimeofday
+  end
+
+  include Cosmos.Databases_core.Make_aad (Eio_io) (Eio_http) (Aad_config)
+end
+
+let aad_client ?(scope = "https://cosmos.azure.com/.default")
+    ?(authority_host = "https://login.microsoftonline.com")
+    ?(now = Unix.gettimeofday) ~endpoint ~tenant_id ~client_id ~client_secret ()
+    =
+  (module struct
+    let endpoint = endpoint
+    let tenant_id = tenant_id
+    let client_id = client_id
+    let client_secret = client_secret
+    let scope = scope
+    let authority_host = authority_host
+    let now = now
+  end : Aad_client)

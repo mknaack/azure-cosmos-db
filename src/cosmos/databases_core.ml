@@ -2,49 +2,6 @@
  Azure cosmos database documentation: https://docs.microsoft.com/en-us/rest/api/cosmos-db/
 *)
 
-module type Account = sig
-  type resource = Dbs | Colls | Docs | Users | Permissions | Offers | Pkranges
-
-  val authorization :
-    Utilities.Verb.t -> resource -> Utilities.Ms_time.t -> string -> string
-
-  val endpoint : string
-end
-
-module Auth_credential (C : Databases_intf.Credentials) : Account = struct
-  type resource = Dbs | Colls | Docs | Users | Permissions | Offers | Pkranges
-
-  let string_of_resource = function
-    | Dbs -> "dbs"
-    | Colls -> "colls"
-    | Docs -> "docs"
-    | Users -> "users"
-    | Permissions -> "permissions"
-    | Offers -> "offers"
-    | Pkranges -> "pkranges"
-
-  let authorization verb resource date db_name =
-    match C.credential with
-    | Databases_intf.Credential.Master_key key ->
-        Utility.authorization_token_using_master_key
-          (Utilities.Verb.string_of_verb verb)
-          (string_of_resource resource)
-          db_name
-          (Utilities.Ms_time.x_ms_date date)
-          key
-    | Databases_intf.Credential.Resource_token token ->
-        Utility.authorization_token_using_resource_token token
-    | Databases_intf.Credential.Resource_token_provider provider ->
-        Utility.authorization_token_using_resource_token (provider ())
-
-  let endpoint = C.endpoint
-end
-
-module Auth (Keys : Databases_intf.Auth_key) : Account = Auth_credential (struct
-  let credential = Databases_intf.Credential.Master_key Keys.master_key
-  let endpoint = Keys.endpoint
-end)
-
 module Response_headers = struct
   type t = {
     content_type : string option;
@@ -134,12 +91,78 @@ type cosmos_error =
   | Connection_error
   | Azure_error of int * Response_headers.t
 
+module type Account = sig
+  type 'a io
+  type resource = Dbs | Colls | Docs | Users | Permissions | Offers | Pkranges
+
+  val authorization :
+    Utilities.Verb.t ->
+    resource ->
+    Utilities.Ms_time.t ->
+    string ->
+    (string, cosmos_error) result io
+
+  val endpoint : string
+end
+
+module Auth_credential
+    (IO : Databases_intf.IO)
+    (C : Databases_intf.Credentials) : Account with type 'a io = 'a IO.t =
+struct
+  type 'a io = 'a IO.t
+  type resource = Dbs | Colls | Docs | Users | Permissions | Offers | Pkranges
+
+  let string_of_resource = function
+    | Dbs -> "dbs"
+    | Colls -> "colls"
+    | Docs -> "docs"
+    | Users -> "users"
+    | Permissions -> "permissions"
+    | Offers -> "offers"
+    | Pkranges -> "pkranges"
+
+  let authorization verb resource date db_name =
+    IO.return
+      (Ok
+         (match C.credential with
+         | Databases_intf.Credential.Master_key key ->
+             Utility.authorization_token_using_master_key
+               (Utilities.Verb.string_of_verb verb)
+               (string_of_resource resource)
+               db_name
+               (Utilities.Ms_time.x_ms_date date)
+               key
+         | Databases_intf.Credential.Resource_token token ->
+             Utility.authorization_token_using_resource_token token
+         | Databases_intf.Credential.Resource_token_provider provider ->
+             Utility.authorization_token_using_resource_token (provider ())
+         | Databases_intf.Credential.Aad_token token ->
+             Utility.authorization_token_using_aad_token token
+         | Databases_intf.Credential.Aad_token_provider provider ->
+             Utility.authorization_token_using_aad_token (provider ())))
+
+  let endpoint = C.endpoint
+end
+
+module Auth (IO : Databases_intf.IO) (Keys : Databases_intf.Auth_key) :
+  Account with type 'a io = 'a IO.t =
+  Auth_credential
+    (IO)
+    (struct
+      let credential = Databases_intf.Credential.Master_key Keys.master_key
+      let endpoint = Keys.endpoint
+    end)
+
 module Make_account
     (IO : Databases_intf.IO)
     (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
-    (Account : Account) =
+    (Account : Account with type 'a io := 'a IO.t) =
 struct
   let ( let* ) = IO.bind
+
+  let ( let** ) m f =
+    IO.bind m (function Ok v -> f v | Error e -> IO.return (Error e))
+
   let host = Utility.adjust_host Account.endpoint
   let timeout_error = IO.return (Error Timeout_error)
   let connection_error = IO.return (Error Connection_error)
@@ -153,21 +176,22 @@ struct
 
   let headers resource verb db_name =
     let ms_date = Utilities.Ms_time.create_now () in
-    let header = Cohttp.Header.init () in
-    let header =
-      Cohttp.Header.add header "authorization"
-        (Account.authorization verb resource ms_date db_name)
-    in
-    let header = Cohttp.Header.add header "x-ms-version" "2018-12-31" in
-    let header =
-      Cohttp.Header.add header "x-ms-date" (Utilities.Ms_time.x_ms_date ms_date)
-    in
-    header
+    let* authorization = Account.authorization verb resource ms_date db_name in
+    IO.return
+      (Result.map
+         (fun authorization ->
+           let header = Cohttp.Header.init () in
+           let header =
+             Cohttp.Header.add header "authorization" authorization
+           in
+           let header = Cohttp.Header.add header "x-ms-version" "2018-12-31" in
+           Cohttp.Header.add header "x-ms-date"
+             (Utilities.Ms_time.x_ms_date ms_date))
+         authorization)
 
   let json_headers resource verb db_name =
-    let header = headers resource verb db_name in
-    let header = Cohttp.Header.add header "content_type" "application/json" in
-    header
+    let** header = headers resource verb db_name in
+    IO.return (Ok (Cohttp.Header.add header "content_type" "application/json"))
 
   let add_header name value header = Cohttp.Header.add header name value
 
@@ -246,10 +270,8 @@ struct
 
   let list_databases ?timeout () =
     let uri = make_uri "dbs" in
-    let* response =
-      Http.get ~headers:(headers Account.Dbs Utilities.Verb.Get "") uri
-      |> wrap_timeout timeout
-    in
+    let** hdrs = headers Account.Dbs Utilities.Verb.Get "" in
+    let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
     handle_response response (fun resp body ->
         let code = get_code resp in
         let value = Json_converter_j.list_databases_of_string body in
@@ -261,7 +283,7 @@ struct
       |> Json_converter_j.string_of_create_database
     in
     let uri = make_uri "dbs" in
-    let hdrs = json_headers Account.Dbs Utilities.Verb.Post "" in
+    let** hdrs = json_headers Account.Dbs Utilities.Verb.Post "" in
     let* response = Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout in
     handle_response response (fun resp body ->
         let result body = Some (Json_converter_j.database_of_string body) in
@@ -270,10 +292,8 @@ struct
   let get ?timeout name =
     let path = "dbs/" ^ name in
     let uri = make_uri path in
-    let* response =
-      Http.get ~headers:(headers Account.Dbs Utilities.Verb.Get path) uri
-      |> wrap_timeout timeout
-    in
+    let** hdrs = headers Account.Dbs Utilities.Verb.Get path in
+    let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
     handle_response response (fun resp body ->
         let result body = Some (Json_converter_j.database_of_string body) in
         result_or_error_with_result 200 result resp body)
@@ -288,10 +308,8 @@ struct
   let delete ?timeout name =
     let path = "dbs/" ^ name in
     let uri = make_uri path in
-    let* response =
-      Http.delete ~headers:(headers Account.Dbs Utilities.Verb.Delete path) uri
-      |> wrap_timeout timeout
-    in
+    let** hdrs = headers Account.Dbs Utilities.Verb.Delete path in
+    let* response = Http.delete ~headers:hdrs uri |> wrap_timeout timeout in
     handle_response response (fun resp _body -> IO.return (with_204_do resp))
 
   module Collection = struct
@@ -313,12 +331,8 @@ struct
     let list ?timeout dbname =
       let path = path_of_collections dbname in
       let uri = make_uri path in
-      let* response =
-        Http.get
-          ~headers:(headers Account.Colls Utilities.Verb.Get ("dbs/" ^ dbname))
-          uri
-        |> wrap_timeout timeout
-      in
+      let** hdrs = headers Account.Colls Utilities.Verb.Get ("dbs/" ^ dbname) in
+      let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.list_collections_of_string body in
           result_or_error_with_result 200 value resp body)
@@ -332,8 +346,11 @@ struct
       in
       let path = path_of_collections dbname in
       let uri = make_uri path in
-      let hdrs =
+      let** base_hdrs =
         json_headers Account.Colls Utilities.Verb.Post ("dbs/" ^ dbname)
+      in
+      let hdrs =
+        base_hdrs
         |> Utilities.apply_to_header_if_some "x-ms-offer-throughput"
              string_of_int offer_throughput
       in
@@ -347,13 +364,10 @@ struct
     let get ?timeout name coll_name =
       let path = path_of_collection name coll_name in
       let uri = make_uri path in
-      let* response =
-        Http.get
-          ~headers:
-            (headers Account.Colls Utilities.Verb.Get (header_path_of_path path))
-          uri
-        |> wrap_timeout timeout
+      let** hdrs =
+        headers Account.Colls Utilities.Verb.Get (header_path_of_path path)
       in
+      let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Some (Json_converter_j.collection_of_string body) in
           result_or_error_with_result 200 value resp body)
@@ -371,23 +385,22 @@ struct
     let delete ?timeout name coll_name =
       let path = path_of_collection name coll_name in
       let uri = make_uri path in
-      let* response =
-        Http.delete
-          ~headers:
-            (headers Account.Colls Utilities.Verb.Delete
-               (header_path_of_path path))
-          uri
-        |> wrap_timeout timeout
+      let** hdrs =
+        headers Account.Colls Utilities.Verb.Delete (header_path_of_path path)
       in
+      let* response = Http.delete ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp _body -> IO.return (with_204_do resp))
 
     module Partition_key_range = struct
       let list ?max_item_count ?continuation ?timeout dbname coll_name =
         let path = path_of_pkranges dbname coll_name in
         let uri = make_uri path in
-        let hdrs =
+        let** base_hdrs =
           headers Account.Pkranges Utilities.Verb.Get
             (path_of_collection dbname coll_name)
+        in
+        let hdrs =
+          base_hdrs
           |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
                string_of_int max_item_count
           |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
@@ -432,9 +445,12 @@ struct
           coll_name content =
         let path = path_of_docs dbname coll_name in
         let uri = make_uri path in
-        let hdrs =
+        let** base_hdrs =
           json_headers Account.Docs Utilities.Verb.Post
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+        in
+        let hdrs =
+          base_hdrs
           |> Utilities.apply_to_header_if_some "x-ms-documentdb-is-upsert"
                string_of_bool is_upsert
           |> Utilities.apply_to_header_if_some "x-ms-indexing-directive"
@@ -529,9 +545,12 @@ struct
         in
         let path = path_of_docs dbname coll_name in
         let uri = make_uri path in
-        let hdrs =
+        let** base_hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+        in
+        let hdrs =
+          base_hdrs
           |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
                string_of_int max_item_count
           |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
@@ -567,9 +586,12 @@ struct
       let get ?if_none_match ~partition_key ?consistency_level ?session_token
           ?timeout dbname coll_name doc_id =
         let path = path_of_doc dbname coll_name doc_id in
-        let headers =
+        let** base_hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             (header_path_of_path path)
+        in
+        let headers =
+          base_hdrs
           |> Utilities.apply_to_header_if_some "If-None-Match" Fun.id
                if_none_match
           |> add_header "x-ms-documentdb-partitionkey"
@@ -588,9 +610,12 @@ struct
       let replace ?indexing_directive ~partition_key ?if_match ?timeout dbname
           coll_name doc_id content =
         let path = path_of_doc dbname coll_name doc_id in
-        let headers =
+        let** base_hdrs =
           json_headers Account.Docs Utilities.Verb.Put
             (header_path_of_path path)
+        in
+        let headers =
+          base_hdrs
           |> Utilities.apply_to_header_if_some "x-ms-indexing-directive"
                string_of_indexing_directive indexing_directive
           |> add_header "x-ms-documentdb-partitionkey"
@@ -607,11 +632,13 @@ struct
 
       let delete ~partition_key ?timeout dbname coll_name doc_id =
         let path = path_of_doc dbname coll_name doc_id in
+        let** base_hdrs =
+          header_path_of_path path |> headers Account.Docs Utilities.Verb.Delete
+        in
         let hdrs =
-          header_path_of_path path
-          |> headers Account.Docs Utilities.Verb.Delete
-          |> add_header "x-ms-documentdb-partitionkey"
-               (string_of_partition_key partition_key)
+          add_header "x-ms-documentdb-partitionkey"
+            (string_of_partition_key partition_key)
+            base_hdrs
         in
         let uri = make_uri path in
         let do_delete () = Http.delete ~headers:hdrs uri in
@@ -645,9 +672,13 @@ struct
       let query ?max_item_count ?continuation ?consistency_level ?session_token
           ?is_partition ?partition_key ?timeout dbname coll_name query =
         let path = path_of_docs dbname coll_name in
-        let make_headers s =
-          let h = headers Account.Docs Utilities.Verb.Post s in
-          Cohttp.Header.add h "x-ms-documentdb-isquery" (string_of_bool true)
+        let** base_hdrs =
+          headers Account.Docs Utilities.Verb.Post
+            ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
+        in
+        let headers =
+          Cohttp.Header.add base_hdrs "x-ms-documentdb-isquery"
+            (string_of_bool true)
           |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
                string_of_int max_item_count
           |> Utilities.apply_to_header_if_some "x-ms-continuation" Fun.id
@@ -663,7 +694,6 @@ struct
                string_of_partition_key partition_key
           |> add_header "content-type" "application/query+json"
         in
-        let headers = make_headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
         let body = Json_converter_j.string_of_query query in
         let uri = make_uri path in
         let* response = Http.post ~headers ~body uri |> wrap_timeout timeout in
@@ -751,9 +781,12 @@ struct
           ?(start_from = Start_from.Beginning) ?(scope = Scope.Container)
           ?max_item_count ?session_token ?timeout dbname coll_name =
         let path = path_of_docs dbname coll_name in
-        let hdrs =
+        let** base_hdrs =
           headers Account.Docs Utilities.Verb.Get
             (path_of_collection dbname coll_name)
+        in
+        let hdrs =
+          base_hdrs
           |> add_header "A-IM" (Mode.string_of mode)
           |> Utilities.apply_to_header_if_some "x-ms-max-item-count"
                string_of_int max_item_count
@@ -1056,9 +1089,12 @@ struct
             List.map (operation_to_batch_op partition_key) operations
           in
           let body = construct_batch_request_body batch_ops in
-          let hdrs =
+          let** base_hdrs =
             json_headers Account.Docs Utilities.Verb.Post
               (path_of_collection dbname coll_name)
+          in
+          let hdrs =
+            base_hdrs
             |> add_header "x-ms-cosmos-is-batch-request" "True"
             |> add_header "x-ms-documentdb-partitionkey"
                  (string_of_partition_key partition_key)
@@ -1160,7 +1196,9 @@ struct
         |> Json_converter_j.string_of_create_user
       in
       let uri = make_uri ("/dbs/" ^ dbname ^ "/users") in
-      let hdrs = json_headers resource Utilities.Verb.Post ("dbs/" ^ dbname) in
+      let** hdrs =
+        json_headers resource Utilities.Verb.Post ("dbs/" ^ dbname)
+      in
       let* response =
         Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
@@ -1171,10 +1209,8 @@ struct
     let list ?timeout dbname =
       let path = "/dbs/" ^ dbname ^ "/users" in
       let uri = make_uri path in
-      let* response =
-        Http.get ~headers:(headers Utilities.Verb.Get ("dbs/" ^ dbname)) uri
-        |> wrap_timeout timeout
-      in
+      let** hdrs = headers Utilities.Verb.Get ("dbs/" ^ dbname) in
+      let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.list_users_of_string body in
           result_or_error_with_result 200 value resp body)
@@ -1182,12 +1218,8 @@ struct
     let get ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = make_uri path in
-      let* response =
-        Http.get
-          ~headers:(headers Utilities.Verb.Get (header_path_of_path path))
-          uri
-        |> wrap_timeout timeout
-      in
+      let** hdrs = headers Utilities.Verb.Get (header_path_of_path path) in
+      let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.user_of_string body in
           result_or_error_with_result 200 value resp body)
@@ -1199,11 +1231,9 @@ struct
       in
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = make_uri path in
+      let** hdrs = headers Utilities.Verb.Put (header_path_of_path path) in
       let* response =
-        Http.put
-          ~headers:(headers Utilities.Verb.Put (header_path_of_path path))
-          ~body uri
-        |> wrap_timeout timeout
+        Http.put ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.user_of_string body in
@@ -1212,12 +1242,8 @@ struct
     let delete ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = make_uri path in
-      let* response =
-        Http.delete
-          ~headers:(headers Utilities.Verb.Delete (header_path_of_path path))
-          uri
-        |> wrap_timeout timeout
-      in
+      let** hdrs = headers Utilities.Verb.Delete (header_path_of_path path) in
+      let* response = Http.delete ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp _body ->
           IO.return (result_or_error 204 resp))
   end
@@ -1243,9 +1269,12 @@ struct
         Printf.sprintf "/dbs/%s/users/%s/permissions" dbname user_name
       in
       let uri = make_uri path in
-      let hdrs =
+      let** base_hdrs =
         json_headers resource Utilities.Verb.Post
           (Printf.sprintf "dbs/%s/users/%s" dbname user_name)
+      in
+      let hdrs =
+        base_hdrs
         |> Utilities.apply_to_header_if_some "x-ms-documentdb-expiry-seconds"
              string_of_int expiry_seconds
       in
@@ -1261,14 +1290,11 @@ struct
         Printf.sprintf "/dbs/%s/users/%s/permissions" dbname user_name
       in
       let uri = make_uri path in
-      let* response =
-        Http.get
-          ~headers:
-            (headers Utilities.Verb.Get
-               (Printf.sprintf "dbs/%s/users/%s" dbname user_name))
-          uri
-        |> wrap_timeout timeout
+      let** hdrs =
+        headers Utilities.Verb.Get
+          (Printf.sprintf "dbs/%s/users/%s" dbname user_name)
       in
+      let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.list_permissions_of_string body in
           result_or_error_with_result 200 value resp body)
@@ -1279,15 +1305,13 @@ struct
           permission_name
       in
       let uri = make_uri path in
-      let* response =
-        Http.get
-          ~headers:
-            (headers Utilities.Verb.Get (header_path_of_path path)
-            |> Utilities.apply_to_header_if_some
-                 "x-ms-documentdb-expiry-seconds" string_of_int expiry_seconds)
-          uri
-        |> wrap_timeout timeout
+      let** hdrs = headers Utilities.Verb.Get (header_path_of_path path) in
+      let hdrs =
+        hdrs
+        |> Utilities.apply_to_header_if_some "x-ms-documentdb-expiry-seconds"
+             string_of_int expiry_seconds
       in
+      let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.permission_of_string body in
           result_or_error_with_result 200 value resp body)
@@ -1306,14 +1330,14 @@ struct
           permission_name
       in
       let uri = make_uri path in
+      let** hdrs = headers Utilities.Verb.Put (header_path_of_path path) in
+      let hdrs =
+        hdrs
+        |> Utilities.apply_to_header_if_some "x-ms-documentdb-expiry-seconds"
+             string_of_int expiry_seconds
+      in
       let* response =
-        Http.put
-          ~headers:
-            (headers Utilities.Verb.Put (header_path_of_path path)
-            |> Utilities.apply_to_header_if_some
-                 "x-ms-documentdb-expiry-seconds" string_of_int expiry_seconds)
-          ~body uri
-        |> wrap_timeout timeout
+        Http.put ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.permission_of_string body in
@@ -1325,12 +1349,8 @@ struct
           permission_name
       in
       let uri = make_uri path in
-      let* response =
-        Http.delete
-          ~headers:(headers Utilities.Verb.Delete (header_path_of_path path))
-          uri
-        |> wrap_timeout timeout
-      in
+      let** hdrs = headers Utilities.Verb.Delete (header_path_of_path path) in
+      let* response = Http.delete ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp _body ->
           IO.return (result_or_error 204 resp))
   end
@@ -1381,10 +1401,8 @@ struct
 
     let list ?timeout () =
       let uri = make_uri path_of_offers in
-      let* response =
-        Http.get ~headers:(headers Utilities.Verb.Get "") uri
-        |> wrap_timeout timeout
-      in
+      let** hdrs = headers Utilities.Verb.Get "" in
+      let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.list_offers_of_string body in
           result_or_error_with_result 200 value resp body)
@@ -1392,19 +1410,16 @@ struct
     let get ?timeout offer_rid =
       let path = path_of_offer offer_rid in
       let uri = make_uri path in
-      let* response =
-        Http.get
-          ~headers:(headers Utilities.Verb.Get (auth_path_of_offer offer_rid))
-          uri
-        |> wrap_timeout timeout
-      in
+      let** hdrs = headers Utilities.Verb.Get (auth_path_of_offer offer_rid) in
+      let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.offer_of_string body in
           result_or_error_with_result 200 value resp body)
 
     let query ?max_item_count ?continuation ?timeout query =
+      let** base_hdrs = headers Utilities.Verb.Post "" in
       let hdrs =
-        headers Utilities.Verb.Post ""
+        base_hdrs
         |> add_header "x-ms-documentdb-isquery" (string_of_bool true)
         |> Utilities.apply_to_header_if_some "x-ms-max-item-count" string_of_int
              max_item_count
@@ -1435,9 +1450,12 @@ struct
       let body = Json_converter_j.string_of_offer offer in
       let path = path_of_offer offer.Json_converter_t.rid in
       let uri = make_uri path in
-      let hdrs =
+      let** base_hdrs =
         json_headers resource Utilities.Verb.Put
           (auth_path_of_offer offer.Json_converter_t.rid)
+      in
+      let hdrs =
+        base_hdrs
         |> Utilities.apply_to_header_if_some
              "x-ms-cosmos-migrate-offer-to-autopilot" string_of_bool
              (match migrate with Some `To_autoscale -> Some true | _ -> None)
@@ -1525,10 +1543,118 @@ module Make_credential
     (IO : Databases_intf.IO)
     (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
     (C : Databases_intf.Credentials) =
-  Make_account (IO) (Http) (Auth_credential (C))
+  Make_account (IO) (Http) (Auth_credential (IO) (C))
 
 module Make
     (IO : Databases_intf.IO)
     (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
     (Auth_key : Databases_intf.Auth_key) =
-  Make_account (IO) (Http) (Auth (Auth_key))
+  Make_account (IO) (Http) (Auth (IO) (Auth_key))
+
+module Auth_aad
+    (IO : Databases_intf.IO)
+    (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
+    (A : Databases_intf.Aad_client) : Account with type 'a io = 'a IO.t = struct
+  type 'a io = 'a IO.t
+  type resource = Dbs | Colls | Docs | Users | Permissions | Offers | Pkranges
+
+  let ( let* ) = IO.bind
+
+  let token_uri =
+    Uri.of_string
+      (Printf.sprintf "%s/%s/oauth2/v2.0/token" A.authority_host A.tenant_id)
+
+  let token_body =
+    Uri.encoded_of_query
+      [
+        ("grant_type", [ "client_credentials" ]);
+        ("client_id", [ A.client_id ]);
+        ("client_secret", [ A.client_secret ]);
+        ("scope", [ A.scope ]);
+      ]
+
+  let token_headers =
+    Cohttp.Header.init_with "Content-Type" "application/x-www-form-urlencoded"
+
+  let refresh_margin_seconds = 300.
+  let token_request_timeout = 30.
+
+  type cache = {
+    mutable token : string option;
+    mutable expires_at : float;
+    mutable in_flight : (string, cosmos_error) result IO.t option;
+  }
+
+  let cache = { token = None; expires_at = 0.; in_flight = None }
+
+  let parse_token_response body =
+    try
+      let open Yojson.Safe.Util in
+      let json = Yojson.Safe.from_string body in
+      let token = json |> member "access_token" |> to_string in
+      let expires_in =
+        match json |> member "expires_in" with
+        | `Int i -> float_of_int i
+        | `Intlit s | `String s -> ( try float_of_string s with _ -> 3600.)
+        | _ -> 3600.
+      in
+      Some (token, expires_in)
+    with _ -> None
+
+  let acquire () : (string, cosmos_error) result IO.t =
+    let* response =
+      IO.with_timeout token_request_timeout
+        (Http.post ~headers:token_headers ~body:token_body token_uri)
+    in
+    match response with
+    | None -> IO.return (Error Timeout_error)
+    | Some (Error Connection_refused) -> IO.return (Error Connection_error)
+    | Some (Error (Other_error _exn)) -> IO.return (Error Connection_error)
+    | Some (Ok (resp, body)) ->
+        let code =
+          resp |> Cohttp.Response.status |> Cohttp.Code.code_of_status
+        in
+        if code / 100 = 2 then
+          match parse_token_response body with
+          | Some (token, expires_in) ->
+              cache.token <- Some token;
+              cache.expires_at <- A.now () +. expires_in;
+              IO.return (Ok token)
+          | None ->
+              IO.return
+                (Error
+                   (Azure_error (code, Response_headers.get_header resp)))
+        else
+          IO.return
+            (Error
+               (Azure_error (code, Response_headers.get_header resp)))
+
+  let get_token () =
+    match cache.token with
+    | Some t when A.now () +. refresh_margin_seconds < cache.expires_at ->
+        IO.return (Ok t)
+    | _ -> (
+        match cache.in_flight with
+        | Some pending -> pending
+        | None ->
+            let pending = acquire () in
+            cache.in_flight <- Some pending;
+            IO.bind pending (fun r ->
+                cache.in_flight <- None;
+                IO.return r))
+
+  let authorization _verb _resource _date _db_name =
+    let* res = get_token () in
+    IO.return
+      (Result.map
+         (fun tok -> Utility.authorization_token_using_aad_token tok)
+         res)
+
+  let endpoint = A.endpoint
+end
+
+module Make_aad
+    (IO : Databases_intf.IO)
+    (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
+    (A : Databases_intf.Aad_client) =
+  Make_account (IO) (Http) (Auth_aad (IO) (Http) (A))
