@@ -148,15 +148,12 @@ struct
     | Error _ -> Alcotest.fail "Mixed operations batch should succeed"
 
   let empty_batch_test () =
-    let* () = setup_collection () in
     let ops = [] in
-    let* result =
-      D.Collection.Batch.execute ~partition_key:"pk" dbname coll_name ops
-    in
+    let result = D.Collection.Batch.validate ops in
     match result with
-    | Error (Batch_validation_error Empty_batch) -> IO.return ()
-    | Error _ -> Alcotest.fail "Expected Batch_validation_error Empty_batch"
-    | Ok _ -> Alcotest.fail "Empty batch should not succeed"
+    | Error Empty_batch -> IO.return ()
+    | Error _ -> Alcotest.fail "Expected Empty_batch"
+    | Ok _ -> Alcotest.fail "Empty batch should not validate"
 
   let max_operations_test () =
     let ops =
@@ -182,6 +179,14 @@ struct
     Alcotest.(check int) "Builder has 2 operations" 2 (length builder);
     let ops = to_operations builder in
     Alcotest.(check int) "Converted to 2 operations" 2 (List.length ops);
+    (match build builder with
+    | Ok built_ops ->
+        Alcotest.(check int) "Built 2 operations" 2 (List.length built_ops)
+    | Error _ -> Alcotest.fail "Valid builder should build");
+    (match build empty with
+    | Error Empty_batch -> ()
+    | Error _ -> Alcotest.fail "Expected Empty_batch"
+    | Ok _ -> Alcotest.fail "Empty builder should not build");
     IO.return ()
 
   let non_atomic_partial_test () =
