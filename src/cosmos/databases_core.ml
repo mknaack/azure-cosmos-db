@@ -1622,12 +1622,10 @@ module Auth_aad
               IO.return (Ok token)
           | None ->
               IO.return
-                (Error
-                   (Azure_error (code, Response_headers.get_header resp)))
+                (Error (Azure_error (code, Response_headers.get_header resp)))
         else
           IO.return
-            (Error
-               (Azure_error (code, Response_headers.get_header resp)))
+            (Error (Azure_error (code, Response_headers.get_header resp)))
 
   let get_token () =
     match cache.token with
