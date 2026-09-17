@@ -15,7 +15,7 @@ module D_token =
             Test_core.Resource_token_integration_tests.current_resource_token))
 
 module Lwt_config : Test_core.Test_io_intf.Config = struct
-  let prefix = "lwt"
+  let prefix = Test_core.Test_common_core.prefix "lwt"
 end
 
 (* Lwt IO implementation for the test functor *)

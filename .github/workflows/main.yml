@@ -100,6 +100,7 @@ jobs:
         env:
           AZURE_COSMOS_KEY: ${{secrets.AZURE_COSMOS_KEY}}
           AZURE_COSMOS_ENDPOINT: ${{vars.AZURE_COSMOS_ENDPOINT}}
+          AZURE_COSMOS_TEST_RUN_ID: gh${{github.run_id}}_${{github.run_attempt}}
         run: opam exec -- dune runtest --instrument-with bisect_ppx --force
 
       - name: Upload coverage to coveralls
