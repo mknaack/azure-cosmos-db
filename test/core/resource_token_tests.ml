@@ -3,10 +3,12 @@ open Mock_test_runner
 let token = Mock_auth.sample_resource_token
 let host = Mock_auth.endpoint
 
-module Master_account = Cosmos.Databases_core.Auth (Mock_auth.Auth)
+module Master_account = Cosmos.Databases_core.Auth (Mock_io) (Mock_auth.Auth)
 
 module Resource_token_account =
-  Cosmos.Databases_core.Auth_credential (Mock_auth.Resource_token_auth)
+  Cosmos.Databases_core.Auth_credential
+    (Mock_io)
+    (Mock_auth.Resource_token_auth)
 
 module Mock_db_as =
   Cosmos.Databases_core.Make_credential (Mock_io) (Mock_http_impl)
@@ -85,6 +87,17 @@ let header_exn name headers =
 
 let date = Utilities.Ms_time.create 0.
 
+let authorization_exn account verb resource date path =
+  match account verb resource date path with
+  | Ok header -> header
+  | Error _ -> Alcotest.fail "authorization should not fail"
+
+let resource_token_authorization verb resource date path =
+  authorization_exn Resource_token_account.authorization verb resource date path
+
+let master_authorization verb resource date path =
+  authorization_exn Master_account.authorization verb resource date path
+
 let resource_token_header_is_pct_encoded_token () =
   let expected =
     Uri.pct_encode ~component:`Userinfo token
@@ -94,13 +107,13 @@ let resource_token_header_is_pct_encoded_token () =
   in
   Alcotest.(check string)
     "Resource token is sent percent encoded" expected
-    (Resource_token_account.authorization Utilities.Verb.Get
-       Resource_token_account.Docs date "dbs/mydb/colls/mycoll")
+    (resource_token_authorization Utilities.Verb.Get Resource_token_account.Docs
+       date "dbs/mydb/colls/mycoll")
 
 let resource_token_header_has_no_master_type () =
   let actual =
-    Resource_token_account.authorization Utilities.Verb.Get
-      Resource_token_account.Docs date "dbs/mydb/colls/mycoll"
+    resource_token_authorization Utilities.Verb.Get Resource_token_account.Docs
+      date "dbs/mydb/colls/mycoll"
   in
   Alcotest.(check bool)
     "Token type is resource" true
@@ -111,7 +124,7 @@ let resource_token_header_has_no_master_type () =
 
 let resource_token_header_ignores_verb_and_path () =
   let authorization verb resource path =
-    Resource_token_account.authorization verb resource date path
+    resource_token_authorization verb resource date path
   in
   let reference =
     authorization Utilities.Verb.Get Resource_token_account.Docs
@@ -134,7 +147,7 @@ let master_key_header_unchanged () =
   in
   Alcotest.(check string)
     "Master key signing is unchanged" expected
-    (Master_account.authorization Utilities.Verb.Get Master_account.Docs date
+    (master_authorization Utilities.Verb.Get Master_account.Docs date
        "dbs/mydb/colls/mycoll")
 
 let resource_token_request_keeps_ms_headers () =

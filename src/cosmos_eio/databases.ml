@@ -168,3 +168,32 @@ let credentials_of_token_provider ~endpoint provider =
     let credential = Credential.Resource_token_provider provider
     let endpoint = endpoint
   end : Credentials)
+
+let credentials_of_aad_token ~endpoint token =
+  (module struct
+    let credential = Credential.Aad_token token
+    let endpoint = endpoint
+  end : Credentials)
+
+let credentials_of_aad_token_provider ~endpoint provider =
+  (module struct
+    let credential = Credential.Aad_token_provider provider
+    let endpoint = endpoint
+  end : Credentials)
+
+module type Aad = Cosmos.Databases_intf.Aad
+module type Aad_client = Cosmos.Databases_intf.Aad_client
+
+module Database_aad (A : Aad) = struct
+  module Aad_config =
+    Cosmos.Databases_core.Aad_client_of_aad
+      (A)
+      (struct
+        let now = Unix.gettimeofday
+      end)
+
+  include Cosmos.Databases_core.Make_aad (Eio_io) (Eio_http) (Aad_config)
+end
+
+let aad_client ?scope ?authority_host ?(now = Unix.gettimeofday) =
+  Cosmos.Databases_core.aad_client ?scope ?authority_host ~now

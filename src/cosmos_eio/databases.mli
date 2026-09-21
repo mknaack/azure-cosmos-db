@@ -5,6 +5,8 @@ module Credential : sig
     | Master_key of string
     | Resource_token of string
     | Resource_token_provider of (unit -> string)
+    | Aad_token of string
+    | Aad_token_provider of (unit -> string)
 end
 
 module type Credentials = Cosmos.Databases_intf.Credentials
@@ -72,3 +74,42 @@ val credentials_of_token_provider :
   endpoint:string -> (unit -> string) -> (module Credentials)
 (** [credentials_of_token_provider ~endpoint provider] calls [provider] for
     every request, so callers can refresh expiring resource tokens. *)
+
+val credentials_of_aad_token : endpoint:string -> string -> (module Credentials)
+(** [credentials_of_aad_token ~endpoint token] wraps a Microsoft Entra ID access
+    token (e.g.
+    [az account get-access-token --resource https://cosmos.azure.com]) as
+    credentials suitable for [Database_as]. Unlike a resource token, an Entra
+    token authorizes every operation, including [list_databases], [User],
+    [Permission] and [Offer]. *)
+
+val credentials_of_aad_token_provider :
+  endpoint:string -> (unit -> string) -> (module Credentials)
+(** [credentials_of_aad_token_provider ~endpoint provider] calls [provider] for
+    every request, so callers running their own refresh loop (managed identity,
+    token broker) always supply a fresh Entra access token. *)
+
+module type Aad = Cosmos.Databases_intf.Aad
+module type Aad_client = Cosmos.Databases_intf.Aad_client
+
+(** [Database_aad] connects with SDK-managed Microsoft Entra ID client
+    credentials. The first request acquires a token from
+    [https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token]; the token is
+    cached and refreshed before expiry. The service principal needs a data-plane
+    role assignment (e.g. Cosmos DB Built-in Data Contributor); control-plane
+    roles do not apply. *)
+module Database_aad (A : Aad) : S
+
+val aad_client :
+  ?scope:string ->
+  ?authority_host:string ->
+  ?now:(unit -> float) ->
+  endpoint:string ->
+  tenant_id:string ->
+  client_id:string ->
+  client_secret:string ->
+  unit ->
+  (module Aad_client)
+(** [aad_client] builds a full {!Cosmos.Databases_intf.Aad_client} module for
+    sovereign clouds, a custom scope, or an injected clock; [Database_aad]
+    covers the common case. *)
