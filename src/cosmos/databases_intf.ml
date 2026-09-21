@@ -17,6 +17,13 @@ module type Credentials = sig
   val endpoint : string
 end
 
+module type Aad = sig
+  val endpoint : string
+  val tenant_id : string
+  val client_id : string
+  val client_secret : string
+end
+
 module type Aad_client = sig
   val endpoint : string
   val tenant_id : string

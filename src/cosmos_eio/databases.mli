@@ -89,13 +89,7 @@ val credentials_of_aad_token_provider :
     every request, so callers running their own refresh loop (managed identity,
     token broker) always supply a fresh Entra access token. *)
 
-module type Aad = sig
-  val endpoint : string
-  val tenant_id : string
-  val client_id : string
-  val client_secret : string
-end
-
+module type Aad = Cosmos.Databases_intf.Aad
 module type Aad_client = Cosmos.Databases_intf.Aad_client
 
 (** [Database_aad] connects with SDK-managed Microsoft Entra ID client

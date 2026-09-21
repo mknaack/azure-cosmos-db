@@ -1551,6 +1551,36 @@ module Make
     (Auth_key : Databases_intf.Auth_key) =
   Make_account (IO) (Http) (Auth (IO) (Auth_key))
 
+let default_aad_scope = "https://cosmos.azure.com/.default"
+let default_aad_authority_host = "https://login.microsoftonline.com"
+
+let aad_client ?(scope = default_aad_scope)
+    ?(authority_host = default_aad_authority_host) ~now ~endpoint ~tenant_id
+    ~client_id ~client_secret () : (module Databases_intf.Aad_client) =
+  (module struct
+    let endpoint = endpoint
+    let tenant_id = tenant_id
+    let client_id = client_id
+    let client_secret = client_secret
+    let scope = scope
+    let authority_host = authority_host
+    let now = now
+  end : Databases_intf.Aad_client)
+
+module Aad_client_of_aad
+    (A : Databases_intf.Aad)
+    (Clock : sig
+      val now : unit -> float
+    end) : Databases_intf.Aad_client = struct
+  let endpoint = A.endpoint
+  let tenant_id = A.tenant_id
+  let client_id = A.client_id
+  let client_secret = A.client_secret
+  let scope = default_aad_scope
+  let authority_host = default_aad_authority_host
+  let now = Clock.now
+end
+
 module Auth_aad
     (IO : Databases_intf.IO)
     (Http : Databases_intf.Http_client with type 'a io := 'a IO.t)
@@ -1579,13 +1609,14 @@ module Auth_aad
   let refresh_margin_seconds = 300.
   let token_request_timeout = 30.
 
-  type cache = {
-    mutable token : string option;
-    mutable expires_at : float;
-    mutable in_flight : (string, cosmos_error) result IO.t option;
-  }
+  type token = { value : string; expires_at : float }
 
-  let cache = { token = None; expires_at = 0.; in_flight = None }
+  type state =
+    | Idle
+    | Cached of token
+    | Acquiring of (string, cosmos_error) result IO.t
+
+  let state = ref Idle
 
   let parse_token_response body =
     try
@@ -1601,7 +1632,7 @@ module Auth_aad
       Some (token, expires_in)
     with _ -> None
 
-  let acquire () : (string, cosmos_error) result IO.t =
+  let acquire () : (token, cosmos_error) result IO.t =
     let* response =
       IO.with_timeout token_request_timeout
         (Http.post ~headers:token_headers ~body:token_body token_uri)
@@ -1617,9 +1648,8 @@ module Auth_aad
         if code / 100 = 2 then
           match parse_token_response body with
           | Some (token, expires_in) ->
-              cache.token <- Some token;
-              cache.expires_at <- A.now () +. expires_in;
-              IO.return (Ok token)
+              IO.return
+                (Ok { value = token; expires_at = A.now () +. expires_in })
           | None ->
               IO.return
                 (Error (Azure_error (code, Response_headers.get_header resp)))
@@ -1628,18 +1658,26 @@ module Auth_aad
             (Error (Azure_error (code, Response_headers.get_header resp)))
 
   let get_token () =
-    match cache.token with
-    | Some t when A.now () +. refresh_margin_seconds < cache.expires_at ->
-        IO.return (Ok t)
-    | _ -> (
-        match cache.in_flight with
-        | Some pending -> pending
-        | None ->
-            let pending = acquire () in
-            cache.in_flight <- Some pending;
-            IO.bind pending (fun r ->
-                cache.in_flight <- None;
-                IO.return r))
+    match !state with
+    | Cached t when A.now () +. refresh_margin_seconds < t.expires_at ->
+        IO.return (Ok t.value)
+    | Acquiring pending -> pending
+    | Idle | Cached _ ->
+        let completed_state = ref None in
+        let pending =
+          IO.bind (acquire ()) (fun r ->
+              let next_state =
+                match r with Ok t -> Cached t | Error _ -> Idle
+              in
+              completed_state := Some next_state;
+              state := next_state;
+              IO.return (Result.map (fun t -> t.value) r))
+        in
+        state := Acquiring pending;
+        (match !completed_state with
+        | Some next_state -> state := next_state
+        | None -> ());
+        pending
 
   let authorization _verb _resource _date _db_name =
     let* res = get_token () in
