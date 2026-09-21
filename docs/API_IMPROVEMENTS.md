@@ -155,7 +155,7 @@ The library uses a **functor-based architecture** with:
   `Change_feed` / `Batch` / `Batch_builder`, with account-scoped `User`, `Permission` and `Offer`
   modules alongside `Collection`
 - Document operations: `create`, `create_multiple`, `get`, `replace`, `delete`, `delete_multiple`, `list`, `query`
-- Transactional batch: `Batch.execute` (`?atomic`, `?should_validate`) with `Batch_builder` for fluent construction
+- Transactional batch: `Batch.execute` (`?atomic`) with `Batch_builder` for fluent construction; validation is opt-in via `Batch.validate` / `Batch_builder.build`
 - Change feed: `Change_feed.read` / `drain` / `fold` with `Mode.t`, `Start_from.t`, `Scope.t`,
   `etag` checkpoints and `is_partition_split`; `Partition_key_range.list` / `ids` for fan-out
 - Throughput: `Offer.list` / `get` / `query` / `replace` plus `get_throughput` / `set_throughput`
@@ -164,7 +164,7 @@ The library uses a **functor-based architecture** with:
 - Authentication: master key or resource token — `Make (IO) (Http) (Auth_key)` remains the
   master-key entry point, while `Make_credential` / `Database_as (C : Credentials)` accept a
   `Credential.t`; `Make_account` exposes the `Account` seam for future schemes (e.g. Entra ID)
-- Errors are a single `cosmos_error` variant: `Timeout_error`, `Connection_error`, `Azure_error`, `Batch_validation_error`
+- Errors are a single `cosmos_error` variant: `Timeout_error`, `Connection_error`, `Azure_error`; batch validation failures use a separate `batch_validation_error` type (exposed as `Batch.validation_error`), not a `cosmos_error` variant
 - Shared retry/throttle handling via `with_throttle_retry` in `databases_core.ml`
 - Test infrastructure: functor-based mocks (`Mock_io`, `Mock_http`, `Mock_response`) allowing HTTP-free unit tests
 
@@ -1099,7 +1099,6 @@ module Batch : sig
   val execute :
     ?timeout:float ->
     ?atomic:bool ->
-    ?should_validate:bool ->
     partition_key:string ->
     string ->            (* dbname *)
     string ->            (* coll_name *)
@@ -1110,16 +1109,17 @@ end
 
 Usage:
 ```ocaml
-let ops =
+match
   Batch_builder.empty
   |> Batch_builder.add_create ~body:doc_json
   |> Batch_builder.add_patch ~id:"doc2" ~patch_op:(Batch.Increment { path = "/count"; value = 1 })
-  |> Batch_builder.to_operations
-
-let%lwt result = Batch.execute ~partition_key:"user123" "mydb" "users" ops
+  |> Batch_builder.build
+with
+| Error e -> (* handle Batch.validation_error *)
+| Ok ops -> Batch.execute ~partition_key:"user123" "mydb" "users" ops
 ```
 
-Validation is performed client-side before the request (max 100 operations, non-empty, no mixing of patch and non-patch operations) and returns `Error (Batch_validation_error _)` rather than raising.
+Validation is opt-in and checked client-side (max 100 operations, non-empty, no mixing of patch and non-patch operations): `Batch.validate` returns `(unit, validation_error) result`, and `Batch_builder.build` validates then returns the operations as `(operation list, validation_error) result`. `Batch.execute` itself performs no validation — an invalid batch is sent to the service and rejected there. `validation_error` is deliberately a separate type from `cosmos_error`, since these checks are client-side.
 
 **Remaining gaps:**
 - No `Transaction` monad / typed item wrapper — operations carry raw JSON strings
