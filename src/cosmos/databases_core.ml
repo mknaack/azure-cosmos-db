@@ -1614,7 +1614,7 @@ module Auth_aad
   type state =
     | Idle
     | Cached of token
-    | Acquiring of (string, cosmos_error) result IO.t
+    | Acquiring of (token, cosmos_error) result IO.t
 
   let state = ref Idle
 
@@ -1657,27 +1657,19 @@ module Auth_aad
           IO.return
             (Error (Azure_error (code, Response_headers.get_header resp)))
 
+  let value_of r = Result.map (fun t -> t.value) r
+
   let get_token () =
     match !state with
     | Cached t when A.now () +. refresh_margin_seconds < t.expires_at ->
         IO.return (Ok t.value)
-    | Acquiring pending -> pending
+    | Acquiring pending -> IO.bind pending (fun r -> IO.return (value_of r))
     | Idle | Cached _ ->
-        let completed_state = ref None in
-        let pending =
-          IO.bind (acquire ()) (fun r ->
-              let next_state =
-                match r with Ok t -> Cached t | Error _ -> Idle
-              in
-              completed_state := Some next_state;
-              state := next_state;
-              IO.return (Result.map (fun t -> t.value) r))
-        in
+        let pending = acquire () in
         state := Acquiring pending;
-        (match !completed_state with
-        | Some next_state -> state := next_state
-        | None -> ());
-        pending
+        IO.bind pending (fun r ->
+            (state := match r with Ok t -> Cached t | Error _ -> Idle);
+            IO.return (value_of r))
 
   let authorization _verb _resource _date _db_name =
     let* res = get_token () in
