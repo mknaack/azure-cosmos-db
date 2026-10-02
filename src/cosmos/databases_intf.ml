@@ -3,6 +3,8 @@ module Credential = struct
     | Master_key of string
     | Resource_token of string
     | Resource_token_provider of (unit -> string)
+    | Aad_token of string
+    | Aad_token_provider of (unit -> string)
 end
 
 module type Auth_key = sig
@@ -13,6 +15,23 @@ end
 module type Credentials = sig
   val credential : Credential.t
   val endpoint : string
+end
+
+module type Aad = sig
+  val endpoint : string
+  val tenant_id : string
+  val client_id : string
+  val client_secret : string
+end
+
+module type Aad_client = sig
+  val endpoint : string
+  val tenant_id : string
+  val client_id : string
+  val client_secret : string
+  val scope : string
+  val authority_host : string
+  val now : unit -> float
 end
 
 module type IO = sig
