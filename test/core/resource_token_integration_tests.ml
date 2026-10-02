@@ -31,6 +31,7 @@ struct
         Alcotest.fail (Printf.sprintf "%s: %d" prefix code)
     | Timeout_error -> Alcotest.fail (prefix ^ ": timeout")
     | Connection_error -> Alcotest.fail (prefix ^ ": connection error")
+    | Http_error message -> Alcotest.fail (prefix ^ ": http error: " ^ message)
 
   let create_database_test () =
     let* res = D.create dbname in

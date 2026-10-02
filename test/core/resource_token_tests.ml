@@ -194,6 +194,20 @@ let document_get_connection_refused () =
       | Error _ -> Alcotest.fail "Expected Connection_error"
       | Ok _ -> Alcotest.fail "Should not succeed")
 
+let document_get_other_http_error () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_document_get (Error (Mock_http.Other_error (Failure "tls failed")));
+      match get_document_as () with
+      | Error (Cosmos.Databases_core.Http_error message as e) ->
+          Alcotest.(check string)
+            "Exception is described" "Failure(\"tls failed\")" message;
+          Alcotest.(check string)
+            "Readable error" "HTTP error: Failure(\"tls failed\")"
+            (Cosmos.Databases_core.string_of_cosmos_error e)
+      | Error _ -> Alcotest.fail "Expected Http_error"
+      | Ok _ -> Alcotest.fail "Should not succeed")
+
 let token_provider_called_per_request () =
   let http = Mock_http.create () in
   provider_calls := 0;
@@ -292,6 +306,7 @@ let tests =
     ("document_list_unauthorized", `Quick, document_list_unauthorized);
     ("document_get_timeout", `Quick, document_get_timeout);
     ("document_get_connection_refused", `Quick, document_get_connection_refused);
+    ("document_get_other_http_error", `Quick, document_get_other_http_error);
     ( "token_provider_called_per_request",
       `Quick,
       token_provider_called_per_request );

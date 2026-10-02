@@ -61,8 +61,10 @@ type batch_validation_error = Cosmos.Databases_core.batch_validation_error =
 type cosmos_error = Cosmos.Databases_core.cosmos_error =
   | Timeout_error
   | Connection_error
+  | Http_error of string
   | Azure_error of int * Response_headers.t
 
+let string_of_cosmos_error = Cosmos.Databases_core.string_of_cosmos_error
 let body_to_string body = Cohttp_lwt.Body.to_string body
 
 module Database (Auth : Auth_key) =

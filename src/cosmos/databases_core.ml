@@ -132,7 +132,14 @@ type batch_validation_error =
 type cosmos_error =
   | Timeout_error
   | Connection_error
+  | Http_error of string
   | Azure_error of int * Response_headers.t
+
+let string_of_cosmos_error = function
+  | Timeout_error -> "Timeout"
+  | Connection_error -> "Connection refused"
+  | Http_error message -> "HTTP error: " ^ message
+  | Azure_error (code, _) -> "Azure error: HTTP status " ^ string_of_int code
 
 module Make_account
     (IO : Databases_intf.IO)
@@ -191,7 +198,8 @@ struct
 
   let handle_http_error = function
     | Http.Connection_refused -> connection_error
-    | Http.Other_error _exn -> connection_error
+    | Http.Other_error exn ->
+        IO.return (Error (Http_error (Printexc.to_string exn)))
 
   let make_uri path = Uri.make ~scheme:"https" ~host ~port:443 ~path ()
 
