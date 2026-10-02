@@ -17,7 +17,7 @@ module type DB = sig
     ?timeout:float ->
     unit ->
     ( int * Cosmos.Json_converter_t.list_databases,
-      Cosmos.Databases_core.cosmos_error )
+      Cosmos.Databases_core.Cosmos_error.t )
     result
     io
 
@@ -25,7 +25,7 @@ module type DB = sig
     ?timeout:float ->
     string ->
     ( int * Cosmos.Json_converter_t.database option,
-      Cosmos.Databases_core.cosmos_error )
+      Cosmos.Databases_core.Cosmos_error.t )
     result
     io
 
@@ -33,7 +33,7 @@ module type DB = sig
     ?timeout:float ->
     string ->
     ( int * Cosmos.Json_converter_t.database option,
-      Cosmos.Databases_core.cosmos_error )
+      Cosmos.Databases_core.Cosmos_error.t )
     result
     io
 
@@ -41,21 +41,21 @@ module type DB = sig
     ?timeout:float ->
     string ->
     ( int * Cosmos.Json_converter_t.database option,
-      Cosmos.Databases_core.cosmos_error )
+      Cosmos.Databases_core.Cosmos_error.t )
     result
     io
 
   val delete :
     ?timeout:float ->
     string ->
-    (int, Cosmos.Databases_core.cosmos_error) result io
+    (int, Cosmos.Databases_core.Cosmos_error.t) result io
 
   module Collection : sig
     val list :
       ?timeout:float ->
       string ->
       ( int * Cosmos.Json_converter_t.list_collections,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -67,7 +67,7 @@ module type DB = sig
       string ->
       string ->
       ( int * Cosmos.Json_converter_t.collection option,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -79,7 +79,7 @@ module type DB = sig
       string ->
       string ->
       ( int * Cosmos.Json_converter_t.collection option,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -88,7 +88,7 @@ module type DB = sig
       string ->
       string ->
       ( int * Cosmos.Json_converter_t.collection option,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -96,7 +96,7 @@ module type DB = sig
       ?timeout:float ->
       string ->
       string ->
-      (int, Cosmos.Databases_core.cosmos_error) result io
+      (int, Cosmos.Databases_core.Cosmos_error.t) result io
 
     module Document : sig
       type indexing_directive = Include | Exclude
@@ -110,7 +110,7 @@ module type DB = sig
         string ->
         string ->
         ( int * Cosmos.Json_converter_t.collection option,
-          Cosmos.Databases_core.cosmos_error )
+          Cosmos.Databases_core.Cosmos_error.t )
         result
         io
 
@@ -123,7 +123,7 @@ module type DB = sig
         string ->
         (string * string) list ->
         ( int * Cosmos.Json_converter_t.collection option,
-          Cosmos.Databases_core.cosmos_error )
+          Cosmos.Databases_core.Cosmos_error.t )
         result
         list
         io
@@ -154,7 +154,7 @@ module type DB = sig
         string ->
         string ->
         ( int * Cosmos.Databases_core.Response_headers.t * list_result,
-          Cosmos.Databases_core.cosmos_error )
+          Cosmos.Databases_core.Cosmos_error.t )
         result
         io
 
@@ -171,7 +171,7 @@ module type DB = sig
         string ->
         string ->
         string ->
-        (int * string, Cosmos.Databases_core.cosmos_error) result io
+        (int * string, Cosmos.Databases_core.Cosmos_error.t) result io
 
       val replace :
         ?indexing_directive:indexing_directive ->
@@ -182,7 +182,7 @@ module type DB = sig
         string ->
         string ->
         string ->
-        (int * string, Cosmos.Databases_core.cosmos_error) result io
+        (int * string, Cosmos.Databases_core.Cosmos_error.t) result io
 
       val delete :
         partition_key:string ->
@@ -190,7 +190,7 @@ module type DB = sig
         string ->
         string ->
         string ->
-        (int, Cosmos.Databases_core.cosmos_error) result io
+        (int, Cosmos.Databases_core.Cosmos_error.t) result io
 
       val delete_multiple :
         partition_key:string ->
@@ -199,7 +199,7 @@ module type DB = sig
         string ->
         string ->
         string list ->
-        (int, Cosmos.Databases_core.cosmos_error) result list io
+        (int, Cosmos.Databases_core.Cosmos_error.t) result list io
 
       val query :
         ?max_item_count:int ->
@@ -213,7 +213,7 @@ module type DB = sig
         string ->
         Cosmos.Json_converter_t.query ->
         ( int * Cosmos.Databases_core.Response_headers.t * list_result,
-          Cosmos.Databases_core.cosmos_error )
+          Cosmos.Databases_core.Cosmos_error.t )
         result
         io
     end
@@ -228,7 +228,7 @@ module type DB = sig
         ( int
           * Cosmos.Databases_core.Response_headers.t
           * Cosmos.Json_converter_t.list_partition_key_ranges,
-          Cosmos.Databases_core.cosmos_error )
+          Cosmos.Databases_core.Cosmos_error.t )
         result
         io
 
@@ -236,7 +236,7 @@ module type DB = sig
         ?timeout:float ->
         string ->
         string ->
-        (int * string list, Cosmos.Databases_core.cosmos_error) result io
+        (int * string list, Cosmos.Databases_core.Cosmos_error.t) result io
     end
 
     module Change_feed : sig
@@ -290,7 +290,7 @@ module type DB = sig
         string ->
         string ->
         ( int * Cosmos.Databases_core.Response_headers.t * page option,
-          Cosmos.Databases_core.cosmos_error )
+          Cosmos.Databases_core.Cosmos_error.t )
         result
         io
 
@@ -303,7 +303,7 @@ module type DB = sig
         ?timeout:float ->
         string ->
         string ->
-        (drain_result, Cosmos.Databases_core.cosmos_error) result io
+        (drain_result, Cosmos.Databases_core.Cosmos_error.t) result io
 
       val fold :
         ?mode:Mode.t ->
@@ -317,7 +317,7 @@ module type DB = sig
         string ->
         init:'acc ->
         f:('acc -> page -> ('acc, string) result io) ->
-        ('acc * string, Cosmos.Databases_core.cosmos_error) result io
+        ('acc * string, Cosmos.Databases_core.Cosmos_error.t) result io
     end
 
     module Batch : sig
@@ -387,7 +387,7 @@ module type DB = sig
         string ->
         string ->
         operation list ->
-        (batch_result, Cosmos.Databases_core.cosmos_error) result io
+        (batch_result, Cosmos.Databases_core.Cosmos_error.t) result io
     end
 
     module Batch_builder : sig
@@ -434,7 +434,7 @@ module type DB = sig
       string ->
       string ->
       ( int * Cosmos.Json_converter_t.user,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -442,7 +442,7 @@ module type DB = sig
       ?timeout:float ->
       string ->
       ( int * Cosmos.Json_converter_t.list_users,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -451,7 +451,7 @@ module type DB = sig
       string ->
       string ->
       ( int * Cosmos.Json_converter_t.user,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -461,7 +461,7 @@ module type DB = sig
       string ->
       string ->
       ( int * Cosmos.Json_converter_t.user,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -469,7 +469,7 @@ module type DB = sig
       ?timeout:float ->
       string ->
       string ->
-      (int, Cosmos.Databases_core.cosmos_error) result io
+      (int, Cosmos.Databases_core.Cosmos_error.t) result io
   end
 
   module Permission : sig
@@ -484,7 +484,7 @@ module type DB = sig
       permission_mode ->
       permission_name:string ->
       ( int * Cosmos.Json_converter_t.permission,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -494,7 +494,7 @@ module type DB = sig
       user_name:string ->
       unit ->
       ( int * Cosmos.Json_converter_t.list_permissions,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -506,7 +506,7 @@ module type DB = sig
       permission_name:string ->
       unit ->
       ( int * Cosmos.Json_converter_t.permission,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -519,7 +519,7 @@ module type DB = sig
       permission_mode ->
       permission_name:string ->
       ( int * Cosmos.Json_converter_t.permission,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -529,7 +529,7 @@ module type DB = sig
       user_name:string ->
       permission_name:string ->
       unit ->
-      (int, Cosmos.Databases_core.cosmos_error) result io
+      (int, Cosmos.Databases_core.Cosmos_error.t) result io
   end
 
   module Offer : sig
@@ -545,7 +545,7 @@ module type DB = sig
       ?timeout:float ->
       unit ->
       ( int * Cosmos.Json_converter_t.list_offers,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -553,7 +553,7 @@ module type DB = sig
       ?timeout:float ->
       string ->
       ( int * Cosmos.Json_converter_t.offer,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -565,7 +565,7 @@ module type DB = sig
       ( int
         * Cosmos.Databases_core.Response_headers.t
         * Cosmos.Json_converter_t.list_offers,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -575,7 +575,7 @@ module type DB = sig
       Cosmos.Json_converter_t.offer ->
       Throughput.t ->
       ( int * Cosmos.Json_converter_t.offer,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -584,7 +584,7 @@ module type DB = sig
       string ->
       string ->
       ( int * Cosmos.Json_converter_t.offer option,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -592,7 +592,7 @@ module type DB = sig
       ?timeout:float ->
       string ->
       ( int * Cosmos.Json_converter_t.offer option,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
 
@@ -600,7 +600,8 @@ module type DB = sig
       ?timeout:float ->
       string ->
       string ->
-      (int * Throughput.t option, Cosmos.Databases_core.cosmos_error) result io
+      (int * Throughput.t option, Cosmos.Databases_core.Cosmos_error.t) result
+      io
 
     val set_throughput :
       ?migrate:[ `To_autoscale | `To_manual ] ->
@@ -609,7 +610,7 @@ module type DB = sig
       string ->
       Throughput.t ->
       ( int * Cosmos.Json_converter_t.offer,
-        Cosmos.Databases_core.cosmos_error )
+        Cosmos.Databases_core.Cosmos_error.t )
       result
       io
   end

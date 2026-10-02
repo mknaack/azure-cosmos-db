@@ -146,13 +146,13 @@ type batch_validation_error = Cosmos.Databases_core.batch_validation_error =
   | Mixed_patch_operations
   | Empty_batch
 
-type cosmos_error = Cosmos.Databases_core.cosmos_error =
+type cosmos_error = Cosmos.Databases_core.Cosmos_error.t =
   | Timeout_error
   | Connection_error
   | Http_error of string
   | Azure_error of int * Response_headers.t
 
-let string_of_cosmos_error = Cosmos.Databases_core.string_of_cosmos_error
+let string_of_cosmos_error = Cosmos.Databases_core.Cosmos_error.string_of
 
 module Database (Auth : Auth_key) =
   Cosmos.Databases_core.Make (Eio_io) (Eio_http) (Auth)

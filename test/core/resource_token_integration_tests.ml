@@ -27,11 +27,13 @@ struct
       partition_key
 
   let fail_error prefix = function
-    | Azure_error (code, _) ->
+    | Cosmos_error.Azure_error (code, _) ->
         Alcotest.fail (Printf.sprintf "%s: %d" prefix code)
-    | Timeout_error -> Alcotest.fail (prefix ^ ": timeout")
-    | Connection_error -> Alcotest.fail (prefix ^ ": connection error")
-    | Http_error message -> Alcotest.fail (prefix ^ ": http error: " ^ message)
+    | Cosmos_error.Timeout_error -> Alcotest.fail (prefix ^ ": timeout")
+    | Cosmos_error.Connection_error ->
+        Alcotest.fail (prefix ^ ": connection error")
+    | Cosmos_error.Http_error message ->
+        Alcotest.fail (prefix ^ ": http error: " ^ message)
 
   let create_database_test () =
     let* res = D.create dbname in
@@ -104,7 +106,7 @@ struct
         another_document
     in
     match res with
-    | Result.Error (Azure_error (code, _)) ->
+    | Result.Error (Cosmos_error.Azure_error (code, _)) ->
         Alcotest.(check int) "Read permission forbids writes" 403 code;
         IO.return ()
     | Result.Error e -> fail_error "Should return an azure error" e
@@ -116,7 +118,7 @@ struct
   let read_database_with_resource_token_test () =
     let* res = Dt.get dbname in
     match res with
-    | Result.Error (Azure_error (code, _)) ->
+    | Result.Error (Cosmos_error.Azure_error (code, _)) ->
         Alcotest.(check bool)
           "Reading outside the permission is rejected" true
           (code = 401 || code = 403);

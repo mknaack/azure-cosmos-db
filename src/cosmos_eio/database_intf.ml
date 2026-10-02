@@ -7,7 +7,7 @@ type batch_validation_error = Cosmos.Databases_core.batch_validation_error =
   | Mixed_patch_operations
   | Empty_batch
 
-type cosmos_error = Cosmos.Databases_core.cosmos_error
+type cosmos_error = Cosmos.Databases_core.Cosmos_error.t
 
 module Response_headers = Cosmos.Databases_core.Response_headers
 
