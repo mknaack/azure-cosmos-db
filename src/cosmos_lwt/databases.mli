@@ -29,6 +29,7 @@ module Response_headers : sig
   val x_ms_serviceversion : t -> string option
   val x_ms_session_token : t -> string option
   val x_ms_substatus : t -> string option
+  val string_of : t -> string
 end
 
 type batch_validation_error = Cosmos.Databases_core.batch_validation_error =
@@ -36,10 +37,14 @@ type batch_validation_error = Cosmos.Databases_core.batch_validation_error =
   | Mixed_patch_operations
   | Empty_batch
 
-type cosmos_error = Cosmos.Databases_core.cosmos_error =
+type cosmos_error = Cosmos.Databases_core.Cosmos_error.t =
   | Timeout_error
   | Connection_error
+  | Http_error of string
   | Azure_error of int * Response_headers.t
+
+val string_of_cosmos_error : cosmos_error -> string
+(** Human-readable description of a [cosmos_error]. *)
 
 module type S = Database_intf.S
 

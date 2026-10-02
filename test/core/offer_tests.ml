@@ -18,7 +18,8 @@ struct
   let rec with_offer_retry attempts f =
     let* result = f () in
     match result with
-    | Error (Azure_error ((423 | 429 | 449), _)) when attempts > 0 ->
+    | Error (Cosmos_error.Azure_error ((423 | 429 | 449), _)) when attempts > 0
+      ->
         let* () = IO.sleep 2.0 in
         with_offer_retry (attempts - 1) f
     | result -> IO.return result

@@ -167,7 +167,7 @@ let document_list_error code =
       expect_document_list
         (Ok (Mock_response.error_response ~code ~message:"denied"));
       match list_documents_as () with
-      | Error (Cosmos.Databases_core.Azure_error (actual, _)) ->
+      | Error (Cosmos.Databases_core.Cosmos_error.Azure_error (actual, _)) ->
           Alcotest.(check int) "Azure error code" code actual
       | Error _ -> Alcotest.fail "Expected an Azure error"
       | Ok _ -> Alcotest.fail "Should not succeed")
@@ -181,7 +181,7 @@ let document_get_timeout () =
       expect_document_get (Ok (Mock_response.make_response "{}"));
       Mock_io.with_timeouts_enabled (fun () ->
           match get_document_as ~timeout:0.0 () with
-          | Error Cosmos.Databases_core.Timeout_error -> ()
+          | Error Cosmos.Databases_core.Cosmos_error.Timeout_error -> ()
           | Error _ -> Alcotest.fail "Expected Timeout_error"
           | Ok _ -> Alcotest.fail "Should not succeed"))
 
@@ -190,8 +190,38 @@ let document_get_connection_refused () =
   Mock_http.with_mock http (fun () ->
       expect_document_get (Error Mock_http.Connection_refused);
       match get_document_as () with
-      | Error Cosmos.Databases_core.Connection_error -> ()
+      | Error Cosmos.Databases_core.Cosmos_error.Connection_error -> ()
       | Error _ -> Alcotest.fail "Expected Connection_error"
+      | Ok _ -> Alcotest.fail "Should not succeed")
+
+let document_get_other_http_error () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_document_get (Error (Mock_http.Other_error (Failure "tls failed")));
+      match get_document_as () with
+      | Error (Cosmos.Databases_core.Cosmos_error.Http_error message as e) ->
+          Alcotest.(check string)
+            "Exception is described" "Failure(\"tls failed\")" message;
+          Alcotest.(check string)
+            "Readable error" "HTTP error: Failure(\"tls failed\")"
+            (Cosmos.Databases_core.Cosmos_error.string_of e)
+      | Error _ -> Alcotest.fail "Expected Http_error"
+      | Ok _ -> Alcotest.fail "Should not succeed")
+
+let string_of_cosmos_error_cases () =
+  let open Cosmos.Databases_core in
+  let check expected e =
+    Alcotest.(check string) expected expected (Cosmos_error.string_of e)
+  in
+  check "Timeout" Cosmos_error.Timeout_error;
+  check "Connection refused" Cosmos_error.Connection_error;
+  check "HTTP error: boom" (Cosmos_error.Http_error "boom");
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_document_list
+        (Ok (Mock_response.error_response ~code:403 ~message:"denied"));
+      match list_documents_as () with
+      | Error e -> check "Azure error: HTTP status 403" e
       | Ok _ -> Alcotest.fail "Should not succeed")
 
 let token_provider_called_per_request () =
@@ -292,6 +322,8 @@ let tests =
     ("document_list_unauthorized", `Quick, document_list_unauthorized);
     ("document_get_timeout", `Quick, document_get_timeout);
     ("document_get_connection_refused", `Quick, document_get_connection_refused);
+    ("document_get_other_http_error", `Quick, document_get_other_http_error);
+    ("string_of_cosmos_error_cases", `Quick, string_of_cosmos_error_cases);
     ( "token_provider_called_per_request",
       `Quick,
       token_provider_called_per_request );

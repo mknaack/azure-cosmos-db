@@ -122,6 +122,28 @@ module Response_headers = struct
   let x_ms_serviceversion t = t.x_ms_serviceversion
   let x_ms_session_token t = t.x_ms_session_token
   let x_ms_substatus t = t.x_ms_substatus
+
+  let string_of t =
+    [
+      ("Content-Type", t.content_type);
+      ("Date", t.date);
+      ("etag", t.etag);
+      ("x-ms-activity-id", t.x_ms_activity_id);
+      ("x-ms-alt-content-path", t.x_ms_alt_content_path);
+      ("x-ms-continuation", t.x_ms_continuation);
+      ("x-ms-item-count", t.x_ms_item_count);
+      ("x-ms-request-charge", t.x_ms_request_charge);
+      ("x-ms-resource-quota", t.x_ms_resource_quota);
+      ("x-ms-resource-usage", t.x_ms_resource_usage);
+      ("x-ms-retry-after-ms", t.x_ms_retry_after_ms);
+      ("x-ms-schemaversion", t.x_ms_schemaversion);
+      ("x-ms-serviceversion", t.x_ms_serviceversion);
+      ("x-ms-session-token", t.x_ms_session_token);
+      ("x-ms-substatus", t.x_ms_substatus);
+    ]
+    |> List.filter_map (fun (name, value) ->
+        Option.map (fun v -> name ^ ": " ^ v) value)
+    |> String.concat "; "
 end
 
 type batch_validation_error =
@@ -129,10 +151,23 @@ type batch_validation_error =
   | Mixed_patch_operations
   | Empty_batch
 
-type cosmos_error =
-  | Timeout_error
-  | Connection_error
-  | Azure_error of int * Response_headers.t
+module Cosmos_error = struct
+  type t =
+    | Timeout_error
+    | Connection_error
+    | Http_error of string
+    | Azure_error of int * Response_headers.t
+
+  let string_of = function
+    | Timeout_error -> "Timeout"
+    | Connection_error -> "Connection refused"
+    | Http_error message -> "HTTP error: " ^ message
+    | Azure_error (code, headers) -> (
+        let status = "Azure error: HTTP status " ^ string_of_int code in
+        match Response_headers.string_of headers with
+        | "" -> status
+        | s -> status ^ " (" ^ s ^ ")")
+end
 
 module Make_account
     (IO : Databases_intf.IO)
@@ -141,8 +176,8 @@ module Make_account
 struct
   let ( let* ) = IO.bind
   let host = Utility.adjust_host Account.endpoint
-  let timeout_error = IO.return (Error Timeout_error)
-  let connection_error = IO.return (Error Connection_error)
+  let timeout_error = IO.return (Error Cosmos_error.Timeout_error)
+  let connection_error = IO.return (Error Cosmos_error.Connection_error)
 
   let wrap_timeout timeout command =
     match timeout with
@@ -175,7 +210,7 @@ struct
     resp |> Cohttp.Response.status |> Cohttp.Code.code_of_status
 
   let azure_error resp =
-    Azure_error (get_code resp, Response_headers.get_header resp)
+    Cosmos_error.Azure_error (get_code resp, Response_headers.get_header resp)
 
   let result_or_error expected_code resp =
     let code = get_code resp in
@@ -191,7 +226,8 @@ struct
 
   let handle_http_error = function
     | Http.Connection_refused -> connection_error
-    | Http.Other_error _exn -> connection_error
+    | Http.Other_error exn ->
+        IO.return (Error (Cosmos_error.Http_error (Printexc.to_string exn)))
 
   let make_uri path = Uri.make ~scheme:"https" ~host ~port:443 ~path ()
 
@@ -282,7 +318,7 @@ struct
     let* exists = get ?timeout name in
     match exists with
     | Ok (code, result) -> IO.return (Ok (code, result))
-    | Error (Azure_error (404, _)) -> create ?timeout name
+    | Error (Cosmos_error.Azure_error (404, _)) -> create ?timeout name
     | Error x -> IO.return (Error x)
 
   let delete ?timeout name =
@@ -363,7 +399,7 @@ struct
       let* exists = get ?timeout dbname coll_name in
       match exists with
       | Ok result -> IO.return (Result.ok result)
-      | Error (Azure_error (404, _)) ->
+      | Error (Cosmos_error.Azure_error (404, _)) ->
           create ?timeout ~indexing_policy ?offer_throughput ~partition_key
             dbname coll_name
       | Error x -> IO.return (Error x)
@@ -554,7 +590,9 @@ struct
             if code = 200 then
               let result = convert_to_list_result body in
               IO.return (Ok (200, response_header, result))
-            else IO.return (Error (Azure_error (code, response_header))))
+            else
+              IO.return
+                (Error (Cosmos_error.Azure_error (code, response_header))))
 
       type consistency_level = Strong | Bounded | Session | Eventual
 
@@ -673,7 +711,9 @@ struct
             if code = 200 then
               let result = convert_to_list_result body in
               IO.return (Ok (200, response_header, result))
-            else IO.return (Error (Azure_error (code, response_header))))
+            else
+              IO.return
+                (Error (Cosmos_error.Azure_error (code, response_header))))
     end
 
     module Change_feed = struct
@@ -770,10 +810,13 @@ struct
         | Ok (code, resp, body) -> (
             let response_headers = Response_headers.get_header resp in
             if code <> 200 && code <> 304 then
-              IO.return (Error (Azure_error (code, response_headers)))
+              IO.return
+                (Error (Cosmos_error.Azure_error (code, response_headers)))
             else
               match Response_headers.etag response_headers with
-              | None -> IO.return (Error (Azure_error (code, response_headers)))
+              | None ->
+                  IO.return
+                    (Error (Cosmos_error.Azure_error (code, response_headers)))
               | Some continuation ->
                   if code = 304 then
                     IO.return (Ok (304, response_headers, None))
@@ -795,7 +838,7 @@ struct
                     IO.return (Ok (200, response_headers, Some page)))
 
       let is_partition_split = function
-        | Azure_error (410, headers) -> (
+        | Cosmos_error.Azure_error (410, headers) -> (
             match Response_headers.x_ms_substatus headers with
             | Some ("1002" | "1007") -> true
             | _ -> false)
@@ -824,13 +867,14 @@ struct
                            checkpoint;
                            caught_up = true;
                          })
-                | None -> IO.return (Error (Azure_error (304, headers))))
+                | None ->
+                    IO.return (Error (Cosmos_error.Azure_error (304, headers))))
             | Ok (200, _, Some page) ->
                 loop (page :: pages) page.continuation
                   (Some (Start_from.Continuation page.continuation))
                   (remaining - 1)
             | Ok (code, headers, _) ->
-                IO.return (Error (Azure_error (code, headers)))
+                IO.return (Error (Cosmos_error.Azure_error (code, headers)))
         in
         loop [] "" start_from max_pages
 
@@ -1094,7 +1138,9 @@ struct
                     0.0 outcomes
                 in
                 IO.return (Ok { outcomes; total_request_charge = total_charge })
-              else IO.return (Error (Azure_error (code, response_header))))
+              else
+                IO.return
+                  (Error (Cosmos_error.Azure_error (code, response_header))))
         in
         do_execute ()
     end
@@ -1423,7 +1469,9 @@ struct
           if code = 200 then
             let result = Json_converter_j.list_offers_of_string body in
             IO.return (Ok (code, response_headers, result))
-          else IO.return (Error (Azure_error (code, response_headers))))
+          else
+            IO.return
+              (Error (Cosmos_error.Azure_error (code, response_headers))))
 
     let replace ?migrate ?timeout (offer : Json_converter_t.offer) throughput =
       let offer =
@@ -1516,7 +1564,7 @@ struct
       match result with
       | Error error -> IO.return (Error error)
       | Ok (_code, response_headers, None) ->
-          IO.return (Error (Azure_error (404, response_headers)))
+          IO.return (Error (Cosmos_error.Azure_error (404, response_headers)))
       | Ok (_, _, Some offer) -> replace ?migrate ?timeout offer throughput
   end
 end
