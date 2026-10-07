@@ -46,7 +46,7 @@ Based on comprehensive analysis of the codebase against official Azure Cosmos DB
 | **Conflicts** | List, Get, Delete (`/conflicts`) | No conflict resolution for multi-region writes |
 | **TTL Management** | All operations | No automatic expiration |
 | **Vector Search** | All operations | No AI/ML features |
-| **Entra ID (AAD) auth** | `type=aad` bearer tokens with RBAC | Requires async token acquisition |
+| **Entra ID (AAD) auth** | `type=aad` bearer tokens with RBAC | Requires async token acquisition — implemented on `devin/entra-id-auth`, not yet merged |
 
 #### 🚫 **Deliberately Not Implemented**
 
@@ -117,6 +117,12 @@ Overall Coverage:      ██████████████████░
   token acquisition. Master-key-only operations (`list_databases`, `User.*`, `Permission.*`,
   `Offer.*`) still fail with 401/403 under a resource token — documented, not enforced by types.
 - **Plan (drafted)**: [`ENTRA_ID_AUTH_PLAN.md`](ENTRA_ID_AUTH_PLAN.md)
+- **In progress**: implemented on the `devin/entra-id-auth` branch (not yet merged to `main`).
+  Adds `Credential.Aad_token` / `Aad_token_provider`, `credentials_of_aad_token(_provider)`, and
+  `Database_aad (A : Aad)` with SDK-managed client-credentials flow — token acquisition from
+  `login.microsoftonline.com`, caching, refresh before expiry, and `aad_client` for sovereign
+  clouds / custom scopes / injected clock. Unlike resource tokens, an Entra token authorizes
+  every operation including `list_databases`, `User`, `Permission` and `Offer`.
 - **Why this is no longer low priority**: both `Master_key` and `Resource_token` derive from the
   account key, so on an account created with
   [`disableLocalAuth = true`](https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-disable-key-based-authentication)
@@ -132,7 +138,8 @@ Overall Coverage:      ██████████████████░
 2. ✅ **Offers Management** - Implemented (`Offer`, `Offer.Throughput`)
 3. ✅ **Resource Token Authentication** - Implemented (`Database_as`, `Credential.t`)
 4. **Entra ID (AAD) Authentication** - `type=aad` bearer tokens with RBAC; the only way to reach an
-   account with key-based auth disabled — [`ENTRA_ID_AUTH_PLAN.md`](ENTRA_ID_AUTH_PLAN.md)
+   account with key-based auth disabled — [`ENTRA_ID_AUTH_PLAN.md`](ENTRA_ID_AUTH_PLAN.md);
+   implementation on `devin/entra-id-auth`, pending merge
 5. **Standalone Document Patch** - Patch outside a batch (`PATCH /docs/{id}`)
 6. **Stored Procedure Execution** - Enable server-side logic
 
@@ -164,7 +171,7 @@ The library uses a **functor-based architecture** with:
 - Authentication: master key or resource token — `Make (IO) (Http) (Auth_key)` remains the
   master-key entry point, while `Make_credential` / `Database_as (C : Credentials)` accept a
   `Credential.t`; `Make_account` exposes the `Account` seam for future schemes (e.g. Entra ID)
-- Errors are a single `cosmos_error` variant: `Timeout_error`, `Connection_error`, `Azure_error`; batch validation failures use a separate `batch_validation_error` type (exposed as `Batch.validation_error`), not a `cosmos_error` variant
+- Errors live in the `Cosmos_error` module (`type t = Timeout_error | Connection_error | Http_error of string | Azure_error of int * Response_headers.t`, aliased as `cosmos_error` in both backends): `Http_error` carries the exception message for non-refused transport failures (TLS, DNS, resets) instead of collapsing them into `Connection_error`; `Cosmos_error.string_of` is exposed as `string_of_cosmos_error` and `Response_headers.string_of` renders response headers into the error text. Batch validation failures use a separate `batch_validation_error` type (exposed as `Batch.validation_error`), not a `cosmos_error` variant
 - Shared retry/throttle handling via `with_throttle_retry` in `databases_core.ml`
 - Test infrastructure: functor-based mocks (`Mock_io`, `Mock_http`, `Mock_response`) allowing HTTP-free unit tests
 
@@ -173,7 +180,7 @@ The library uses a **functor-based architecture** with:
 | Aspect | This OCaml SDK | Modern SDKs (.NET/Python/Java) |
 |--------|---------------|-------------------------------|
 | Terminology | `Collection`, `Document` | `Container`, `Item` (v3+ SDKs) |
-| Authentication | Master key, resource token (incl. refreshable provider) | Master key, resource token, Entra ID (`authKeyOrResourceToken`) |
+| Authentication | Master key, resource token (incl. refreshable provider); Entra ID in progress on `devin/entra-id-auth` | Master key, resource token, Entra ID (`authKeyOrResourceToken`) |
 | Entry point | Functor with Auth_key module | Client struct with connection pooling |
 | Type safety | Raw JSON strings | Strongly typed generics |
 | Query building | Raw SQL strings | LINQ/fluent query builders |
@@ -1239,7 +1246,9 @@ additionally requires async token acquisition.
 1. **Entra ID (AAD) authentication** - Enabled by the `Make_account` seam from improvement 13.
    Raised from low priority: accounts with `disableLocalAuth = true` are unreachable by this SDK,
    since both existing credential kinds derive from the account key.
-   [`ENTRA_ID_AUTH_PLAN.md`](ENTRA_ID_AUTH_PLAN.md)
+   [`ENTRA_ID_AUTH_PLAN.md`](ENTRA_ID_AUTH_PLAN.md) — implementation in progress on
+   `devin/entra-id-auth` (`Credential.Aad_token(_provider)`, `Database_aad`, `aad_client`),
+   not yet merged
 2. **Client abstraction** - Essential for production use with connection pooling
 3. **Strongly typed documents** - Replace raw JSON strings with typed interfaces
 4. **Unified response type** - Consistent, informative response handling
