@@ -48,8 +48,8 @@
   lwt
   (lwt_ppx
    (>= 2.0.2))
-  lwt_ssl
-  ssl
+  tls-lwt
+  ca-certs
   cohttp-lwt-unix
   (alcotest-lwt :with-test)
   (bisect_ppx :with-test)
