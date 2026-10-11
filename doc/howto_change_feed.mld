@@ -1,5 +1,7 @@
 {0 How to consume the change feed}
 
+Reference: {{:../azure-cosmos-db-lwt/Cosmos_lwt/Database_intf/module-type-S/Collection/Change_feed/index.html}[Cosmos_lwt.Databases.S.Collection.Change_feed]} (Lwt), {{:../azure-cosmos-db-eio/Cosmos_eio/Database_intf/module-type-S/Collection/Change_feed/index.html}[Cosmos_eio.Databases.S.Collection.Change_feed]} (Eio); {{:../azure-cosmos-db-lwt/Cosmos_lwt/Database_intf/module-type-S/Collection/Partition_key_range/index.html}[Cosmos_lwt.Databases.S.Collection.Partition_key_range]} (Lwt), {{:../azure-cosmos-db-eio/Cosmos_eio/Database_intf/module-type-S/Collection/Partition_key_range/index.html}[Cosmos_eio.Databases.S.Collection.Partition_key_range]} (Eio).
+
 The pull-model change feed returns the latest version of changed documents.
 Treat [304 Not Modified] as the normal idle result, and persist the returned
 ETag checkpoint in the application:

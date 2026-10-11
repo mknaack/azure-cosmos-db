@@ -39,6 +39,15 @@ jobs:
           opam exec -- dune build @doc
           mkdir -p _site
           cp -r _build/default/_doc/_html/* _site/
+          chmod u+w _site/index.html
+          cat > _site/index.html <<'EOF'
+          <!DOCTYPE html>
+          <meta charset="utf-8">
+          <title>Azure Cosmos DB for OCaml</title>
+          <meta http-equiv="refresh" content="0; url=azure-cosmos-db/index.html">
+          <link rel="canonical" href="azure-cosmos-db/index.html">
+          <a href="azure-cosmos-db/index.html">Azure Cosmos DB for OCaml documentation</a>
+          EOF
           
       - name: Setup Pages
         uses: actions/configure-pages@v4

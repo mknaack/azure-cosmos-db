@@ -48,7 +48,7 @@ With Eio the API is the same, but calls return thunks and must run inside
 
 # Documentation
 
-- [Documentation](https://mknaack.github.io/azure-cosmos-db/azure-cosmos-db/index.html):
+- [Documentation](https://mknaack.github.io/azure-cosmos-db/):
   how-to guides, explanations and the API reference
 - [Azure Cosmos DB REST API](https://learn.microsoft.com/en-us/rest/api/cosmos-db/)
 

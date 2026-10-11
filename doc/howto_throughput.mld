@@ -1,5 +1,7 @@
 {0 How to manage throughput}
 
+Reference: {{:../azure-cosmos-db-lwt/Cosmos_lwt/Database_intf/module-type-S/Offer/index.html}[Cosmos_lwt.Databases.S.Offer]} (Lwt), {{:../azure-cosmos-db-eio/Cosmos_eio/Database_intf/module-type-S/Offer/index.html}[Cosmos_eio.Databases.S.Offer]} (Eio).
+
 Offers expose provisioned throughput for databases and collections:
 
 {[
