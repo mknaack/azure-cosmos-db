@@ -1,0 +1,34 @@
+{0 Azure Cosmos DB for OCaml}
+
+An OCaml client for the
+{{:https://learn.microsoft.com/en-us/rest/api/cosmos-db/}Azure Cosmos DB REST API}.
+Pick a backend:
+
+- [azure-cosmos-db-lwt] for applications using Lwt;
+- [azure-cosmos-db-eio] for applications using Eio (OCaml 5).
+
+Both expose the same operations through the signature
+{{:../azure-cosmos-db-lwt/Cosmos_lwt/Databases/index.html#module-type-S}[Cosmos_lwt.Databases.S]} /
+{{:../azure-cosmos-db-eio/Cosmos_eio/Databases/index.html#module-type-S}[Cosmos_eio.Databases.S]}. Examples in this
+documentation use Lwt; Eio differences are noted where they matter.
+
+{1 Tutorial}
+
+Coming soon: a step-by-step introduction that creates a database, a
+collection and documents.
+
+{1 How-to guides}
+
+- {!page-howto_resource_tokens}
+- {!page-howto_change_feed}
+- {!page-howto_throughput}
+
+{1 Explanation}
+
+Coming soon: background on backends, authentication, partition keys and the
+change feed.
+
+{1 Reference}
+
+- {{:../azure-cosmos-db-lwt/Cosmos_lwt/Databases/index.html}[Cosmos_lwt.Databases]}: Lwt backend
+- {{:../azure-cosmos-db-eio/Cosmos_eio/Databases/index.html}[Cosmos_eio.Databases]}: Eio backend
