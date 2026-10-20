@@ -262,7 +262,7 @@ module type S = sig
           idle, not that the request failed. Persist [page.continuation] and
           resume with [Start_from.Continuation]. A supplied timeout applies
           independently to each request attempt; exhausted 429 retries are
-          reported as [Timeout_error]. *)
+          reported as [Azure_error (429, headers)]. *)
 
       val is_partition_split : cosmos_error -> bool
 
