@@ -137,7 +137,7 @@ module type Account = sig
     resource ->
     Utilities.Ms_time.t ->
     string ->
-    (string, Cosmos_error.t) result io
+    (string, cosmos_error) result io
 
   val endpoint : string
 end
@@ -1660,7 +1660,7 @@ module Auth_aad
   type state =
     | Idle
     | Cached of token
-    | Acquiring of (token, Cosmos_error.t) result IO.t
+    | Acquiring of (token, cosmos_error) result IO.t
 
   let state = ref Idle
 
@@ -1678,7 +1678,7 @@ module Auth_aad
       Some (token, expires_in)
     with _ -> None
 
-  let acquire () : (token, Cosmos_error.t) result IO.t =
+  let acquire () : (token, cosmos_error) result IO.t =
     let* response =
       IO.with_timeout token_request_timeout
         (Http.post ~headers:token_headers ~body:token_body token_uri)
