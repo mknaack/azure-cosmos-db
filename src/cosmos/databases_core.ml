@@ -126,6 +126,8 @@ module Cosmos_error = struct
         | s -> status ^ " (" ^ s ^ ")")
 end
 
+type cosmos_error = Cosmos_error.t
+
 module type Account = sig
   type 'a io
   type resource = Dbs | Colls | Docs | Users | Permissions | Offers | Pkranges
@@ -1685,8 +1687,8 @@ module Auth_aad
     | None -> IO.return (Error Cosmos_error.Timeout_error)
     | Some (Error Connection_refused) ->
         IO.return (Error Cosmos_error.Connection_error)
-    | Some (Error (Other_error _exn)) ->
-        IO.return (Error Cosmos_error.Connection_error)
+    | Some (Error (Other_error exn)) ->
+        IO.return (Error (Cosmos_error.Http_error (Printexc.to_string exn)))
     | Some (Ok (resp, body)) ->
         let code =
           resp |> Cohttp.Response.status |> Cohttp.Code.code_of_status
