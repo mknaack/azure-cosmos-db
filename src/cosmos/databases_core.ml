@@ -280,15 +280,16 @@ struct
               | Ok (resp, body) ->
                   let code = get_code resp in
                   if code = 429 then
-                    let response_header = Response_headers.get_header resp in
-                    let milliseconds =
-                      Response_headers.x_ms_retry_after_ms response_header
-                      |> Option.value ~default:"0" |> int_of_string_opt
-                      |> Option.value ~default:0 |> Int.to_float
-                    in
-                    let* () = IO.sleep (milliseconds /. 1000.) in
-                    if attempt > 0 then retry_loop (attempt - 1) ()
-                    else timeout_error
+                    if attempt > 0 then
+                      let response_header = Response_headers.get_header resp in
+                      let milliseconds =
+                        Response_headers.x_ms_retry_after_ms response_header
+                        |> Option.value ~default:"0" |> int_of_string_opt
+                        |> Option.value ~default:0 |> Int.to_float
+                      in
+                      let* () = IO.sleep (milliseconds /. 1000.) in
+                      retry_loop (attempt - 1) ()
+                    else IO.return (Error (azure_error resp))
                   else IO.return (Ok (code, resp, body))
               | Error Http.Connection_refused ->
                   if attempt > 0 then
@@ -1128,59 +1129,54 @@ struct
 
       let execute ?timeout ?(atomic = true) ~partition_key dbname coll_name
           operations =
-        let do_execute () =
-          let path = path_of_docs dbname coll_name in
-          let uri = make_uri path in
-          let batch_ops =
-            List.map (operation_to_batch_op partition_key) operations
-          in
-          let body = construct_batch_request_body batch_ops in
-          let*? base_hdrs =
-            json_headers Account.Docs Utilities.Verb.Post
-              (path_of_collection dbname coll_name)
-          in
-          let hdrs =
-            base_hdrs
-            |> add_header "x-ms-cosmos-is-batch-request" "True"
-            |> add_header "x-ms-documentdb-partitionkey"
-                 (string_of_partition_key partition_key)
-            |> add_header "x-ms-cosmos-batch-atomic" (string_of_bool atomic)
-          in
-          let* response =
-            Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout
-          in
-          handle_response response (fun resp body ->
-              let code = get_code resp in
-              let response_header = Response_headers.get_header resp in
-              if code = 200 || code = 207 then
-                let outcomes =
-                  let parse_result json =
-                    let open Yojson.Safe.Util in
-                    {
-                      status_code = json |> member "statusCode" |> to_int;
-                      request_charge =
-                        json |> member "requestCharge" |> to_number;
-                      etag = json |> member "eTag" |> to_string_option;
-                      resource_body =
-                        (match json |> member "resourceBody" with
-                        | `Null -> None
-                        | v -> Some (Yojson.Safe.to_string v));
-                    }
-                  in
-                  Yojson.Safe.from_string body
-                  |> Yojson.Safe.Util.to_list |> List.map parse_result
-                in
-                let total_charge =
-                  List.fold_left
-                    (fun acc r -> acc +. r.request_charge)
-                    0.0 outcomes
-                in
-                IO.return (Ok { outcomes; total_request_charge = total_charge })
-              else
-                IO.return
-                  (Error (Cosmos_error.Azure_error (code, response_header))))
+        let path = path_of_docs dbname coll_name in
+        let uri = make_uri path in
+        let batch_ops =
+          List.map (operation_to_batch_op partition_key) operations
         in
-        do_execute ()
+        let body = construct_batch_request_body batch_ops in
+        let*? base_hdrs =
+          json_headers Account.Docs Utilities.Verb.Post
+            (path_of_collection dbname coll_name)
+        in
+        let hdrs =
+          base_hdrs
+          |> add_header "x-ms-cosmos-is-batch-request" "True"
+          |> add_header "x-ms-documentdb-partitionkey"
+               (string_of_partition_key partition_key)
+          |> add_header "x-ms-cosmos-batch-atomic" (string_of_bool atomic)
+        in
+        let do_post () = Http.post ~headers:hdrs ~body uri in
+        let* retry_result =
+          with_throttle_retry ?timeout ~max_retries:10 do_post
+        in
+        match retry_result with
+        | Error e -> IO.return (Error e)
+        | Ok (code, resp, body) ->
+            if code = 200 || code = 207 then
+              let outcomes =
+                let parse_result json =
+                  let open Yojson.Safe.Util in
+                  {
+                    status_code = json |> member "statusCode" |> to_int;
+                    request_charge = json |> member "requestCharge" |> to_number;
+                    etag = json |> member "eTag" |> to_string_option;
+                    resource_body =
+                      (match json |> member "resourceBody" with
+                      | `Null -> None
+                      | v -> Some (Yojson.Safe.to_string v));
+                  }
+                in
+                Yojson.Safe.from_string body
+                |> Yojson.Safe.Util.to_list |> List.map parse_result
+              in
+              let total_charge =
+                List.fold_left
+                  (fun acc r -> acc +. r.request_charge)
+                  0.0 outcomes
+              in
+              IO.return (Ok { outcomes; total_request_charge = total_charge })
+            else IO.return (Error (azure_error resp))
     end
 
     module Batch_builder = struct

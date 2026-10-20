@@ -556,6 +556,78 @@ let mock_batch_patch_body_valid_json_test () =
              object"
       | _ -> Alcotest.fail "Patch 'value' has an unexpected shape")
 
+let docs_uri path =
+  Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com" ~port:443
+    ~path ()
+
+let expect_batch response =
+  Mock_http.expect
+    {
+      method_ = `Post;
+      uri = docs_uri "/dbs/mydb/colls/mycoll/docs";
+      expected_headers = [];
+      expected_body = None;
+      response = Ok response;
+    }
+
+let batch_read_ops =
+  [
+    Mock_db.Collection.Batch.Read
+      { id = "doc1"; if_match = None; if_none_match = None };
+  ]
+
+let mock_batch_throttle_retry_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_batch (Mock_response.throttled_response ~retry_after_ms:0);
+      expect_batch
+        (Mock_response.make_response ~status:200
+           {|[{"statusCode":200,"requestCharge":1.0}]|});
+      (match
+         Mock_db.Collection.Batch.execute ~partition_key:"pk" "mydb" "mycoll"
+           batch_read_ops
+       with
+      | Ok { outcomes = [ { status_code = 200; _ } ]; _ } -> ()
+      | _ -> Alcotest.fail "Expected throttled batch to be retried");
+      Mock_http.verify ())
+
+let mock_batch_error_returns_azure_error_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_batch (Mock_response.error_response ~code:400 ~message:"Bad");
+      match
+        Mock_db.Collection.Batch.execute ~partition_key:"pk" "mydb" "mycoll"
+          batch_read_ops
+      with
+      | Error (Azure_error (400, _)) -> ()
+      | _ -> Alcotest.fail "Expected Azure_error 400")
+
+let mock_throttle_retry_exhausted_returns_azure_error_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      List.iter
+        (fun _ ->
+          Mock_http.expect
+            {
+              method_ = `Delete;
+              uri = docs_uri "/dbs/mydb/colls/mycoll/docs/doc1";
+              expected_headers = [];
+              expected_body = None;
+              response =
+                Ok (Mock_response.throttled_response ~retry_after_ms:250);
+            })
+        [ 1; 2; 3; 4 ];
+      (match
+         Mock_db.Collection.Document.delete ~partition_key:"pk" "mydb" "mycoll"
+           "doc1"
+       with
+      | Error (Azure_error (429, headers)) ->
+          Alcotest.(check (option string))
+            "retry-after preserved" (Some "250")
+            (Cosmos.Databases_core.Response_headers.x_ms_retry_after_ms headers)
+      | _ -> Alcotest.fail "Expected Azure_error 429 after exhausted retries");
+      Mock_http.verify ())
+
 let mock_batch_empty_returns_validation_error_test () =
   match Mock_db.Collection.Batch.validate [] with
   | Error Empty_batch -> ()
@@ -948,6 +1020,13 @@ let tests =
     ( "mock_batch_patch_body_valid_json",
       `Quick,
       mock_batch_patch_body_valid_json_test );
+    ("mock_batch_throttle_retry", `Quick, mock_batch_throttle_retry_test);
+    ( "mock_batch_error_returns_azure_error",
+      `Quick,
+      mock_batch_error_returns_azure_error_test );
+    ( "mock_throttle_retry_exhausted_returns_azure_error",
+      `Quick,
+      mock_throttle_retry_exhausted_returns_azure_error_test );
     ( "mock_batch_empty_returns_validation_error",
       `Quick,
       mock_batch_empty_returns_validation_error_test );
