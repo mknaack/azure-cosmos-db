@@ -160,7 +160,7 @@ module Make_account
 struct
   let ( let* ) = IO.bind
 
-  let ( let** ) m f =
+  let ( let*? ) m f =
     IO.bind m (function Ok v -> f v | Error e -> IO.return (Error e))
 
   let host = Utility.adjust_host Account.endpoint
@@ -190,7 +190,7 @@ struct
          authorization)
 
   let json_headers resource verb db_name =
-    let** header = headers resource verb db_name in
+    let*? header = headers resource verb db_name in
     IO.return (Ok (Cohttp.Header.add header "content_type" "application/json"))
 
   let add_header name value header = Cohttp.Header.add header name value
@@ -270,7 +270,7 @@ struct
 
   let list_databases ?timeout () =
     let uri = make_uri "dbs" in
-    let** hdrs = headers Account.Dbs Utilities.Verb.Get "" in
+    let*? hdrs = headers Account.Dbs Utilities.Verb.Get "" in
     let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
     handle_response response (fun resp body ->
         let code = get_code resp in
@@ -283,7 +283,7 @@ struct
       |> Json_converter_j.string_of_create_database
     in
     let uri = make_uri "dbs" in
-    let** hdrs = json_headers Account.Dbs Utilities.Verb.Post "" in
+    let*? hdrs = json_headers Account.Dbs Utilities.Verb.Post "" in
     let* response = Http.post ~headers:hdrs ~body uri |> wrap_timeout timeout in
     handle_response response (fun resp body ->
         let result body = Some (Json_converter_j.database_of_string body) in
@@ -292,7 +292,7 @@ struct
   let get ?timeout name =
     let path = "dbs/" ^ name in
     let uri = make_uri path in
-    let** hdrs = headers Account.Dbs Utilities.Verb.Get path in
+    let*? hdrs = headers Account.Dbs Utilities.Verb.Get path in
     let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
     handle_response response (fun resp body ->
         let result body = Some (Json_converter_j.database_of_string body) in
@@ -308,7 +308,7 @@ struct
   let delete ?timeout name =
     let path = "dbs/" ^ name in
     let uri = make_uri path in
-    let** hdrs = headers Account.Dbs Utilities.Verb.Delete path in
+    let*? hdrs = headers Account.Dbs Utilities.Verb.Delete path in
     let* response = Http.delete ~headers:hdrs uri |> wrap_timeout timeout in
     handle_response response (fun resp _body -> IO.return (with_204_do resp))
 
@@ -331,7 +331,7 @@ struct
     let list ?timeout dbname =
       let path = path_of_collections dbname in
       let uri = make_uri path in
-      let** hdrs = headers Account.Colls Utilities.Verb.Get ("dbs/" ^ dbname) in
+      let*? hdrs = headers Account.Colls Utilities.Verb.Get ("dbs/" ^ dbname) in
       let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.list_collections_of_string body in
@@ -346,7 +346,7 @@ struct
       in
       let path = path_of_collections dbname in
       let uri = make_uri path in
-      let** base_hdrs =
+      let*? base_hdrs =
         json_headers Account.Colls Utilities.Verb.Post ("dbs/" ^ dbname)
       in
       let hdrs =
@@ -364,7 +364,7 @@ struct
     let get ?timeout name coll_name =
       let path = path_of_collection name coll_name in
       let uri = make_uri path in
-      let** hdrs =
+      let*? hdrs =
         headers Account.Colls Utilities.Verb.Get (header_path_of_path path)
       in
       let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
@@ -385,7 +385,7 @@ struct
     let delete ?timeout name coll_name =
       let path = path_of_collection name coll_name in
       let uri = make_uri path in
-      let** hdrs =
+      let*? hdrs =
         headers Account.Colls Utilities.Verb.Delete (header_path_of_path path)
       in
       let* response = Http.delete ~headers:hdrs uri |> wrap_timeout timeout in
@@ -395,7 +395,7 @@ struct
       let list ?max_item_count ?continuation ?timeout dbname coll_name =
         let path = path_of_pkranges dbname coll_name in
         let uri = make_uri path in
-        let** base_hdrs =
+        let*? base_hdrs =
           headers Account.Pkranges Utilities.Verb.Get
             (path_of_collection dbname coll_name)
         in
@@ -445,7 +445,7 @@ struct
           coll_name content =
         let path = path_of_docs dbname coll_name in
         let uri = make_uri path in
-        let** base_hdrs =
+        let*? base_hdrs =
           json_headers Account.Docs Utilities.Verb.Post
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
         in
@@ -545,7 +545,7 @@ struct
         in
         let path = path_of_docs dbname coll_name in
         let uri = make_uri path in
-        let** base_hdrs =
+        let*? base_hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
         in
@@ -586,7 +586,7 @@ struct
       let get ?if_none_match ~partition_key ?consistency_level ?session_token
           ?timeout dbname coll_name doc_id =
         let path = path_of_doc dbname coll_name doc_id in
-        let** base_hdrs =
+        let*? base_hdrs =
           json_headers Account.Docs Utilities.Verb.Get
             (header_path_of_path path)
         in
@@ -610,7 +610,7 @@ struct
       let replace ?indexing_directive ~partition_key ?if_match ?timeout dbname
           coll_name doc_id content =
         let path = path_of_doc dbname coll_name doc_id in
-        let** base_hdrs =
+        let*? base_hdrs =
           json_headers Account.Docs Utilities.Verb.Put
             (header_path_of_path path)
         in
@@ -632,7 +632,7 @@ struct
 
       let delete ~partition_key ?timeout dbname coll_name doc_id =
         let path = path_of_doc dbname coll_name doc_id in
-        let** base_hdrs =
+        let*? base_hdrs =
           header_path_of_path path |> headers Account.Docs Utilities.Verb.Delete
         in
         let hdrs =
@@ -672,7 +672,7 @@ struct
       let query ?max_item_count ?continuation ?consistency_level ?session_token
           ?is_partition ?partition_key ?timeout dbname coll_name query =
         let path = path_of_docs dbname coll_name in
-        let** base_hdrs =
+        let*? base_hdrs =
           headers Account.Docs Utilities.Verb.Post
             ("dbs/" ^ dbname ^ "/colls/" ^ coll_name)
         in
@@ -781,7 +781,7 @@ struct
           ?(start_from = Start_from.Beginning) ?(scope = Scope.Container)
           ?max_item_count ?session_token ?timeout dbname coll_name =
         let path = path_of_docs dbname coll_name in
-        let** base_hdrs =
+        let*? base_hdrs =
           headers Account.Docs Utilities.Verb.Get
             (path_of_collection dbname coll_name)
         in
@@ -1089,7 +1089,7 @@ struct
             List.map (operation_to_batch_op partition_key) operations
           in
           let body = construct_batch_request_body batch_ops in
-          let** base_hdrs =
+          let*? base_hdrs =
             json_headers Account.Docs Utilities.Verb.Post
               (path_of_collection dbname coll_name)
           in
@@ -1196,7 +1196,7 @@ struct
         |> Json_converter_j.string_of_create_user
       in
       let uri = make_uri ("/dbs/" ^ dbname ^ "/users") in
-      let** hdrs =
+      let*? hdrs =
         json_headers resource Utilities.Verb.Post ("dbs/" ^ dbname)
       in
       let* response =
@@ -1209,7 +1209,7 @@ struct
     let list ?timeout dbname =
       let path = "/dbs/" ^ dbname ^ "/users" in
       let uri = make_uri path in
-      let** hdrs = headers Utilities.Verb.Get ("dbs/" ^ dbname) in
+      let*? hdrs = headers Utilities.Verb.Get ("dbs/" ^ dbname) in
       let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.list_users_of_string body in
@@ -1218,7 +1218,7 @@ struct
     let get ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = make_uri path in
-      let** hdrs = headers Utilities.Verb.Get (header_path_of_path path) in
+      let*? hdrs = headers Utilities.Verb.Get (header_path_of_path path) in
       let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.user_of_string body in
@@ -1231,7 +1231,7 @@ struct
       in
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = make_uri path in
-      let** hdrs = headers Utilities.Verb.Put (header_path_of_path path) in
+      let*? hdrs = headers Utilities.Verb.Put (header_path_of_path path) in
       let* response =
         Http.put ~headers:hdrs ~body uri |> wrap_timeout timeout
       in
@@ -1242,7 +1242,7 @@ struct
     let delete ?timeout dbname user_name =
       let path = "/dbs/" ^ dbname ^ "/users/" ^ user_name in
       let uri = make_uri path in
-      let** hdrs = headers Utilities.Verb.Delete (header_path_of_path path) in
+      let*? hdrs = headers Utilities.Verb.Delete (header_path_of_path path) in
       let* response = Http.delete ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp _body ->
           IO.return (result_or_error 204 resp))
@@ -1269,7 +1269,7 @@ struct
         Printf.sprintf "/dbs/%s/users/%s/permissions" dbname user_name
       in
       let uri = make_uri path in
-      let** base_hdrs =
+      let*? base_hdrs =
         json_headers resource Utilities.Verb.Post
           (Printf.sprintf "dbs/%s/users/%s" dbname user_name)
       in
@@ -1290,7 +1290,7 @@ struct
         Printf.sprintf "/dbs/%s/users/%s/permissions" dbname user_name
       in
       let uri = make_uri path in
-      let** hdrs =
+      let*? hdrs =
         headers Utilities.Verb.Get
           (Printf.sprintf "dbs/%s/users/%s" dbname user_name)
       in
@@ -1305,7 +1305,7 @@ struct
           permission_name
       in
       let uri = make_uri path in
-      let** hdrs = headers Utilities.Verb.Get (header_path_of_path path) in
+      let*? hdrs = headers Utilities.Verb.Get (header_path_of_path path) in
       let hdrs =
         hdrs
         |> Utilities.apply_to_header_if_some "x-ms-documentdb-expiry-seconds"
@@ -1330,7 +1330,7 @@ struct
           permission_name
       in
       let uri = make_uri path in
-      let** hdrs = headers Utilities.Verb.Put (header_path_of_path path) in
+      let*? hdrs = headers Utilities.Verb.Put (header_path_of_path path) in
       let hdrs =
         hdrs
         |> Utilities.apply_to_header_if_some "x-ms-documentdb-expiry-seconds"
@@ -1349,7 +1349,7 @@ struct
           permission_name
       in
       let uri = make_uri path in
-      let** hdrs = headers Utilities.Verb.Delete (header_path_of_path path) in
+      let*? hdrs = headers Utilities.Verb.Delete (header_path_of_path path) in
       let* response = Http.delete ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp _body ->
           IO.return (result_or_error 204 resp))
@@ -1401,7 +1401,7 @@ struct
 
     let list ?timeout () =
       let uri = make_uri path_of_offers in
-      let** hdrs = headers Utilities.Verb.Get "" in
+      let*? hdrs = headers Utilities.Verb.Get "" in
       let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.list_offers_of_string body in
@@ -1410,14 +1410,14 @@ struct
     let get ?timeout offer_rid =
       let path = path_of_offer offer_rid in
       let uri = make_uri path in
-      let** hdrs = headers Utilities.Verb.Get (auth_path_of_offer offer_rid) in
+      let*? hdrs = headers Utilities.Verb.Get (auth_path_of_offer offer_rid) in
       let* response = Http.get ~headers:hdrs uri |> wrap_timeout timeout in
       handle_response response (fun resp body ->
           let value body = Json_converter_j.offer_of_string body in
           result_or_error_with_result 200 value resp body)
 
     let query ?max_item_count ?continuation ?timeout query =
-      let** base_hdrs = headers Utilities.Verb.Post "" in
+      let*? base_hdrs = headers Utilities.Verb.Post "" in
       let hdrs =
         base_hdrs
         |> add_header "x-ms-documentdb-isquery" (string_of_bool true)
@@ -1450,7 +1450,7 @@ struct
       let body = Json_converter_j.string_of_offer offer in
       let path = path_of_offer offer.Json_converter_t.rid in
       let uri = make_uri path in
-      let** base_hdrs =
+      let*? base_hdrs =
         json_headers resource Utilities.Verb.Put
           (auth_path_of_offer offer.Json_converter_t.rid)
       in
