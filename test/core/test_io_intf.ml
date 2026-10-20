@@ -101,6 +101,13 @@ module type DB = sig
     module Document : sig
       type indexing_directive = Include | Exclude
 
+      type patch_operation =
+        | Add of { path : string; value : string }
+        | Set of { path : string; value : string }
+        | ReplacePath of { path : string; value : string }
+        | Remove of { path : string }
+        | Increment of { path : string; value : int }
+
       val create :
         ?is_upsert:bool ->
         ?indexing_directive:indexing_directive ->
@@ -182,6 +189,17 @@ module type DB = sig
         string ->
         string ->
         string ->
+        (int * string, Cosmos.Databases_core.Cosmos_error.t) result io
+
+      val patch :
+        partition_key:string ->
+        ?if_match:string ->
+        ?condition:string ->
+        ?timeout:float ->
+        string ->
+        string ->
+        string ->
+        patch_operation list ->
         (int * string, Cosmos.Databases_core.Cosmos_error.t) result io
 
       val delete :
@@ -354,7 +372,7 @@ module type DB = sig
             patch_op : patch_operation;
           }
 
-      and patch_operation =
+      and patch_operation = Document.patch_operation =
         | Add of { path : string; value : string }
         | Set of { path : string; value : string }
         | ReplacePath of { path : string; value : string }

@@ -501,6 +501,69 @@ let mock_offer_throughput_of_content_test () =
     "empty content" None
     (Option.map T.string_of (T.of_content empty))
 
+let expect_document_patch ~expected_headers ~expected_body =
+  Mock_http.expect
+    {
+      method_ = `Patch;
+      uri =
+        Uri.make ~scheme:"https" ~host:"mock-account.documents.azure.com"
+          ~port:443 ~path:"/dbs/mydb/colls/mycoll/docs/doc1" ();
+      expected_headers;
+      expected_body = Some expected_body;
+      response = Ok (Mock_response.make_response {|{"id":"doc1"}|});
+    }
+
+let mock_document_patch_request_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_document_patch
+        ~expected_headers:
+          [
+            ("Content-Type", "application/json_patch+json");
+            ("x-ms-documentdb-partitionkey", {|["pk"]|});
+            ("If-Match", "etag1");
+          ]
+        ~expected_body:
+          {|{"condition":"from c where c.n > 0","operations":[{"op":"add","path":"/a","value":1},{"op":"set","path":"/b","value":"x"},{"op":"replace","path":"/c","value":true},{"op":"remove","path":"/d"},{"op":"incr","path":"/e","value":5}]}|};
+      let result =
+        Mock_db.Collection.Document.(
+          patch ~partition_key:"pk" ~if_match:"etag1"
+            ~condition:"from c where c.n > 0" "mydb" "mycoll" "doc1"
+            [
+              Add { path = "/a"; value = "1" };
+              Set { path = "/b"; value = {|"x"|} };
+              ReplacePath { path = "/c"; value = "true" };
+              Remove { path = "/d" };
+              Increment { path = "/e"; value = 5 };
+            ])
+      in
+      (match result with
+      | Ok (code, body) ->
+          Alcotest.(check int) "Status code" 200 code;
+          Alcotest.(check string) "Patched document" {|{"id":"doc1"}|} body
+      | Error _ -> Alcotest.fail "Should not return error");
+      let auth, date = get_recorded_auth_and_date () in
+      let expected =
+        compute_expected_auth "patch" "docs" "dbs/mydb/colls/mycoll/docs/doc1"
+          date
+      in
+      Alcotest.(check string) "Document.patch signs with PATCH" expected auth)
+
+let mock_document_patch_without_condition_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_document_patch ~expected_headers:[]
+        ~expected_body:{|{"operations":[{"op":"remove","path":"/d"}]}|};
+      let _ =
+        Mock_db.Collection.Document.(
+          patch ~partition_key:"pk" "mydb" "mycoll" "doc1"
+            [ Remove { path = "/d" } ])
+      in
+      let req, _ = Mock_http.get_recorded () |> List.hd in
+      Alcotest.(check (option string))
+        "No If-Match header" None
+        (Cohttp.Header.get req.Mock_http.headers "If-Match"))
+
 let mock_batch_patch_body_valid_json_test () =
   let http = Mock_http.create () in
   Mock_http.with_mock http (fun () ->
@@ -945,6 +1008,10 @@ let tests =
     ( "mock_offer_throughput_of_content",
       `Quick,
       mock_offer_throughput_of_content_test );
+    ("mock_document_patch_request", `Quick, mock_document_patch_request_test);
+    ( "mock_document_patch_without_condition",
+      `Quick,
+      mock_document_patch_without_condition_test );
     ( "mock_batch_patch_body_valid_json",
       `Quick,
       mock_batch_patch_body_valid_json_test );

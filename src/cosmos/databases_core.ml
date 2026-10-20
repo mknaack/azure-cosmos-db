@@ -475,6 +475,39 @@ struct
     module Document = struct
       type indexing_directive = Include | Exclude
 
+      type patch_operation =
+        | Add of { path : string; value : string }
+        | Set of { path : string; value : string }
+        | ReplacePath of { path : string; value : string }
+        | Remove of { path : string }
+        | Increment of { path : string; value : int }
+
+      let json_string s = Yojson.Safe.to_string (`String s)
+
+      let string_of_patch_operation op =
+        let with_value name path value =
+          Printf.sprintf {|{"op":"%s","path":%s,"value":%s}|} name
+            (json_string path) value
+        in
+        match op with
+        | Add { path; value } -> with_value "add" path value
+        | Set { path; value } -> with_value "set" path value
+        | ReplacePath { path; value } -> with_value "replace" path value
+        | Remove { path } ->
+            Printf.sprintf {|{"op":"remove","path":%s}|} (json_string path)
+        | Increment { path; value } ->
+            with_value "incr" path (string_of_int value)
+
+      let patch_body ?condition operations =
+        let operations =
+          List.map string_of_patch_operation operations |> String.concat ","
+        in
+        match condition with
+        | None -> Printf.sprintf {|{"operations":[%s]}|} operations
+        | Some condition ->
+            Printf.sprintf {|{"condition":%s,"operations":[%s]}|}
+              (json_string condition) operations
+
       let string_of_indexing_directive = function
         | Include -> "Include"
         | Exclude -> "Exclude"
@@ -669,6 +702,25 @@ struct
         handle_response response (fun resp body ->
             let code = get_code resp in
             IO.return (Ok (code, body)))
+
+      let patch ~partition_key ?if_match ?condition ?timeout dbname coll_name
+          doc_id operations =
+        let path = path_of_doc dbname coll_name doc_id in
+        let*? base_hdrs =
+          headers Account.Docs Utilities.Verb.Patch (header_path_of_path path)
+        in
+        let headers =
+          base_hdrs
+          |> add_header "Content-Type" "application/json_patch+json"
+          |> add_header "x-ms-documentdb-partitionkey"
+               (string_of_partition_key partition_key)
+          |> Utilities.apply_to_header_if_some "If-Match" Fun.id if_match
+        in
+        let body = patch_body ?condition operations in
+        let uri = make_uri path in
+        let* response = Http.patch ~headers ~body uri |> wrap_timeout timeout in
+        handle_response response (fun resp body ->
+            IO.return (Ok (get_code resp, body)))
 
       let delete ~partition_key ?timeout dbname coll_name doc_id =
         let path = path_of_doc dbname coll_name doc_id in
@@ -985,7 +1037,7 @@ struct
             patch_op : patch_operation;
           }
 
-      and patch_operation =
+      and patch_operation = Document.patch_operation =
         | Add of { path : string; value : string }
         | Set of { path : string; value : string }
         | ReplacePath of { path : string; value : string }
@@ -1088,23 +1140,7 @@ struct
               ~if_none_match ~id:(Some id) ~resource_body:(Some body) ~from:None
               ~value:None ()
         | Patch { id; if_match; patch_op } ->
-            let value_str =
-              match patch_op with
-              | Add { path; value } ->
-                  Printf.sprintf {|{"path": "%s", "op": "add", "value": %s}|}
-                    path value
-              | Set { path; value } ->
-                  Printf.sprintf {|{"path": "%s", "op": "set", "value": %s}|}
-                    path value
-              | ReplacePath { path; value } ->
-                  Printf.sprintf
-                    {|{"path": "%s", "op": "replace", "value": %s}|} path value
-              | Remove { path } ->
-                  Printf.sprintf {|{"path": "%s", "op": "remove"}|} path
-              | Increment { path; value } ->
-                  Printf.sprintf {|{"path": "%s", "op": "incr", "value": %d}|}
-                    path value
-            in
+            let value_str = Document.string_of_patch_operation patch_op in
             make_batch_op partition_key ~operation_type:`Patch ~if_match
               ~if_none_match:None ~id:(Some id) ~resource_body:None
               ~from:(Some "") ~value:(Some value_str) ()
