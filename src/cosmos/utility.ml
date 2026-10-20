@@ -42,3 +42,8 @@ let authorization_token_using_resource_token token =
   Uri.pct_encode ~component:`Userinfo token
   |> string_replace "%3D" "%3d" |> string_replace "%2B" "%2b"
   |> string_replace "%2F" "%2f"
+
+let authorization_token_using_aad_token access_token =
+  Uri.pct_encode ~component:`Userinfo ("type=aad&ver=1.0&sig=" ^ access_token)
+  |> string_replace "%3D" "%3d" |> string_replace "%2B" "%2b"
+  |> string_replace "%2F" "%2f"
