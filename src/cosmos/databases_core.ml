@@ -135,7 +135,7 @@ module type Account = sig
     resource ->
     Utilities.Ms_time.t ->
     string ->
-    (string, cosmos_error) result io
+    (string, Cosmos_error.t) result io
 
   val endpoint : string
 end
@@ -1662,7 +1662,7 @@ module Auth_aad
   type state =
     | Idle
     | Cached of token
-    | Acquiring of (token, cosmos_error) result IO.t
+    | Acquiring of (token, Cosmos_error.t) result IO.t
 
   let state = ref Idle
 
@@ -1680,15 +1680,17 @@ module Auth_aad
       Some (token, expires_in)
     with _ -> None
 
-  let acquire () : (token, cosmos_error) result IO.t =
+  let acquire () : (token, Cosmos_error.t) result IO.t =
     let* response =
       IO.with_timeout token_request_timeout
         (Http.post ~headers:token_headers ~body:token_body token_uri)
     in
     match response with
-    | None -> IO.return (Error Timeout_error)
-    | Some (Error Connection_refused) -> IO.return (Error Connection_error)
-    | Some (Error (Other_error _exn)) -> IO.return (Error Connection_error)
+    | None -> IO.return (Error Cosmos_error.Timeout_error)
+    | Some (Error Connection_refused) ->
+        IO.return (Error Cosmos_error.Connection_error)
+    | Some (Error (Other_error _exn)) ->
+        IO.return (Error Cosmos_error.Connection_error)
     | Some (Ok (resp, body)) ->
         let code =
           resp |> Cohttp.Response.status |> Cohttp.Code.code_of_status
@@ -1700,10 +1702,13 @@ module Auth_aad
                 (Ok { value = token; expires_at = A.now () +. expires_in })
           | None ->
               IO.return
-                (Error (Azure_error (code, Response_headers.get_header resp)))
+                (Error
+                   (Cosmos_error.Azure_error
+                      (code, Response_headers.get_header resp)))
         else
           IO.return
-            (Error (Azure_error (code, Response_headers.get_header resp)))
+            (Error
+               (Cosmos_error.Azure_error (code, Response_headers.get_header resp)))
 
   let value_of r = Result.map (fun t -> t.value) r
 
