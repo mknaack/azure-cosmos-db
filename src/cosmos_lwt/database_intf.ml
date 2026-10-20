@@ -81,6 +81,16 @@ module type S = sig
     module Document : sig
       type indexing_directive = Include | Exclude
 
+      (** A JSON Patch operation for {!patch}. [path] is a JSON Pointer such as
+          ["/address/city"]; [value] is raw JSON (e.g. [{|"Oslo"|}] or ["42"]).
+      *)
+      type patch_operation =
+        | Add of { path : string; value : string }
+        | Set of { path : string; value : string }
+        | ReplacePath of { path : string; value : string }
+        | Remove of { path : string }
+        | Increment of { path : string; value : int }
+
       val create :
         ?is_upsert:bool ->
         ?indexing_directive:indexing_directive ->
@@ -158,6 +168,25 @@ module type S = sig
         string ->
         string ->
         (int * string, cosmos_error) result Lwt.t
+
+      val patch :
+        partition_key:string ->
+        ?if_match:string ->
+        ?condition:string ->
+        ?timeout:float ->
+        string ->
+        string ->
+        string ->
+        patch_operation list ->
+        (int * string, cosmos_error) result Lwt.t
+      (** [patch ~partition_key dbname coll_name doc_id operations] applies
+          [operations] to the document [doc_id] in a single
+          [PATCH /dbs/dbname/colls/coll_name/docs/doc_id] request and returns
+          the status code and the response body (the patched document on [200]).
+          Cosmos DB accepts at most 10 operations per request. [condition] is a
+          filter predicate such as ["from c where c.status = 'active'"]; if it
+          does not match, Cosmos returns [412]. [if_match] makes the patch
+          conditional on the document's etag. *)
 
       val delete :
         partition_key:string ->
@@ -335,7 +364,7 @@ module type S = sig
             patch_op : patch_operation;
           }
 
-      and patch_operation =
+      and patch_operation = Document.patch_operation =
         | Add of { path : string; value : string }
         | Set of { path : string; value : string }
         | ReplacePath of { path : string; value : string }
