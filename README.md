@@ -5,7 +5,8 @@ Azure Cosmos DB for OCaml
 
 An OCaml client for the [Azure Cosmos DB REST API](https://learn.microsoft.com/en-us/rest/api/cosmos-db/):
 databases, collections, documents, queries, transactional batches, the change
-feed, users, permissions and resource tokens, and throughput offers.
+feed, users, permissions, resource tokens and Entra ID (AAD) authentication,
+and throughput offers.
 
 | Package | Use it when |
 |---|---|

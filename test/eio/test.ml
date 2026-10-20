@@ -121,6 +121,11 @@ let resource_token_tests =
     (fun (name, _speed, test_fn) -> (name, test_fn))
     Test_core.Resource_token_tests.tests
 
+let aad_auth_tests =
+  List.map
+    (fun (name, _speed, test_fn) -> (name, test_fn))
+    Test_core.Aad_auth_tests.tests
+
 let () =
   Eio_main.run @@ fun env ->
   clock_ref := Some (Eio.Stdenv.clock env);
@@ -130,6 +135,7 @@ let () =
         [
           ("mock tests", wrap_sync_tests `Quick mock_tests);
           ("resource token tests", wrap_sync_tests `Quick resource_token_tests);
+          ("aad auth tests", wrap_sync_tests `Quick aad_auth_tests);
           ( "utility cosmos test",
             wrap_sync_tests `Quick Test_core.Test_cosmos_utility.tests );
           ("partition key test", integration_tests);

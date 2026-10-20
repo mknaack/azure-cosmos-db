@@ -20,6 +20,7 @@ collection and documents.
 {1 How-to guides}
 
 - {!page-howto_resource_tokens}
+- {!page-howto_entra_id}
 - {!page-howto_change_feed}
 - {!page-howto_throughput}
 
