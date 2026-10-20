@@ -293,7 +293,7 @@ let token_endpoint_http_error () =
       (match
          Db.Collection.Document.get ~partition_key:"pk" "mydb" "mycoll" "doc1"
        with
-      | Error (Cosmos.Databases_core.Azure_error (code, _)) ->
+      | Error (Cosmos.Databases_core.Cosmos_error.Azure_error (code, _)) ->
           Alcotest.(check int) "Token endpoint status code" 401 code
       | Error _ -> Alcotest.fail "Expected token endpoint Azure_error"
       | Ok _ -> Alcotest.fail "Should not succeed");
@@ -312,7 +312,7 @@ let token_endpoint_malformed_body () =
       match
         Db.Collection.Document.get ~partition_key:"pk" "mydb" "mycoll" "doc1"
       with
-      | Error (Cosmos.Databases_core.Azure_error (code, _)) ->
+      | Error (Cosmos.Databases_core.Cosmos_error.Azure_error (code, _)) ->
           Alcotest.(check int) "Token endpoint status code" 200 code
       | Error _ -> Alcotest.fail "Expected malformed token Azure_error"
       | Ok _ -> Alcotest.fail "Should not succeed")
@@ -328,7 +328,7 @@ let token_endpoint_connection_refused () =
       match
         Db.Collection.Document.get ~partition_key:"pk" "mydb" "mycoll" "doc1"
       with
-      | Error Cosmos.Databases_core.Connection_error -> ()
+      | Error Cosmos.Databases_core.Cosmos_error.Connection_error -> ()
       | Error _ -> Alcotest.fail "Expected Connection_error"
       | Ok _ -> Alcotest.fail "Should not succeed")
 
