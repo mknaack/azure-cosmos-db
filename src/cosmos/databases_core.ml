@@ -128,6 +128,14 @@ end
 
 type cosmos_error = Cosmos_error.t
 
+(** Error returned by [Change_feed.fold]. Both variants carry the accumulator
+    and checkpoint of the last successfully processed page, so a failed fold can
+    be resumed by passing the checkpoint back as
+    [~start_from:(Change_feed.Start_from.Continuation checkpoint)]. *)
+type 'acc fold_error =
+  | Read_error of { error : cosmos_error; acc : 'acc; checkpoint : string }
+  | Handler_error of { message : string; acc : 'acc; checkpoint : string }
+
 module type Account = sig
   type 'a io
   type resource = Dbs | Colls | Docs | Users | Permissions | Offers | Pkranges
@@ -798,6 +806,14 @@ struct
         caught_up : bool;
       }
 
+      type nonrec 'acc fold_error = 'acc fold_error =
+        | Read_error of {
+            error : cosmos_error;
+            acc : 'acc;
+            checkpoint : string;
+          }
+        | Handler_error of { message : string; acc : 'acc; checkpoint : string }
+
       let apply_start_from start_from headers =
         match start_from with
         | Start_from.Beginning -> headers
@@ -923,19 +939,22 @@ struct
                 coll_name
             in
             match result with
-            | Error e -> IO.return (Error e)
+            | Error error ->
+                IO.return (Error (Read_error { error; acc; checkpoint }))
             | Ok drained -> (
                 let rec apply_pages acc checkpoint = function
                   | [] -> IO.return (Ok (acc, checkpoint))
                   | page :: pages -> (
                       let* result = f acc page in
                       match result with
-                      | Error _ -> IO.return (Error (acc, checkpoint))
+                      | Error message ->
+                          IO.return
+                            (Error (Handler_error { message; acc; checkpoint }))
                       | Ok acc -> apply_pages acc page.continuation pages)
                 in
                 let* applied = apply_pages acc checkpoint drained.pages in
                 match applied with
-                | Error (acc, checkpoint) -> IO.return (Ok (acc, checkpoint))
+                | Error _ as error -> IO.return error
                 | Ok (acc, _) ->
                     if remaining = 1 then
                       IO.return (Ok (acc, drained.checkpoint))
@@ -948,7 +967,12 @@ struct
                         (Some (Start_from.Continuation drained.checkpoint))
                         (remaining - 1))
         in
-        poll init "" start_from max_polls
+        let checkpoint =
+          match start_from with
+          | Some (Start_from.Continuation checkpoint) -> checkpoint
+          | _ -> ""
+        in
+        poll init checkpoint start_from max_polls
     end
 
     module Batch = struct
