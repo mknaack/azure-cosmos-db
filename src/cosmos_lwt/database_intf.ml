@@ -286,6 +286,21 @@ module type S = sig
         string ->
         (drain_result, cosmos_error) result Lwt.t
 
+      type 'acc fold_error = 'acc Cosmos.Databases_core.fold_error =
+        | Read_error of {
+            error : cosmos_error;
+            acc : 'acc;
+            checkpoint : string;
+          }
+        | Handler_error of { message : string; acc : 'acc; checkpoint : string }
+            (** Error returned by {!fold}. [Read_error] means the feed read
+                failed with [error]; [Handler_error] means the page callback
+                returned [Error message]. Both carry the accumulator and
+                checkpoint of the last successfully processed page, so the fold
+                can be resumed from that checkpoint. [checkpoint] is empty when
+                no page had been processed and no resume checkpoint was
+                supplied. *)
+
       val fold :
         ?mode:Mode.t ->
         ?start_from:Start_from.t ->
@@ -298,7 +313,7 @@ module type S = sig
         string ->
         init:'acc ->
         f:('acc -> page -> ('acc, string) result Lwt.t) ->
-        ('acc * string, cosmos_error) result Lwt.t
+        ('acc * string, 'acc fold_error) result Lwt.t
     end
 
     module Batch : sig
