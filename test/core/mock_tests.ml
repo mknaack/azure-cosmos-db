@@ -853,10 +853,54 @@ let mock_change_feed_fold_callback_error_keeps_checkpoint_test () =
           "mydb" "mycoll"
       in
       match result with
-      | Ok (count, checkpoint) ->
-          Alcotest.(check int) "last good accumulator" 1 count;
+      | Error (Handler_error { message; acc; checkpoint }) ->
+          Alcotest.(check string) "handler message" "stop" message;
+          Alcotest.(check int) "last good accumulator" 1 acc;
           Alcotest.(check string) "last good checkpoint" "e1" checkpoint
-      | Error _ -> Alcotest.fail "Fold callback error should stop cleanly")
+      | Ok _ -> Alcotest.fail "Fold callback error should not succeed"
+      | Error _ -> Alcotest.fail "Expected Handler_error")
+
+let mock_change_feed_fold_first_page_error_keeps_resume_checkpoint_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed
+        (Mock_response.change_feed_response ~etag:"e1" [ ("one", "r1") ]);
+      expect_feed (Mock_response.not_modified_response ~etag:"e2");
+      let result =
+        Mock_db.Collection.Change_feed.fold ~max_polls:1 ~init:0
+          ~start_from:
+            (Mock_db.Collection.Change_feed.Start_from.Continuation "saved")
+          ~f:(fun _ _ -> Error "fail")
+          "mydb" "mycoll"
+      in
+      match result with
+      | Error (Handler_error { message; acc; checkpoint }) ->
+          Alcotest.(check string) "handler message" "fail" message;
+          Alcotest.(check int) "init accumulator" 0 acc;
+          Alcotest.(check string) "resume checkpoint" "saved" checkpoint
+      | Ok _ -> Alcotest.fail "Fold callback error should not succeed"
+      | Error _ -> Alcotest.fail "Expected Handler_error")
+
+let mock_change_feed_fold_read_error_keeps_checkpoint_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      expect_feed (Mock_response.error_response ~code:500 ~message:"boom");
+      let result =
+        Mock_db.Collection.Change_feed.fold ~max_polls:1 ~init:0
+          ~start_from:
+            (Mock_db.Collection.Change_feed.Start_from.Continuation "saved")
+          ~f:(fun count _ -> Ok count)
+          "mydb" "mycoll"
+      in
+      match result with
+      | Error (Read_error { error; acc; checkpoint }) -> (
+          Alcotest.(check int) "init accumulator" 0 acc;
+          Alcotest.(check string) "resume checkpoint" "saved" checkpoint;
+          match error with
+          | Azure_error (500, _) -> ()
+          | _ -> Alcotest.fail "Expected Azure_error 500")
+      | Ok _ -> Alcotest.fail "Fold read error should not succeed"
+      | Error _ -> Alcotest.fail "Expected Read_error")
 
 let mock_change_feed_throttle_retry_test () =
   let http = Mock_http.create () in
@@ -997,6 +1041,12 @@ let tests =
     ( "mock_change_feed_fold_callback_error_keeps_checkpoint",
       `Quick,
       mock_change_feed_fold_callback_error_keeps_checkpoint_test );
+    ( "mock_change_feed_fold_first_page_error_keeps_resume_checkpoint",
+      `Quick,
+      mock_change_feed_fold_first_page_error_keeps_resume_checkpoint_test );
+    ( "mock_change_feed_fold_read_error_keeps_checkpoint",
+      `Quick,
+      mock_change_feed_fold_read_error_keeps_checkpoint_test );
     ( "mock_change_feed_throttle_retry",
       `Quick,
       mock_change_feed_throttle_retry_test );
