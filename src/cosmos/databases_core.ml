@@ -503,18 +503,14 @@ struct
           | 200 -> Some (Json_converter_j.collection_of_string body_str)
           | _ -> None
         in
-        let* retry_result = with_throttle_retry ~max_retries:10 do_post in
+        let* retry_result =
+          with_throttle_retry ?timeout ~max_retries:10 do_post
+        in
         match retry_result with
         | Error e -> IO.return (Error e)
-        | Ok (code, _resp, body_str) -> (
+        | Ok (code, _resp, body_str) ->
             let value = extract_value code body_str in
-            match timeout with
-            | None -> IO.return (Result.ok (code, value))
-            | Some t -> (
-                let* timed_result = IO.with_timeout t (IO.return ()) in
-                match timed_result with
-                | None -> timeout_error
-                | Some () -> IO.return (Result.ok (code, value))))
+            IO.return (Result.ok (code, value))
 
       let create_multiple ?is_upsert ?indexing_directive ?timeout
           ?(chunk_size = 100) dbname coll_name content_list =
@@ -682,17 +678,12 @@ struct
         in
         let uri = make_uri path in
         let do_delete () = Http.delete ~headers:hdrs uri in
-        let* retry_result = with_throttle_retry ~max_retries:3 do_delete in
+        let* retry_result =
+          with_throttle_retry ?timeout ~max_retries:3 do_delete
+        in
         match retry_result with
         | Error e -> IO.return (Error e)
-        | Ok (code, _resp, _body) -> (
-            match timeout with
-            | None -> IO.return (Ok code)
-            | Some t -> (
-                let* timed_result = IO.with_timeout t (IO.return ()) in
-                match timed_result with
-                | None -> timeout_error
-                | Some () -> IO.return (Ok code)))
+        | Ok (code, _resp, _body) -> IO.return (Ok code)
 
       let delete_multiple ~partition_key ?timeout ?(chunk_size = 100) dbname
           coll_name doc_ids =
