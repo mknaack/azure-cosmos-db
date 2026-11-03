@@ -905,6 +905,68 @@ let mock_pkranges_parses_ids_test () =
           Alcotest.(check (list string)) "range ids" [ "0"; "1" ] ids
       | _ -> Alcotest.fail "Expected parsed partition range ids")
 
+let documents_uri =
+  Uri.make ~scheme:"https" ~host:Mock_auth.endpoint ~port:443
+    ~path:"/dbs/mydb/colls/mycoll/docs" ()
+
+let document_uri =
+  Uri.make ~scheme:"https" ~host:Mock_auth.endpoint ~port:443
+    ~path:"/dbs/mydb/colls/mycoll/docs/doc1" ()
+
+let check_single_request_inside_timeout expected_method =
+  match !Tracking_http.requests with
+  | [ (method_, inside) ] ->
+      Alcotest.(check string) "request method" expected_method method_;
+      Alcotest.(check bool) "request ran inside with_timeout" true inside
+  | _ -> Alcotest.fail "Expected exactly one HTTP request"
+
+let mock_document_create_request_inside_timeout_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      let body = {|{"id":"doc1"}|} in
+      Mock_http.expect
+        {
+          method_ = `Post;
+          uri = documents_uri;
+          expected_headers = [];
+          expected_body = Some body;
+          response =
+            Ok
+              (Mock_response.make_response ~status:201
+                 (Mock_response.document_response ~id:"doc1" ~_rid:"rid1"
+                    ~json:body ()));
+        };
+      Tracking_http.requests := [];
+      let call =
+        Tracking_db.Collection.Document.create ~partition_key:"pk" ~timeout:10.0
+          "mydb" "mycoll" body
+      in
+      match call () with
+      | Error _ -> Alcotest.fail "Expected document create to succeed"
+      | Ok _ -> check_single_request_inside_timeout "POST")
+
+let mock_document_delete_request_inside_timeout_test () =
+  let http = Mock_http.create () in
+  Mock_http.with_mock http (fun () ->
+      Mock_http.expect
+        {
+          method_ = `Delete;
+          uri = document_uri;
+          expected_headers = [];
+          expected_body = None;
+          response = Ok (Mock_response.empty_body_response ~status:204);
+        };
+      Tracking_http.requests := [];
+      let call =
+        Tracking_db.Collection.Document.delete ~partition_key:"pk" ~timeout:10.0
+          "mydb" "mycoll" "doc1"
+      in
+      match call () with
+      | Error _ -> Alcotest.fail "Expected document delete to succeed"
+      | Ok code ->
+          Alcotest.(check int) "status" 204 code;
+          check_single_request_inside_timeout "DELETE")
+
 let tests =
   [
     ("mock_io_bind", `Quick, test_mock_io_bind);
@@ -1007,4 +1069,10 @@ let tests =
       `Quick,
       mock_pkranges_auth_resource_path_test );
     ("mock_pkranges_parses_ids", `Quick, mock_pkranges_parses_ids_test);
+    ( "mock_document_create_request_inside_timeout",
+      `Quick,
+      mock_document_create_request_inside_timeout_test );
+    ( "mock_document_delete_request_inside_timeout",
+      `Quick,
+      mock_document_delete_request_inside_timeout_test );
   ]
