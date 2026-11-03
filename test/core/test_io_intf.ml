@@ -305,6 +305,14 @@ module type DB = sig
         string ->
         (drain_result, Cosmos.Databases_core.Cosmos_error.t) result io
 
+      type 'acc fold_error = 'acc Cosmos.Databases_core.fold_error =
+        | Read_error of {
+            error : Cosmos.Databases_core.Cosmos_error.t;
+            acc : 'acc;
+            checkpoint : string;
+          }
+        | Handler_error of { message : string; acc : 'acc; checkpoint : string }
+
       val fold :
         ?mode:Mode.t ->
         ?start_from:Start_from.t ->
@@ -317,7 +325,7 @@ module type DB = sig
         string ->
         init:'acc ->
         f:('acc -> page -> ('acc, string) result io) ->
-        ('acc * string, Cosmos.Databases_core.Cosmos_error.t) result io
+        ('acc * string, 'acc fold_error) result io
     end
 
     module Batch : sig
