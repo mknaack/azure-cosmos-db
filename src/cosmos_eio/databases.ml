@@ -121,6 +121,15 @@ module Eio_http :
         let body_string = Eio.Flow.read_all resp_body in
         (resp, body_string))
 
+  let patch ~headers ~body uri =
+    perform_request (fun sw ->
+        let body = Cohttp_eio.Body.of_string body in
+        let resp, resp_body =
+          Cohttp_eio.Client.patch (get_client ()) ~sw ~body ~headers uri
+        in
+        let body_string = Eio.Flow.read_all resp_body in
+        (resp, body_string))
+
   let delete ~headers uri =
     perform_request (fun sw ->
         let resp, body =

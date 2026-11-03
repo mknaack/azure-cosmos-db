@@ -66,6 +66,12 @@ module type Http_client = sig
     Uri.t ->
     (Cohttp.Response.t * string, http_error) result io
 
+  val patch :
+    headers:Cohttp.Header.t ->
+    body:string ->
+    Uri.t ->
+    (Cohttp.Response.t * string, http_error) result io
+
   val delete :
     headers:Cohttp.Header.t ->
     Uri.t ->

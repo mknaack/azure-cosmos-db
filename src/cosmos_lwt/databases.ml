@@ -42,6 +42,10 @@ module Lwt_http :
     let body = Cohttp_lwt.Body.of_string body in
     perform_request (fun () -> Cohttp_lwt_unix.Client.put ~headers ~body uri)
 
+  let patch ~headers ~body uri =
+    let body = Cohttp_lwt.Body.of_string body in
+    perform_request (fun () -> Cohttp_lwt_unix.Client.patch ~headers ~body uri)
+
   let delete ~headers uri =
     perform_request (fun () -> Cohttp_lwt_unix.Client.delete ~headers uri)
 end

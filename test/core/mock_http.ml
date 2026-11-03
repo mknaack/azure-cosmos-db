@@ -2,14 +2,14 @@ type 'a io = 'a Mock_io.t
 type http_error = Connection_refused | Other_error of exn
 
 type request = {
-  method_ : [ `Get | `Post | `Put | `Delete ];
+  method_ : [ `Get | `Post | `Put | `Patch | `Delete ];
   uri : Uri.t;
   headers : Cohttp.Header.t;
   body : string option;
 }
 
 type expectation = {
-  method_ : [ `Get | `Post | `Put | `Delete ];
+  method_ : [ `Get | `Post | `Put | `Patch | `Delete ];
   uri : Uri.t;
   expected_headers : (string * string) list;
   expected_body : string option;
@@ -45,6 +45,7 @@ let match_method m1 m2 =
   | `Get, `Get -> true
   | `Post, `Post -> true
   | `Put, `Put -> true
+  | `Patch, `Patch -> true
   | `Delete, `Delete -> true
   | _ -> false
 
@@ -91,6 +92,7 @@ let handle_request ?body method_ uri headers =
              | `Get -> "GET"
              | `Post -> "POST"
              | `Put -> "PUT"
+             | `Patch -> "PATCH"
              | `Delete -> "DELETE"));
       if not (match_uri uri exp.uri) then
         Alcotest.fail (Printf.sprintf "Mock HTTP: URI host/path mismatch");
@@ -105,6 +107,7 @@ let handle_request ?body method_ uri headers =
 let get ~headers uri = handle_request `Get uri headers
 let post ~headers ~body uri = handle_request ~body `Post uri headers
 let put ~headers ~body uri = handle_request ~body `Put uri headers
+let patch ~headers ~body uri = handle_request ~body `Patch uri headers
 let delete ~headers uri = handle_request `Delete uri headers
 
 let with_mock mock f =

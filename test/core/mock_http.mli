@@ -2,14 +2,14 @@ type 'a io = 'a Mock_io.t
 type http_error = Connection_refused | Other_error of exn
 
 type request = {
-  method_ : [ `Get | `Post | `Put | `Delete ];
+  method_ : [ `Get | `Post | `Put | `Patch | `Delete ];
   uri : Uri.t;
   headers : Cohttp.Header.t;
   body : string option;
 }
 
 type expectation = {
-  method_ : [ `Get | `Post | `Put | `Delete ];
+  method_ : [ `Get | `Post | `Put | `Patch | `Delete ];
   uri : Uri.t;
   expected_headers : (string * string) list;
   expected_body : string option;
@@ -39,6 +39,12 @@ val post :
   (Cohttp.Response.t * string, http_error) result io
 
 val put :
+  headers:Cohttp.Header.t ->
+  body:string ->
+  Uri.t ->
+  (Cohttp.Response.t * string, http_error) result io
+
+val patch :
   headers:Cohttp.Header.t ->
   body:string ->
   Uri.t ->

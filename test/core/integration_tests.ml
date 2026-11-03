@@ -342,6 +342,55 @@ struct
         let _ = Alcotest.(check int) "Status same int" 200 code in
         IO.return ()
 
+  let patch_document_with_partition_key_test () =
+    let* res =
+      D.Collection.Document.(
+        patch ~partition_key:"a Last name" dbname_partition
+          collection_name_partition (document_id ^ "1")
+          [
+            Set { path = "/firstName"; value = {|"Patched"|} };
+            Add { path = "/nickname"; value = {|"first"|} };
+            ReplacePath { path = "/nickname"; value = {|"second"|} };
+            Add { path = "/visits"; value = "1" };
+            Increment { path = "/visits"; value = 2 };
+            Add { path = "/temporary"; value = "true" };
+            Remove { path = "/temporary" };
+          ])
+    in
+    match res with
+    | Result.Error _ -> Alcotest.fail "Should not return error"
+    | Result.Ok (code, body) ->
+        let open Yojson.Safe.Util in
+        let json = Yojson.Safe.from_string body in
+        Alcotest.(check int) "Status same int" 200 code;
+        Alcotest.(check string)
+          "firstName is set" "Patched"
+          (json |> member "firstName" |> to_string);
+        Alcotest.(check string)
+          "nickname is replaced" "second"
+          (json |> member "nickname" |> to_string);
+        Alcotest.(check int)
+          "visits is incremented" 3
+          (json |> member "visits" |> to_int);
+        Alcotest.(check bool)
+          "temporary is removed" true
+          (json |> member "temporary" = `Null);
+        IO.return ()
+
+  let patch_document_with_failing_condition_test () =
+    let* res =
+      D.Collection.Document.(
+        patch ~partition_key:"a Last name"
+          ~condition:"from c where c.firstName = 'no such name'"
+          dbname_partition collection_name_partition (document_id ^ "1")
+          [ Set { path = "/firstName"; value = {|"Unreachable"|} } ])
+    in
+    match res with
+    | Result.Error _ -> Alcotest.fail "Should not return error"
+    | Result.Ok (code, _) ->
+        let _ = Alcotest.(check int) "Precondition failed" 412 code in
+        IO.return ()
+
   let upsert_document_with_partition_key_test () =
     let* res =
       D.Collection.Document.create ~is_upsert:true ~partition_key:"a Last name"
@@ -704,6 +753,10 @@ struct
       ("get document with partition key", get_document_with_partition_key_test);
       ( "replace document with partition key",
         replace_document_with_partition_key_test );
+      ( "patch document with partition key",
+        patch_document_with_partition_key_test );
+      ( "patch document with failing condition",
+        patch_document_with_failing_condition_test );
       ( "upsert document with partition key",
         upsert_document_with_partition_key_test );
       ( "create a lot document with partition key",

@@ -17,6 +17,7 @@ module Mock_http_impl :
   let get = Mock_http.get
   let post = Mock_http.post
   let put = Mock_http.put
+  let patch = Mock_http.patch
   let delete = Mock_http.delete
 end
 
