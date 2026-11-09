@@ -7,6 +7,11 @@
   eio_main
   cohttp-eio
   tls-eio
+  tls
+  x509
+  domain-name
+  ipaddr
+  uri
   ca-certs
   mirage-crypto-rng.unix)
  (instrumentation

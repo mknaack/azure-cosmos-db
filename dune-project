@@ -74,10 +74,16 @@
   (cohttp-eio
    (>= 6.0.0))
   tls-eio
+  tls
+  x509
+  domain-name
+  ipaddr
+  uri
   ca-certs
   (mirage-crypto-rng
    (>= 1.0.0))
   (alcotest :with-test)
+  (ptime :with-test)
   (bisect_ppx :with-test)
   (odoc :with-doc))
  (conflicts

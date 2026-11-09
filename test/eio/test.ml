@@ -136,6 +136,8 @@ let () =
           ("mock tests", wrap_sync_tests `Quick mock_tests);
           ("resource token tests", wrap_sync_tests `Quick resource_token_tests);
           ("aad auth tests", wrap_sync_tests `Quick aad_auth_tests);
+          ( "tls hostname verification",
+            wrap_sync_tests `Quick (Tls_tests.tests (Eio.Stdenv.net env)) );
           ( "utility cosmos test",
             wrap_sync_tests `Quick Test_core.Test_cosmos_utility.tests );
           ("partition key test", integration_tests);
