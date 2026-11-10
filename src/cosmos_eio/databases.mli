@@ -25,6 +25,20 @@ val with_env :
     client) required by {!Database} operations. All database calls must happen
     inside [f]. Call this once inside [Eio_main.run] and [Eio.Switch.run]. *)
 
+val https :
+  authenticator:X509.Authenticator.t ->
+  Uri.t ->
+  [> Eio.Flow.two_way_ty | Eio.Resource.close_ty ] Eio.Std.r ->
+  Tls_eio.t
+(** [https ~authenticator uri socket] runs a client TLS handshake over [socket],
+    verifying the server certificate with [authenticator] against the host of
+    [uri] (a DNS name, sent as SNI, or an IP address). This is the TLS connector
+    {!with_env} uses, with the system CA store as [authenticator].
+
+    @raise Invalid_argument if [uri] has no valid host.
+    @raise Tls_eio.Tls_failure
+      if the certificate is not trusted or not issued for the host. *)
+
 module Response_headers : sig
   type t = Cosmos.Databases_core.Response_headers.t
 

@@ -1,6 +1,19 @@
 (test
  (name test)
  (package azure-cosmos-db-eio)
- (libraries test_core azure-cosmos-db-eio alcotest eio_main utilities)
+ (libraries
+  test_core
+  azure-cosmos-db-eio
+  alcotest
+  eio_main
+  utilities
+  tls
+  tls-eio
+  x509
+  ipaddr
+  ptime
+  uri
+  unix
+  mirage-crypto-rng.unix)
  (flags
   (:standard -annot -short-paths)))
