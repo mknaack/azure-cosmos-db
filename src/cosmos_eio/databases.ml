@@ -52,20 +52,20 @@ let tls_peer uri =
                 (Printf.sprintf "Cosmos_eio: invalid host %S in URI: %s" host
                    msg)))
 
-let https ~authenticator =
+let https ~authenticator uri socket =
   let tls_config = Result.get_ok (Tls.Config.client ~authenticator ()) in
-  fun uri socket ->
-    match tls_peer uri with
-    | `Host host -> Tls_eio.client_of_flow tls_config ~host socket
-    | `Ip ip -> Tls_eio.client_of_flow tls_config ~ip socket
+  match tls_peer uri with
+  | `Host host -> Tls_eio.client_of_flow tls_config ~host socket
+  | `Ip ip -> Tls_eio.client_of_flow tls_config ~ip socket
 
 let with_env ~sw:_ env f =
   Mirage_crypto_rng_unix.use_default ();
   let net = Eio.Stdenv.net env in
   let clock = Eio.Stdenv.clock env in
   let authenticator = Result.get_ok (Ca_certs.authenticator ()) in
-  let https = https ~authenticator in
-  let https uri socket = (https uri socket :> _ Eio.Flow.two_way) in
+  let https uri socket =
+    (https ~authenticator uri socket :> _ Eio.Flow.two_way)
+  in
   let client = Cohttp_eio.Client.make ~https:(Some https) net in
   let old_sleep = !_sleep_fn in
   let old_wt = !_with_timeout_fn in
